@@ -1,0 +1,39 @@
+# --- Gradle / Android build ciktilari ---
+# Uretilen her sey depoya girmez; `./gradlew assembleDebug` ile yeniden uretilir.
+build/
+.gradle/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+captures/
+.externalNativeBuild/
+
+# builds/ altinda elle saklanan surum APK'lari (her biri ~23 MB).
+# Depoda tutulmaz — GitHub Releases'e yuklenir.
+builds/
+
+# --- Makineye ozel ---
+# SDK yolu bu makineye ozeldir, baska bilgisayarda yanlis olur.
+local.properties
+
+# --- Sirlar: ASLA commit edilmez (APPDeveloper/CLAUDE.md §8) ---
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+*.env
+google-services.json
+service-account*.json
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+
+# --- Isletim sistemi ---
+.DS_Store
+Thumbs.db
+desktop.ini

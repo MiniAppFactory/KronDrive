@@ -1,0 +1,749 @@
+package com.miniappfactory.krondrive.game
+
+import com.miniappfactory.krondrive.data.BoosterType
+import kotlin.math.abs
+import kotlin.math.floor
+import kotlin.math.min
+import kotlin.random.Random
+
+/**
+ * Kron Drive simulasyonu. **Saf Kotlin** — Android'e hic bagimliligi yok, bu
+ * sayede JVM birim testleriyle dogrulanabiliyor (bkz. `src/test/.../game`).
+ * Cizim [com.miniappfactory.krondrive.ui.game] altinda, bu sinifin durumunu
+ * okuyup Compose Canvas'a aktarir.
+ *
+ * Fizik, HTML prototipinden birebir tasindi; tek yapisal fark, ACCELERATION
+ * yukseltmesinin anlamli olabilmesi icin eklenen birinci dereceden hiz
+ * gecikmesidir (bkz. [GameConfig.ACCEL_RATE_BASE]).
+ */
+class GameEngine(
+    val mode: RunMode,
+    val level: LevelDef? = null,
+    private val upgrades: UpgradeLevels = UpgradeLevels(),
+    private val boosters: Set<BoosterType> = emptySet(),
+    /** Sonsuz moddaki mevcut rekor (saniye) — "rekoruna 3 saniye kaldi" mesaji icin. */
+    private val endlessRecordSeconds: Int = 0,
+    /**
+     * Bu bolumden DAHA ONCE kazanilmis yildiz sayisi. Coin odulu yalnizca
+     * bunun USTUNE cikan yildizlar icin verilir; aksi halde ayni bolumu
+     * tekrar oynamak sinirsiz coin basardi (bkz. finish()).
+     */
+    private val previousStars: Int = 0,
+    /**
+     * Oyuncunun garajda sectigi govde sekli ve boyasi. Simulasyona HIC
+     * dokunmaz — yalnizca cizim okur (carpisma kutusu [GameConfig] sabitlerinden
+     * gelir ve sekle gore degismez).
+     */
+    val carStyle: CarStyle = CarCatalog.defaultStyle,
+    private val random: Random = Random.Default
+) {
+
+    // -----------------------------------------------------------------
+    // Sahne olculeri
+    // -----------------------------------------------------------------
+
+    var viewWidth: Float = 0f
+        private set
+    var viewHeight: Float = 0f
+        private set
+
+    var roadWidth: Float = 0f
+        private set
+    var roadX: Float = 0f
+        private set
+    var laneWidth: Float = 0f
+        private set
+
+    fun setViewport(width: Float, height: Float) {
+        if (width <= 0f || height <= 0f) return
+        viewWidth = width
+        viewHeight = height
+        roadWidth = min(GameConfig.ROAD_MAX_WIDTH_PX, width * GameConfig.ROAD_WIDTH_RATIO)
+        roadX = (width - roadWidth) / 2f
+        laneWidth = roadWidth / GameConfig.LANE_COUNT
+        playerY = height - GameConfig.PLAYER_BOTTOM_OFFSET_PX
+        targetX = laneCenter(playerLane)
+        if (playerX == 0f) playerX = targetX
+        // Ekran olculeri degistiginde serit merkezleri kayar; sahnedeki
+        // nesneleri de yeni merkezlere tasi (aksi halde engeller yolun
+        // disinda kalirdi).
+        obstacles.forEach { it.x = laneCenter(it.lane) }
+        coins.forEach { it.x = laneCenter(it.lane) }
+    }
+
+    fun laneCenter(lane: Int): Float = roadX + laneWidth * lane + laneWidth / 2f
+
+    // -----------------------------------------------------------------
+    // Kosu durumu
+    // -----------------------------------------------------------------
+
+    var phase: RunPhase = RunPhase.COUNTDOWN
+        private set
+
+    /** Geri sayimda kalan saniye (3, 2, 1 ...). */
+    var countdownRemaining: Float = GameConfig.COUNTDOWN_SECONDS.toFloat()
+        private set
+
+    val theme: RoadTheme = RoadTheme.entries[random.nextInt(RoadTheme.entries.size)]
+
+    /** Bu kosunun taban hizi — bolum kendi baslangic hizini verebilir. */
+    private val baseSpeed: Float =
+        level?.startSpeedKmh?.let { GameConfig.speedFromKmh(it) } ?: GameConfig.BASE_SPEED
+
+    var score: Float = 0f
+        private set
+    var speed: Float = baseSpeed
+        private set
+    var boost: Float = GameConfig.BOOST_START
+        private set
+    var roadOffset: Float = 0f
+        private set
+
+    var timeElapsed: Float = 0f
+        private set
+
+    /** Sure hedefli bolumlerde kalan sure; sonsuz modda null. */
+    var timeRemaining: Float? = null
+        private set
+
+    private var distancePx: Float = 0f
+    private var boostDistancePx: Float = 0f
+
+    var combo: Int = 0
+        private set
+    private var comboTimer: Float = 0f
+
+    private var bestCombo: Int = 0
+    private var bigCombos: Int = 0
+    private var perfectDodges: Int = 0
+    private var vehiclesPassed: Int = 0
+    private var coinsCollected: Int = 0
+    private var brakeTaps: Int = 0
+    private var crashed: Boolean = false
+    private var revivesUsed: Int = 0
+
+    private var invulnerableFor: Float = 0f
+    private var freeBoostRemaining: Float =
+        if (BoosterType.TURBO_START in boosters) GameConfig.TURBO_START_FREE_BOOST_SEC else 0f
+    private var secondChanceAvailable: Boolean = BoosterType.SECOND_CHANCE in boosters
+
+    /** Duraklatma menusundeki reklamli guclendirici bu kosuda kullanildi mi. */
+    private var pauseBoosterUsed: Boolean = false
+
+    /** Bar bosaldi ve parmak hala basili — boost yeniden tutusamaz. */
+    private var boostLockedUntilRelease: Boolean = false
+
+    private val scoreMultiplier: Float =
+        if (BoosterType.SCORE_BOOSTER in boosters) GameConfig.SCORE_BOOSTER_MULTIPLIER else 1f
+
+    /** Kosu bittiginde doldurulur; sonuc ekrani bunu okur. */
+    var lastResult: RunResult? = null
+        private set
+
+    // -----------------------------------------------------------------
+    // Oyuncu ve giris
+    // -----------------------------------------------------------------
+
+    var playerLane: Int = 1
+        private set
+    var playerX: Float = 0f
+        private set
+    var playerY: Float = 0f
+        private set
+    private var targetX: Float = 0f
+
+    var boostDown: Boolean = false
+        private set
+    var brakeDown: Boolean = false
+        private set
+
+    /** HUD'daki "boost yaniyor" gostergesi ve egzoz alevi icin. */
+    var boosting: Boolean = false
+        private set
+
+    // -----------------------------------------------------------------
+    // Sahne nesneleri
+    // -----------------------------------------------------------------
+
+    class Obstacle(
+        var lane: Int,
+        var x: Float,
+        var y: Float,
+        val colorIndex: Int,
+        val speedMul: Float
+    ) {
+        /** Oyuncuyla dikey olarak ortusurken gorulen en kucuk yatay mesafe. */
+        var minDx: Float = Float.MAX_VALUE
+        /** Oyuncuyu geride biraktiginda bir kez degerlendirilir. */
+        var evaluated: Boolean = false
+    }
+
+    class Coin(var lane: Int, var x: Float, var y: Float, var pulse: Float)
+
+    class Particle(
+        var x: Float,
+        var y: Float,
+        var vx: Float,
+        var vy: Float,
+        var life: Float,
+        val size: Float,
+        val color: Int
+    )
+
+    val obstacles = ArrayList<Obstacle>()
+    val coins = ArrayList<Coin>()
+    val particles = ArrayList<Particle>()
+
+    private var obstacleSpawnAcc: Float = 0f
+    private var coinSpawnAcc: Float = 0f
+
+    private val events = ArrayList<GameEvent>()
+
+    init {
+        timeRemaining = level?.goal?.timeLimitSeconds?.toFloat()
+    }
+
+    // -----------------------------------------------------------------
+    // Giris (kontroller)
+    // -----------------------------------------------------------------
+
+    fun steerLeft() {
+        if (phase != RunPhase.RUNNING) return
+        playerLane = (playerLane - 1).coerceAtLeast(0)
+        targetX = laneCenter(playerLane)
+    }
+
+    fun steerRight() {
+        if (phase != RunPhase.RUNNING) return
+        playerLane = (playerLane + 1).coerceAtMost(GameConfig.LANE_COUNT - 1)
+        targetX = laneCenter(playerLane)
+    }
+
+    fun setBoost(down: Boolean) {
+        boostDown = down
+    }
+
+    fun setBrake(down: Boolean) {
+        // "Frene en fazla N kez bas" hedefi icin sadece BASMA kenari sayilir.
+        if (down && !brakeDown && phase == RunPhase.RUNNING) brakeTaps++
+        brakeDown = down
+    }
+
+    fun pause() {
+        if (phase == RunPhase.RUNNING || phase == RunPhase.COUNTDOWN) {
+            resumePhase = phase
+            phase = RunPhase.PAUSED
+            boostDown = false
+            brakeDown = false
+            boosting = false
+        }
+    }
+
+    private var resumePhase: RunPhase = RunPhase.COUNTDOWN
+
+    fun resume() {
+        if (phase == RunPhase.PAUSED) phase = resumePhase
+    }
+
+    /**
+     * Reklam izlendikten sonra carpisma noktasindan devam. Skor ve istatistikler
+     * korunur, oyuncunun onundeki trafik temizlenir ve kisa bir dokunulmazlik
+     * verilir — aksi halde oyuncu ayni araca aninda tekrar carpardi.
+     */
+    fun revive() {
+        if (phase != RunPhase.CRASHED) return
+        revivesUsed++
+        crashed = false
+        obstacles.removeAll { it.y > -GameConfig.CAR_HEIGHT_PX && it.y < viewHeight }
+        invulnerableFor = GameConfig.INVULNERABLE_SEC_AFTER_SAVE
+        boost = GameConfig.BOOST_MAX
+        combo = 0
+        comboTimer = 0f
+        phase = RunPhase.RUNNING
+    }
+
+    // -----------------------------------------------------------------
+    // Ana dongu
+    // -----------------------------------------------------------------
+
+    /**
+     * Bir kareyi isler ve o karede olusan olaylari dondurur.
+     *
+     * Olay listesi kare BASINDA degil SONUNDA bosaltilir: `finish()` gibi disaridan
+     * cagrilabilen fonksiyonlarin urettigi olaylar da bir sonraki cagrida cagirana
+     * ulassin diye (bastan temizleseydik sessizce kaybolurlardi).
+     */
+    fun step(deltaSeconds: Float): List<GameEvent> {
+        val dt = deltaSeconds.coerceIn(0f, GameConfig.MAX_FRAME_DT)
+        when (phase) {
+            RunPhase.COUNTDOWN -> {
+                countdownRemaining -= dt
+                if (countdownRemaining <= 0f) {
+                    countdownRemaining = 0f
+                    phase = RunPhase.RUNNING
+                }
+            }
+
+            RunPhase.RUNNING -> updateRunning(dt)
+            RunPhase.PAUSED, RunPhase.CRASHED, RunPhase.FINISHED -> Unit
+        }
+        updateParticles(dt)
+        // Cogu karede hic olay yok — o durumda tahsisat da yapmiyoruz.
+        if (events.isEmpty()) return emptyList()
+        val produced = ArrayList<GameEvent>(events)
+        events.clear()
+        return produced
+    }
+
+    private fun updateRunning(dt: Float) {
+        timeElapsed += dt
+        if (invulnerableFor > 0f) invulnerableFor -= dt
+
+        updateSpeed(dt)
+        updateBoostEnergy(dt)
+
+        // Serit degisiminin yumusak takibi (prototiple ayni katsayi).
+        playerX += (targetX - playerX) * min(1f, GameConfig.LANE_LERP_RATE * dt)
+
+        val travel = speed * GameConfig.WORLD_PX_PER_SPEED_UNIT * dt
+        roadOffset += travel
+        distancePx += travel
+        if (boosting) boostDistancePx += travel
+
+        score += speed * GameConfig.SCORE_PER_SPEED_PER_SEC * dt * scoreMultiplier
+
+        updateCombo(dt)
+        spawn(dt)
+        updateObstacles(dt)
+        updateCoins(dt)
+
+        timeRemaining?.let { remaining ->
+            val left = remaining - dt
+            timeRemaining = left
+            if (left <= 0f) onTimeLimitReached()
+        }
+        checkGoalReached()
+    }
+
+    private fun updateSpeed(dt: Float) {
+        val scoreCap = UpgradeCatalog.scoreSpeedCap(upgrades.speed)
+        var target = baseSpeed + min(scoreCap, score / GameConfig.SCORE_SPEED_DIVISOR)
+
+        // Parmak kalkinca kilit acilir.
+        if (!boostDown) boostLockedUntilRelease = false
+        // Histerezis: devam etmek icin enerji > 0 yeter, ama bar bosaldiktan
+        // sonra YENIDEN tutusmak icin hem parmagin kalkmasi hem de
+        // BOOST_REENGAGE_MIN kadar enerji gerekir (bkz. GameConfig).
+        val energyThreshold = if (boosting) 0f else GameConfig.BOOST_REENGAGE_MIN
+        val wantsBoost = boostDown &&
+            !boostLockedUntilRelease &&
+            (boost > energyThreshold || freeBoostRemaining > 0f)
+        if (wantsBoost) target += UpgradeCatalog.boostSpeedBonus(upgrades.boost)
+        if (brakeDown) target -= UpgradeCatalog.brakePenalty(upgrades.brake)
+        target *= endlessSpeedMultiplier()
+        target = target.coerceAtLeast(GameConfig.MIN_SPEED)
+
+        val rate = if (target > speed) {
+            UpgradeCatalog.accelRate(upgrades.acceleration)
+        } else {
+            UpgradeCatalog.decelRate(upgrades.brake)
+        }
+        speed += (target - speed) * min(1f, rate * dt)
+
+        if (wantsBoost && !boosting) events.add(GameEvent.BoostStarted)
+        boosting = wantsBoost
+    }
+
+    private fun updateBoostEnergy(dt: Float) {
+        if (boosting) {
+            if (freeBoostRemaining > 0f) {
+                // TURBO_START: ilk saniyelerde enerji harcanmaz.
+                freeBoostRemaining -= dt
+            } else {
+                boost = (boost - UpgradeCatalog.boostDrain(upgrades.boost) * dt).coerceAtLeast(0f)
+                if (boost <= 0f) boostLockedUntilRelease = true
+            }
+            addParticles(playerX, playerY + 86f, boostTrail = true)
+        } else if (boostDown && boostLockedUntilRelease) {
+            // Bos bar, parmak hala basili: ne calisir ne dolar. Oyuncu boost'u
+            // birakmadan bar dolsaydi, birakip basmadan tekrar tutusurdu.
+        } else {
+            val regen = if (brakeDown) {
+                GameConfig.BOOST_REGEN_PER_SEC_BRAKING
+            } else {
+                GameConfig.BOOST_REGEN_PER_SEC
+            }
+            boost = (boost + regen * dt).coerceAtMost(GameConfig.BOOST_MAX)
+        }
+    }
+
+    private fun updateCombo(dt: Float) {
+        if (combo > 0) {
+            comboTimer -= dt
+            if (comboTimer <= 0f) {
+                combo = 0
+                events.add(GameEvent.ComboBroken)
+            }
+        }
+    }
+
+    private fun spawn(dt: Float) {
+        val traffic = endlessTrafficMultiplier()
+        obstacleSpawnAcc += dt
+        coinSpawnAcc += dt
+        if (obstacleSpawnAcc > GameConfig.OBSTACLE_SPAWN_INTERVAL_SEC / traffic) {
+            spawnObstacle()
+            obstacleSpawnAcc = 0f
+        }
+        if (coinSpawnAcc > GameConfig.COIN_SPAWN_INTERVAL_SEC) {
+            spawnCoin()
+            coinSpawnAcc = 0f
+        }
+    }
+
+    private fun spawnObstacle() {
+        val lane = random.nextInt(GameConfig.LANE_COUNT)
+        obstacles.add(
+            Obstacle(
+                lane = lane,
+                x = laneCenter(lane),
+                y = GameConfig.OBSTACLE_SPAWN_Y_PX,
+                colorIndex = random.nextInt(OBSTACLE_COLORS.size),
+                speedMul = GameConfig.OBSTACLE_SPEED_MUL_MIN +
+                    random.nextFloat() *
+                    (GameConfig.OBSTACLE_SPEED_MUL_MAX - GameConfig.OBSTACLE_SPEED_MUL_MIN)
+            )
+        )
+    }
+
+    private fun spawnCoin() {
+        val lane = random.nextInt(GameConfig.LANE_COUNT)
+        coins.add(
+            Coin(
+                lane = lane,
+                x = laneCenter(lane),
+                y = GameConfig.COIN_SPAWN_Y_PX,
+                pulse = random.nextFloat() * 6.28f
+            )
+        )
+    }
+
+    private fun updateObstacles(dt: Float) {
+        // Carpisma kutusu cizimden turetilir (bkz. GameConfig) — gorunmeyen
+        // bir alana carpip "haksiz kaza" hissi olusmasin diye.
+        val hitW = GameConfig.CAR_HITBOX_WIDTH_PX
+        val hitH = GameConfig.CAR_HITBOX_HEIGHT_PX
+        val playerHitLeft = playerX - hitW / 2f
+        val playerHitTop = playerY + GameConfig.CAR_HITBOX_TOP_OFFSET
+        val playerHitBottom = playerHitTop + hitH
+        val playerVisualBottom = playerY + GameConfig.CAR_HEIGHT_PX
+
+        var i = obstacles.size - 1
+        while (i >= 0) {
+            val o = obstacles[i]
+            o.y += speed * GameConfig.WORLD_PX_PER_SPEED_UNIT * dt * o.speedMul
+
+            val obstacleHitLeft = o.x - hitW / 2f
+            val obstacleHitTop = o.y + GameConfig.CAR_HITBOX_TOP_OFFSET
+            val verticallyOverlapping =
+                playerHitTop < obstacleHitTop + hitH && playerHitBottom > obstacleHitTop
+
+            if (verticallyOverlapping) {
+                val dx = abs(playerX - o.x)
+                if (dx < o.minDx) o.minDx = dx
+
+                val hit = rectHit(
+                    playerHitLeft, playerHitTop, hitW, hitH,
+                    obstacleHitLeft, obstacleHitTop, hitW, hitH
+                )
+                if (hit && invulnerableFor <= 0f) {
+                    if (secondChanceAvailable) {
+                        secondChanceAvailable = false
+                        invulnerableFor = GameConfig.INVULNERABLE_SEC_AFTER_SAVE
+                        obstacles.removeAt(i)
+                        events.add(GameEvent.Crash(saved = true))
+                        i--
+                        continue
+                    }
+                    onCrash()
+                    return
+                }
+            }
+
+            // Oyuncuyu geride biraktigi an: gecis puani + perfect dodge kontrolu.
+            if (!o.evaluated && o.y > playerVisualBottom) {
+                o.evaluated = true
+                vehiclesPassed++
+                score += GameConfig.SCORE_PER_PASSED_VEHICLE
+                events.add(GameEvent.VehiclePassed)
+                // Esik serit araligina gore hesaplanir — bkz. GameConfig.
+                if (o.minDx <= GameConfig.perfectDodgeMaxDx(laneWidth)) registerPerfectDodge()
+            }
+
+            if (o.y > viewHeight + GameConfig.OBSTACLE_DESPAWN_MARGIN_PX) {
+                obstacles.removeAt(i)
+            }
+            i--
+        }
+    }
+
+    private fun registerPerfectDodge() {
+        combo++
+        comboTimer = GameConfig.COMBO_WINDOW_SEC
+        if (combo > bestCombo) bestCombo = combo
+        // Haftalik gorev sayaci: her 5'e ULASILDIGI anda bir kez sayilir
+        // (combo 6, 7 ... ayni zinciri ikinci kez saymaz).
+        if (combo == 5) bigCombos++
+        perfectDodges++
+        val multiplier = GameConfig.comboMultiplier(combo)
+        val bonus = (GameConfig.PERFECT_DODGE_BASE_SCORE * multiplier).toInt()
+        score += bonus * scoreMultiplier
+        events.add(GameEvent.PerfectDodge(combo, multiplier, bonus))
+    }
+
+    private fun updateCoins(dt: Float) {
+        var i = coins.size - 1
+        while (i >= 0) {
+            val c = coins[i]
+            c.y += speed * GameConfig.WORLD_PX_PER_SPEED_UNIT * dt
+            c.pulse += dt * 8f
+
+            val pickedUp = abs(playerX - c.x) < 26f && abs((playerY + 36f) - c.y) < 38f
+            if (pickedUp) {
+                score += GameConfig.SCORE_PER_COIN * scoreMultiplier
+                boost = (boost + GameConfig.BOOST_REFUND_PER_COIN).coerceAtMost(GameConfig.BOOST_MAX)
+                coinsCollected += GameConfig.COINS_PER_PICKUP
+                addParticles(c.x, c.y, boostTrail = false)
+                coins.removeAt(i)
+                events.add(GameEvent.CoinPicked(coinsCollected))
+            } else if (c.y > viewHeight + GameConfig.COIN_DESPAWN_MARGIN_PX) {
+                coins.removeAt(i)
+            }
+            i--
+        }
+    }
+
+    private fun updateParticles(dt: Float) {
+        var i = particles.size - 1
+        while (i >= 0) {
+            val p = particles[i]
+            p.x += p.vx
+            p.y += p.vy
+            p.life -= dt
+            p.vy += 0.03f
+            if (p.life <= 0f) particles.removeAt(i)
+            i--
+        }
+    }
+
+    private fun addParticles(x: Float, y: Float, boostTrail: Boolean) {
+        val count = if (boostTrail) 3 else 12
+        repeat(count) { index ->
+            particles.add(
+                Particle(
+                    x = x,
+                    y = y,
+                    vx = (random.nextFloat() - 0.5f) * (if (boostTrail) 1.4f else 4.6f),
+                    vy = if (boostTrail) {
+                        2f + random.nextFloat() * 3f
+                    } else {
+                        (random.nextFloat() - 0.5f) * 4.6f
+                    },
+                    life = if (boostTrail) {
+                        0.16f + random.nextFloat() * 0.12f
+                    } else {
+                        0.40f + random.nextFloat() * 0.20f
+                    },
+                    size = if (boostTrail) {
+                        3f + random.nextFloat() * 3f
+                    } else {
+                        2f + random.nextFloat() * 3f
+                    },
+                    color = if (boostTrail) {
+                        if (index % 2 == 1) COLOR_BOOST_BLUE else COLOR_BOOST_YELLOW
+                    } else {
+                        if (index % 2 == 1) COLOR_BOOST_YELLOW else COLOR_SPARK_ORANGE
+                    }
+                )
+            )
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Bitis kosullari
+    // -----------------------------------------------------------------
+
+    private fun onCrash() {
+        crashed = true
+        score = (score - GameConfig.CRASH_SCORE_PENALTY).coerceAtLeast(0f)
+        combo = 0
+        boosting = false
+        phase = RunPhase.CRASHED
+        events.add(GameEvent.Crash(saved = false))
+    }
+
+    private fun onTimeLimitReached() {
+        timeRemaining = 0f
+        val goal = level?.goal
+        // Sure hedefli bolumde sureyi doldurmak = basari; mesafe hedeflisinde
+        // sure limitine takilmak = basarisizlik.
+        val completed = goal is LevelGoal.SurviveTime
+        finish(completed)
+    }
+
+    private fun checkGoalReached() {
+        val goal = level?.goal
+        if (goal is LevelGoal.ReachDistance && distanceMeters() >= goal.meters) {
+            finish(completed = true)
+            return
+        }
+        // Gunluk gorev: EN UST kademe tutturuldugu anda kosu basariyla biter
+        // (sadece yukari sayan hedefler icin — bkz. Objective.autoCompletes).
+        // Ilk kademede bitirmek yanlis olurdu: oyuncu ayni kosuda ustteki
+        // kademeleri de toplayabilmeli.
+        if (mode == RunMode.DAILY && level != null) {
+            val objective = level.stars.last()
+            if (objective.autoCompletes && objective.isMet(currentStats(completed = true))) {
+                finish(completed = true)
+            }
+        }
+    }
+
+    /**
+     * Kosuyu bitirir. Carpisma sonrasi kullanici "devam" teklifini reddettiginde
+     * de UI bunu cagirir.
+     */
+    fun finish(completed: Boolean = false) {
+        if (phase == RunPhase.FINISHED) return
+        phase = RunPhase.FINISHED
+        boosting = false
+        val stats = currentStats(completed = completed && !crashed)
+        val stars = LevelEvaluator.stars(level, stats)
+        // Gunluk gorevde kademe carpismadan bagimsiz sayilir (bkz. tiersReached).
+        val dailyTiers = if (mode == RunMode.DAILY && level != null) {
+            LevelEvaluator.tiersReached(level.stars, stats)
+        } else {
+            0
+        }
+        // Yildiz coini SADECE YENI kazanilan yildiz icin odenir. Eskiden her
+        // oynayista tekrar odeniyordu ve bolum 1'i (30 sn, uc kolay yildiz)
+        // tekrar tekrar oynamak, bolum 30'u oynamaktan daha karliydi — oyunun
+        // en yuksek coin/saniye orani bir farm dongusuydu (2026-08-14).
+        val newStars = (stars - previousStars).coerceAtLeast(0)
+        var coinsEarned = stats.coinsCollected * GameConfig.COINS_PER_PICKUP +
+            stats.score / GameConfig.SCORE_PER_BONUS_COIN +
+            newStars * GameConfig.COINS_PER_STAR
+        if (BoosterType.DOUBLE_REWARD in boosters) {
+            coinsEarned *= GameConfig.DOUBLE_REWARD_MULTIPLIER
+        }
+        // Cok kisa kosu hic odemez: "basla - hemen birak - tekrar basla"
+        // dongusu de bir farm yoluydu (bkz. GameConfig.MIN_PAID_RUN_SECONDS).
+        if (stats.timeSurvivedSec < GameConfig.MIN_PAID_RUN_SECONDS) coinsEarned = 0
+        val xpEarned = stats.score / GameConfig.XP_PER_SCORE_POINT_DIVISOR +
+            stars * GameConfig.XP_PER_STAR
+
+        val newRecord = mode == RunMode.ENDLESS && stats.timeSurvivedSec > endlessRecordSeconds
+        val gap = endlessRecordSeconds - stats.timeSurvivedSec
+        val secondsFromRecord = if (
+            mode == RunMode.ENDLESS && !newRecord && gap in 1..GameConfig.NEAR_RECORD_SECONDS
+        ) gap else null
+
+        val result = RunResult(
+            mode = mode,
+            levelId = level?.id,
+            stats = stats,
+            stars = stars,
+            newStars = newStars,
+            coinsEarned = coinsEarned,
+            xpEarned = xpEarned,
+            dailyTiers = dailyTiers,
+            newRecord = newRecord,
+            secondsFromRecord = secondsFromRecord
+        )
+        lastResult = result
+        events.add(GameEvent.Finished(result))
+    }
+
+    /** Carpisma aninda "reklamla devam" teklif edilebilir mi. */
+    fun canRevive(): Boolean =
+        phase == RunPhase.CRASHED && revivesUsed < GameConfig.REVIVE_MAX_PER_RUN
+
+    // -----------------------------------------------------------------
+    // Duraklatma menusunden reklamli guclendirici
+    // -----------------------------------------------------------------
+
+    /**
+     * Duraklatma menusunde reklam izleyerek Ikinci Sans alinabilir mi
+     * (sahibi istegi, 2026-08-14). Kosu basina BIR KEZ ve yalnizca oyuncuda
+     * zaten Ikinci Sans yokken — aksi halde reklam izleyip hicbir sey
+     * almadigini dusunurdu.
+     */
+    fun canGrantPauseBooster(): Boolean =
+        phase == RunPhase.PAUSED && !pauseBoosterUsed && !secondChanceAvailable
+
+    /** Reklam gercekten izlendiginde cagrilir; bu kosu icin Ikinci Sans verir. */
+    fun grantPauseBooster() {
+        if (!canGrantPauseBooster()) return
+        pauseBoosterUsed = true
+        secondChanceAvailable = true
+        boost = GameConfig.BOOST_MAX
+    }
+
+    // -----------------------------------------------------------------
+    // Turetilmis degerler
+    // -----------------------------------------------------------------
+
+    fun distanceMeters(): Int = (distancePx / GameConfig.PIXELS_PER_METER).toInt()
+
+    fun boostDistanceMeters(): Int = (boostDistancePx / GameConfig.PIXELS_PER_METER).toInt()
+
+    fun speedKmh(): Int = GameConfig.speedToKmh(speed)
+
+    fun currentStats(completed: Boolean = false): RunStats = RunStats(
+        score = score.toInt(),
+        timeSurvivedSec = timeElapsed.toInt(),
+        distanceMeters = distanceMeters(),
+        boostDistanceMeters = boostDistanceMeters(),
+        vehiclesPassed = vehiclesPassed,
+        perfectDodges = perfectDodges,
+        bestCombo = bestCombo,
+        bigCombos = bigCombos,
+        coinsCollected = coinsCollected,
+        brakeTaps = brakeTaps,
+        crashed = crashed,
+        revivesUsed = revivesUsed,
+        completed = completed
+    )
+
+    /** Sonsuz modda sure ilerledikce hiz carpani (30sn -> +%10, 60sn -> +%20 ...). */
+    fun endlessSpeedMultiplier(): Float {
+        if (mode != RunMode.ENDLESS) return 1f
+        val steps = floor(timeElapsed / GameConfig.ENDLESS_STEP_SECONDS)
+        return (1f + GameConfig.ENDLESS_SPEED_STEP * steps)
+            .coerceAtMost(GameConfig.ENDLESS_SPEED_MAX_MULTIPLIER)
+    }
+
+    private fun endlessTrafficMultiplier(): Float {
+        if (mode != RunMode.ENDLESS) return 1f
+        val steps = floor(timeElapsed / GameConfig.ENDLESS_STEP_SECONDS)
+        return (1f + GameConfig.ENDLESS_TRAFFIC_STEP * steps)
+            .coerceAtMost(GameConfig.ENDLESS_TRAFFIC_MAX_MULTIPLIER)
+    }
+
+    /** Dokunulmazlik suresi devam ediyor mu (cizimde araci yanip sondurmek icin). */
+    fun isInvulnerable(): Boolean = invulnerableFor > 0f
+
+    private fun rectHit(
+        ax: Float, ay: Float, aw: Float, ah: Float,
+        bx: Float, by: Float, bw: Float, bh: Float
+    ): Boolean = ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by
+
+    companion object {
+        /** Prototipteki engel renkleri: sari, mavi, beyaz, turuncu. */
+        val OBSTACLE_COLORS = intArrayOf(0xFFFFD60A.toInt(), 0xFF00C2FF.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF7B00.toInt())
+
+        private val COLOR_BOOST_BLUE = 0xFF19A2FF.toInt()
+        private val COLOR_BOOST_YELLOW = 0xFFFFD33D.toInt()
+        private val COLOR_SPARK_ORANGE = 0xFFFF6536.toInt()
+    }
+}

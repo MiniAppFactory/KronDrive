@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Varsayilan: tum uygulama verisi yedeklenir (sadece yerel oyun
+             ilerlemesi; kimlik/odeme/hassas veri yok). -->
+    </cloud-backup>
+</data-extraction-rules>

@@ -1,0 +1,17 @@
+# Satir sonlarini normalize et: depoda LF, Windows'ta calisma kopyasi CRLF.
+# Bu olmadan her dosya ilk commit'te "tumu degisti" gorunur.
+* text=auto
+
+# Gradle wrapper betigi Unix'te calisabilmeli — CRLF ile bozulur.
+gradlew text eol=lf
+*.sh text eol=lf
+gradlew.bat text eol=crlf
+
+# Ikili dosyalar: git bunlara dokunmasin.
+*.png binary
+*.jpg binary
+*.jar binary
+*.apk binary
+*.aab binary
+*.keystore binary
+*.jks binary
