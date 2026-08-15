@@ -6,21 +6,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import com.miniappfactory.krondrive.game.CarAxis
 import com.miniappfactory.krondrive.game.CarCatalog
+import com.miniappfactory.krondrive.game.CarGradient
 import com.miniappfactory.krondrive.game.CarPart
 import com.miniappfactory.krondrive.game.CarStyle
 import com.miniappfactory.krondrive.game.GameConfig
+import kotlin.math.sin
 
 /**
- * Oyuncu aracinin cizimi — TEK kaynak. Hem oyun sahnesi
- * ([com.miniappfactory.krondrive.ui.game.drawGameScene]) hem de garajdaki
- * onizleme bu fonksiyonlari kullanir; boylece garajda gordugun arac ile
- * yolda surdugun arac ayni koddan cikar.
+ * Arac cizimi — TEK kaynak. Oyun sahnesi
+ * ([com.miniappfactory.krondrive.ui.game.drawGameScene]), garaj onizlemesi ve
+ * TRAFIK araclari ayni fonksiyonlari kullanir; boylece garajda gordugun arac
+ * ile yolda surdugun arac (ve onundeki trafik) ayni koddan cikar.
  *
  * Sekle ozel Compose kodu YOKTUR: geometri [CarCatalog] icinde saf veri olarak
  * durur, burasi sadece o veriyi Canvas'a cevirir. Yeni sekil eklemek icin bu
@@ -29,6 +33,64 @@ import com.miniappfactory.krondrive.game.GameConfig
  * Koordinatlar prototipin ham arac uzayindadir (x -20..20, y -2..74); olcegi
  * cagiran uygular.
  */
+
+// ---------------------------------------------------------------------------
+// Renk / firca yardimcilari
+// ---------------------------------------------------------------------------
+
+/** Ton kaydirma: `+1` tam beyaz, `-1` tam siyah (bkz. [com.miniappfactory.krondrive.game.CarTint]). */
+private fun shifted(color: Color, shift: Float): Color = when {
+    shift >= 0f -> Color(
+        red = color.red + (1f - color.red) * shift,
+        green = color.green + (1f - color.green) * shift,
+        blue = color.blue + (1f - color.blue) * shift,
+        alpha = color.alpha
+    )
+
+    else -> {
+        val k = 1f + shift
+        Color(color.red * k, color.green * k, color.blue * k, color.alpha)
+    }
+}
+
+/**
+ * Firca onbellegi.
+ *
+ * Gerekli, cunku sahne 60 Hz'de yeniden ciziliyor ve her karede oyuncu +
+ * trafik araclari icin duzinelerce gradyan uretilirdi. [Brush] nesnesi kendi
+ * shader'ini boyuta gore icinde onbelleklediginden, ayni ORNEGI yeniden
+ * kullanmak native shader'in da yeniden uretilmesini engeller.
+ *
+ * Anahtar (renk + parca) sonlu: 4 govde + trafik x 13 renk. Sinirsiz
+ * buyumez, bu yuzden tahliye politikasi yok. Compose cizimi tek is
+ * parcaciginda (main) yurudugu icin senkronizasyon da gerekmiyor.
+ */
+private val brushCache = HashMap<Pair<Long, CarPart>, Brush>()
+
+private fun brushFor(argb: Long, part: CarPart, gradient: CarGradient): Brush =
+    brushCache.getOrPut(argb to part) {
+        val base = Color(argb)
+        val stops = gradient.stops
+            .map { it.position to shifted(base, it.shift) }
+            .toTypedArray()
+        when (gradient.axis) {
+            CarAxis.HORIZONTAL -> Brush.horizontalGradient(
+                colorStops = stops,
+                startX = part.left,
+                endX = part.right
+            )
+
+            CarAxis.VERTICAL -> Brush.verticalGradient(
+                colorStops = stops,
+                startY = part.top,
+                endY = part.bottom
+            )
+        }
+    }
+
+// ---------------------------------------------------------------------------
+// Cizim
+// ---------------------------------------------------------------------------
 
 /** Yere dusen golge — sekilden BAGIMSIZ, aracin ayak izi hissi sabit kalsin diye. */
 fun DrawScope.drawCarShadow() {
@@ -42,28 +104,39 @@ fun DrawScope.drawCarShadow() {
 /** Katalogdaki parcalari sirayla cizer (liste sirasi = katman sirasi). */
 fun DrawScope.drawCarParts(style: CarStyle) {
     style.shape.parts.forEach { part ->
-        val color = Color(style.argbOf(part.paint))
+        val argb = style.argbOf(part.paint)
+        val gradient = part.gradient
+        val brush = gradient?.let { brushFor(argb, part, it) }
+        val color = Color(argb)
+        val alpha = part.alpha
         when (part) {
-            is CarPart.Box -> if (part.corner > 0f) {
-                drawRoundRect(
-                    color = color,
-                    topLeft = Offset(part.left, part.top),
-                    size = Size(part.width, part.height),
-                    cornerRadius = CornerRadius(part.corner)
-                )
-            } else {
-                drawRect(
-                    color = color,
-                    topLeft = Offset(part.left, part.top),
-                    size = Size(part.width, part.height)
-                )
+            is CarPart.Box -> {
+                val topLeft = Offset(part.left, part.top)
+                val size = Size(part.width, part.height)
+                if (part.corner > 0f) {
+                    val radius = CornerRadius(part.corner)
+                    if (brush != null) {
+                        drawRoundRect(brush, topLeft, size, radius, alpha = alpha)
+                    } else {
+                        drawRoundRect(color, topLeft, size, radius, alpha = alpha)
+                    }
+                } else {
+                    if (brush != null) {
+                        drawRect(brush, topLeft, size, alpha = alpha)
+                    } else {
+                        drawRect(color, topLeft, size, alpha = alpha)
+                    }
+                }
             }
 
-            is CarPart.Disc -> drawCircle(
-                color = color,
-                radius = part.radius,
-                center = Offset(part.centerX, part.centerY)
-            )
+            is CarPart.Disc -> {
+                val center = Offset(part.centerX, part.centerY)
+                if (brush != null) {
+                    drawCircle(brush, part.radius, center, alpha = alpha)
+                } else {
+                    drawCircle(color, part.radius, center, alpha = alpha)
+                }
+            }
 
             is CarPart.Wedge -> {
                 val path = Path().apply {
@@ -72,32 +145,98 @@ fun DrawScope.drawCarParts(style: CarStyle) {
                     }
                     close()
                 }
-                drawPath(path, color)
+                if (brush != null) {
+                    drawPath(path, brush, alpha = alpha)
+                } else {
+                    drawPath(path, color, alpha = alpha)
+                }
             }
         }
     }
 }
 
 /**
- * Boost alevi. Aracin bittigi yerden baslar — kisa gövdeli sekillerde egzoz
- * ile alev arasinda bosluk kalmasin diye sabit bir y kullanilmiyor.
+ * Boost alevi. Dort katman: halo + dis pluma + ic pluma + sicak cekirdek.
+ *
+ * Her pluma ucuna dogru hem DARALIR hem SAYDAMLASIR — kenarlarin sonumlenmesi
+ * buradan geliyor. Eski cizim iki duz ucgendi ve sahibin ifadesiyle "lego
+ * gibi" duruyordu (2026-08-15). Alev yalnizca cizimdir, carpismaya girmez.
+ *
+ * [phase] saniye cinsinden bir zaman; iki farkli frekansta sinus ile
+ * titrestirilir ki tekrar mekanik hissettirmesin. Varsayilani 0 — durgun
+ * onizlemeler (garaj) icin.
  */
-fun DrawScope.drawCarBoostFlame(style: CarStyle) {
-    val start = style.shape.artBottom + CarCatalog.FLAME_GAP
-    val outer = Path().apply {
-        moveTo(-CarCatalog.FLAME_OUTER_HALF_WIDTH, start)
-        lineTo(CarCatalog.FLAME_OUTER_HALF_WIDTH, start)
-        lineTo(0f, start + CarCatalog.FLAME_OUTER_LENGTH)
+fun DrawScope.drawCarBoostFlame(style: CarStyle, phase: Float = 0f) {
+    val root = style.shape.artBottom + CarCatalog.FLAME_ROOT_OFFSET
+    val flicker = 1f + 0.13f * sin(phase * 17f) + 0.07f * sin(phase * 27.3f)
+    val wobble = 1f + 0.09f * sin(phase * 21f + 1.7f)
+
+    // 1) Halo: yumusak kenari veren radyal sonum.
+    val haloCenter = Offset(0f, root + CarCatalog.FLAME_HALO_RADIUS * 0.42f)
+    val outer = Color(CarCatalog.FLAME_OUTER_ARGB)
+    drawCircle(
+        brush = Brush.radialGradient(
+            colorStops = arrayOf(
+                0f to outer.copy(alpha = 0.30f),
+                0.45f to outer.copy(alpha = 0.13f),
+                1f to outer.copy(alpha = 0f)
+            ),
+            center = haloCenter,
+            radius = CarCatalog.FLAME_HALO_RADIUS
+        ),
+        radius = CarCatalog.FLAME_HALO_RADIUS,
+        center = haloCenter
+    )
+
+    // 2-4) Plumalar: kok genis ve opak, uc sivri ve saydam.
+    plume(
+        root, CarCatalog.FLAME_OUTER_HALF_WIDTH * wobble,
+        CarCatalog.FLAME_OUTER_LENGTH * flicker, outer, 0.84f
+    )
+    val innerLength = CarCatalog.FLAME_INNER_LENGTH * (1f + 0.10f * sin(phase * 23f + 0.6f))
+    plume(
+        root, CarCatalog.FLAME_INNER_HALF_WIDTH * wobble, innerLength,
+        Color(CarCatalog.FLAME_INNER_ARGB), 0.92f
+    )
+    plume(
+        root, CarCatalog.FLAME_INNER_HALF_WIDTH * wobble * 0.52f, innerLength * 0.62f,
+        Color(CarCatalog.FLAME_CORE_ARGB), 0.98f
+    )
+}
+
+/**
+ * Tek bir alev plumasi. Uca dogru daralan bir yol cizilir ve uzerine kokten
+ * uca saydamlasan bir dikey gradyan uygulanir; ikisi birlikte "kenari sonen
+ * alev" hissini veriyor.
+ */
+private fun DrawScope.plume(
+    root: Float,
+    halfWidth: Float,
+    length: Float,
+    color: Color,
+    alpha: Float
+) {
+    if (length <= 0f || halfWidth <= 0f) return
+    val tip = root + length
+    val path = Path().apply {
+        moveTo(-halfWidth, root)
+        // Kenarlar duz degil hafif ic bukey: sivri uc daha organik okunuyor.
+        quadraticTo(-halfWidth * 0.72f, root + length * 0.55f, 0f, tip)
+        quadraticTo(halfWidth * 0.72f, root + length * 0.55f, halfWidth, root)
         close()
     }
-    drawPath(outer, Color(CarCatalog.FLAME_OUTER_ARGB))
-    val inner = Path().apply {
-        moveTo(-CarCatalog.FLAME_INNER_HALF_WIDTH, start)
-        lineTo(CarCatalog.FLAME_INNER_HALF_WIDTH, start)
-        lineTo(0f, start + CarCatalog.FLAME_INNER_LENGTH)
-        close()
-    }
-    drawPath(inner, Color(CarCatalog.FLAME_INNER_ARGB))
+    drawPath(
+        path = path,
+        brush = Brush.verticalGradient(
+            colorStops = arrayOf(
+                0f to color.copy(alpha = alpha),
+                0.45f to color.copy(alpha = alpha * 0.55f),
+                1f to color.copy(alpha = 0f)
+            ),
+            startY = root,
+            endY = tip
+        )
+    )
 }
 
 /**
@@ -105,12 +244,18 @@ fun DrawScope.drawCarBoostFlame(style: CarStyle) {
  * [GameConfig.CAR_ART_SCALE] burada uygulanir — carpisma kutusu ayni sabitten
  * turetildigi icin gorsel ile kutu birebir ortusur.
  */
-fun DrawScope.drawStyledCar(x: Float, y: Float, style: CarStyle, boosting: Boolean) {
+fun DrawScope.drawStyledCar(
+    x: Float,
+    y: Float,
+    style: CarStyle,
+    boosting: Boolean,
+    flamePhase: Float = 0f
+) {
     translate(x, y) {
         scale(GameConfig.CAR_ART_SCALE, GameConfig.CAR_ART_SCALE, pivot = Offset.Zero) {
             drawCarShadow()
             drawCarParts(style)
-            if (boosting) drawCarBoostFlame(style)
+            if (boosting) drawCarBoostFlame(style, flamePhase)
         }
     }
 }

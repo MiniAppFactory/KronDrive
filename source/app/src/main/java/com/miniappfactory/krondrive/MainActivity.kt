@@ -15,9 +15,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
-import com.google.android.ump.ConsentRequestParameters
-import com.google.android.ump.UserMessagingPlatform
 import com.miniappfactory.krondrive.ads.AdIds
+import com.miniappfactory.krondrive.ads.ConsentManager
 import com.miniappfactory.krondrive.audio.EngineSoundManager
 import com.miniappfactory.krondrive.ui.KronViewModel
 import com.miniappfactory.krondrive.ui.navigation.AppNavigation
@@ -46,12 +45,17 @@ class MainActivity : ComponentActivity() {
         )
         MobileAds.initialize(applicationContext) {}
 
-        requestAndShowUmpConsentIfRequired { adsConsentResolved.value = true }
+        ConsentManager.requestConsent(this) { adsConsentResolved.value = true }
         // Guvenlik agi: consent akisi (ag hatasi, yayinlanmamis Privacy form vb.)
         // hicbir dali cagirmadan takilirsa banner O OTURUM BOYUNCA hic gorunmez.
-        // 4 saniye sonra reklamlari yine de ac.
+        // 4 saniye sonra TEKRAR SORULUR — ama kosulsuz acilmaz: reklam ancak
+        // SDK "istenebilir" diyorsa gosterilir. Eskiden burada kosulsuz `true`
+        // vardi ve onay cozulmeden banner acilabiliyordu (uyum denetimi,
+        // 2026-08-14; EU User Consent Policy ihlali riski).
         Handler(Looper.getMainLooper()).postDelayed({
-            if (!adsConsentResolved.value) adsConsentResolved.value = true
+            if (!adsConsentResolved.value && ConsentManager.canRequestAds(this)) {
+                adsConsentResolved.value = true
+            }
         }, 4000)
 
         setContent {
@@ -75,23 +79,4 @@ class MainActivity : ComponentActivity() {
         EngineSoundManager.stop()
     }
 
-    /**
-     * UMP consent: guncelleme HATA verse bile `canRequestAds()` true ise
-     * reklamlara devam edilir — AdMob konsolunda Privacy & Messaging formu
-     * yayinlanmamissa hata donuyor ama bu reklam istemeyi engellememeli.
-     */
-    private fun requestAndShowUmpConsentIfRequired(onResolved: () -> Unit) {
-        val params = ConsentRequestParameters.Builder().build()
-        val consentInformation = UserMessagingPlatform.getConsentInformation(this)
-        consentInformation.requestConsentInfoUpdate(
-            this,
-            params,
-            {
-                UserMessagingPlatform.loadAndShowConsentFormIfRequired(this) { onResolved() }
-            },
-            {
-                if (consentInformation.canRequestAds()) onResolved()
-            }
-        )
-    }
 }

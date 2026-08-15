@@ -30,13 +30,26 @@ class GameEngine(
      */
     private val previousStars: Int = 0,
     /**
-     * Oyuncunun garajda sectigi govde sekli ve boyasi. Simulasyona HIC
-     * dokunmaz — yalnizca cizim okur (carpisma kutusu [GameConfig] sabitlerinden
-     * gelir ve sekle gore degismez).
+     * Oyuncunun garajda sectigi govde sekli ve boyasi.
+     *
+     * 2026-08-15'e kadar simulasyona HIC dokunmuyordu (araclar tamamen
+     * kozmetikti). Artik govdenin dort surus carpani fizige giriyor — bkz.
+     * [CarShapeDef] ve `docs/BALANCE.md`. Boya hâlâ yalnizca cizimdir.
+     *
+     * CARPISMA KUTUSU DEGISMEDI: kutu [GameConfig] sabitlerinden gelir ve
+     * sekle gore degismez (PROVENANCE #6). Carpanlar yalnizca hedef hiza,
+     * yaklasma oranina, fren cezasina ve boost tuketimine dokunur.
      */
     val carStyle: CarStyle = CarCatalog.defaultStyle,
     private val random: Random = Random.Default
 ) {
+
+    /**
+     * Fizige giren govde. Kosu boyunca degismez — oyuncu garaja donmeden
+     * arac degistiremez, bu yuzden her karede [carStyle] uzerinden cozmek
+     * yerine bir kez alaniyor.
+     */
+    private val car: CarShapeDef = carStyle.shape
 
     // -----------------------------------------------------------------
     // Sahne olculeri
@@ -127,9 +140,6 @@ class GameEngine(
         if (BoosterType.TURBO_START in boosters) GameConfig.TURBO_START_FREE_BOOST_SEC else 0f
     private var secondChanceAvailable: Boolean = BoosterType.SECOND_CHANCE in boosters
 
-    /** Duraklatma menusundeki reklamli guclendirici bu kosuda kullanildi mi. */
-    private var pauseBoosterUsed: Boolean = false
-
     /** Bar bosaldi ve parmak hala basili — boost yeniden tutusamaz. */
     private var boostLockedUntilRelease: Boolean = false
 
@@ -170,7 +180,14 @@ class GameEngine(
         var x: Float,
         var y: Float,
         val colorIndex: Int,
-        val speedMul: Float
+        /**
+         * Aracin KENDI ileri hizi, oyuncunun hiziyla ayni birimde.
+         * Ekranda asagi akma hizi `(oyuncuHizi - ownSpeed) * K`; zemin
+         * `oyuncuHizi * K` ile kaydigi icin arac asfalta gore `ownSpeed`
+         * kadar ILERI gider. 0 = park etmis arac (eski davranis).
+         * Bkz. [GameConfig.TRAFFIC_SPEED_RATIO_MIN].
+         */
+        val ownSpeed: Float
     ) {
         /** Oyuncuyla dikey olarak ortusurken gorulen en kucuk yatay mesafe. */
         var minDx: Float = Float.MAX_VALUE
@@ -197,6 +214,9 @@ class GameEngine(
     private var obstacleSpawnAcc: Float = 0f
     private var coinSpawnAcc: Float = 0f
 
+    /** Sifirdan buyukken yeni arac dogmaz (revive sonrasi guvenli pencere). */
+    private var spawnPausedFor: Float = 0f
+
     private val events = ArrayList<GameEvent>()
 
     init {
@@ -221,6 +241,38 @@ class GameEngine(
 
     fun setBoost(down: Boolean) {
         boostDown = down
+    }
+
+    // -----------------------------------------------------------------
+    // Hiz kilidi — YALNIZCA sonsuz mod
+    // -----------------------------------------------------------------
+
+    /**
+     * Sonsuz modda hiz kilidi acik mi. Sahibi istegi (2026-08-15): "uzun sure
+     * gitmek isteyen varsa sabitlesin, yavas yavas gitsin".
+     *
+     * Kilit ACIKKEN skordan gelen hizlanma ve sonsuz modun 30 saniyelik hiz
+     * rampasi DEVRE DISI kalir; hiz kilitlendigi degerde durur. Boost ve fren
+     * calismaya devam eder — kilit "hizini sen yonet" demek, "donduruldu"
+     * demek degil.
+     *
+     * TRAFIK YOGUNLUGU RAMPASI DURMAZ: mod yine zorlasir, sadece oyuncu
+     * kendi temposunu secer. Aksi halde kilit, sonsuz modu sonsuz bir
+     * duz yola cevirirdi.
+     */
+    var speedLocked: Boolean = false
+        private set
+
+    /** Kilitlendigi andaki hedef hiz; kilit acikken taban budur. */
+    private var lockedSpeed: Float = 0f
+
+    /** Hiz kilidi bu modda kullanilabilir mi (yalnizca sonsuz mod). */
+    fun canLockSpeed(): Boolean = mode == RunMode.ENDLESS
+
+    fun toggleSpeedLock() {
+        if (!canLockSpeed()) return
+        speedLocked = !speedLocked
+        if (speedLocked) lockedSpeed = speed
     }
 
     fun setBrake(down: Boolean) {
@@ -254,8 +306,15 @@ class GameEngine(
         if (phase != RunPhase.CRASHED) return
         revivesUsed++
         crashed = false
-        obstacles.removeAll { it.y > -GameConfig.CAR_HEIGHT_PX && it.y < viewHeight }
+        // TUM araclar temizlenir — eskiden yalnizca EKRANDAKILER siliniyordu,
+        // ekranin ustunde bekleyenler (y < -CAR_HEIGHT) duruyor ve dokunulmazlik
+        // biter bitmez oyuncunun uzerine iniyordu. Oyuncu bunu "reklami izledim,
+        // baslar baslamaz tekrar carptim" diye bildirdi (2026-08-14).
+        obstacles.clear()
         invulnerableFor = GameConfig.INVULNERABLE_SEC_AFTER_SAVE
+        // Bos yolun hemen yeni araclarla dolmamasi icin dogma da duraklatilir.
+        spawnPausedFor = GameConfig.REVIVE_SPAWN_PAUSE_SEC
+        obstacleSpawnAcc = 0f
         boost = GameConfig.BOOST_MAX
         combo = 0
         comboTimer = 0f
@@ -326,8 +385,13 @@ class GameEngine(
     }
 
     private fun updateSpeed(dt: Float) {
-        val scoreCap = UpgradeCatalog.scoreSpeedCap(upgrades.speed)
-        var target = baseSpeed + min(scoreCap, score / GameConfig.SCORE_SPEED_DIVISOR)
+        val scoreCap = UpgradeCatalog.scoreSpeedCap(upgrades.speed, car)
+        // Kilit acikken skordan gelen hizlanma yok sayilir (bkz. speedLocked).
+        var target = if (speedLocked) {
+            lockedSpeed
+        } else {
+            baseSpeed + min(scoreCap, score / GameConfig.SCORE_SPEED_DIVISOR)
+        }
 
         // Parmak kalkinca kilit acilir.
         if (!boostDown) boostLockedUntilRelease = false
@@ -339,13 +403,24 @@ class GameEngine(
             !boostLockedUntilRelease &&
             (boost > energyThreshold || freeBoostRemaining > 0f)
         if (wantsBoost) target += UpgradeCatalog.boostSpeedBonus(upgrades.boost)
-        if (brakeDown) target -= UpgradeCatalog.brakePenalty(upgrades.brake)
-        target *= endlessSpeedMultiplier()
+        if (brakeDown) target -= UpgradeCatalog.brakePenalty(upgrades.brake, car)
+        // Sonsuz modun 30 saniyelik hiz rampasi da kilitliyken uygulanmaz;
+        // trafik yogunlugu rampasi ise devam eder (bkz. speedLocked).
+        if (!speedLocked) target *= endlessSpeedMultiplier()
         target = target.coerceAtLeast(GameConfig.MIN_SPEED)
 
         val rate = if (target > speed) {
-            UpgradeCatalog.accelRate(upgrades.acceleration)
+            UpgradeCatalog.accelRate(upgrades.acceleration, car)
         } else {
+            // Aracin fren carpani BURAYA UYGULANMAZ, bilerek. [decelRate]
+            // yalnizca frenin degil HER asagi yoneli yakinsamanin orani:
+            // boost birakildiktan sonraki sonumleme de bundan gecer. Carpanla
+            // olceklenseydi "freni iyi" bir arac boost'un artigini da daha
+            // cabuk kaybederdi — yani bir GUC, gizli bir CEZA getirirdi.
+            // Ayrica garajdaki FREN cubugu [brakePenalty] uzerinden okunuyor;
+            // gosterilmeyen ikinci bir etki eklemek "gosterilmeyen ozellik yok
+            // sayilir" kuralini bozardi (docs/BALANCE.md, sinir 3). Ayni hata
+            // yukseltme tarafinda bir kez yapilmisti (bkz. UpgradeCatalog).
             UpgradeCatalog.decelRate(upgrades.brake)
         }
         speed += (target - speed) * min(1f, rate * dt)
@@ -360,7 +435,8 @@ class GameEngine(
                 // TURBO_START: ilk saniyelerde enerji harcanmaz.
                 freeBoostRemaining -= dt
             } else {
-                boost = (boost - UpgradeCatalog.boostDrain(upgrades.boost) * dt).coerceAtLeast(0f)
+                boost =
+                    (boost - UpgradeCatalog.boostDrain(upgrades.boost, car) * dt).coerceAtLeast(0f)
                 if (boost <= 0f) boostLockedUntilRelease = true
             }
             addParticles(playerX, playerY + 86f, boostTrail = true)
@@ -389,9 +465,21 @@ class GameEngine(
 
     private fun spawn(dt: Float) {
         val traffic = endlessTrafficMultiplier()
+        if (spawnPausedFor > 0f) {
+            // Revive sonrasi guvenli pencere: coin dogmaya devam eder (tehdit
+            // degil), arac dogmaz. Sayac da ilerlemez ki pencere bitince
+            // birikmis bir arac aniden dusmesin.
+            spawnPausedFor -= dt
+            coinSpawnAcc += dt
+            if (coinSpawnAcc > GameConfig.COIN_SPAWN_INTERVAL_SEC) {
+                spawnCoin()
+                coinSpawnAcc = 0f
+            }
+            return
+        }
         obstacleSpawnAcc += dt
         coinSpawnAcc += dt
-        if (obstacleSpawnAcc > GameConfig.OBSTACLE_SPAWN_INTERVAL_SEC / traffic) {
+        if (obstacleSpawnAcc > obstacleSpawnInterval(traffic)) {
             spawnObstacle()
             obstacleSpawnAcc = 0f
         }
@@ -409,11 +497,33 @@ class GameEngine(
                 x = laneCenter(lane),
                 y = GameConfig.OBSTACLE_SPAWN_Y_PX,
                 colorIndex = random.nextInt(OBSTACLE_COLORS.size),
-                speedMul = GameConfig.OBSTACLE_SPEED_MUL_MIN +
-                    random.nextFloat() *
-                    (GameConfig.OBSTACLE_SPEED_MUL_MAX - GameConfig.OBSTACLE_SPEED_MUL_MIN)
+                ownSpeed = randomTrafficSpeed()
             )
         )
+    }
+
+    /**
+     * Yeni bir trafik aracinin kendi hizi. Oyuncunun ANLIK hizina degil
+     * kosunun TABAN hizina baglidir — boost'a basinca oyuncu gercekten daha
+     * hizli yaklassin diye (bkz. [GameConfig.TRAFFIC_SPEED_RATIO_MIN]).
+     */
+    private fun randomTrafficSpeed(): Float {
+        val ratio = GameConfig.TRAFFIC_SPEED_RATIO_MIN +
+            random.nextFloat() *
+            (GameConfig.TRAFFIC_SPEED_RATIO_MAX - GameConfig.TRAFFIC_SPEED_RATIO_MIN)
+        return baseSpeed * ratio
+    }
+
+    /**
+     * O anki engel dogma araligi. Iki carpan var:
+     * - [endlessTrafficMultiplier]: sonsuz modda sure ilerledikce siklasir.
+     * - [LevelDef.trafficDensity]: bolumun kendi yogunlugu (varsayilan 1.0).
+     *   Ilk bolumler bunu 1'in ALTINDA tutar; yol seyrek, oyuncu once serit
+     *   degistirmeyi ogrenir.
+     */
+    fun obstacleSpawnInterval(endlessTraffic: Float = endlessTrafficMultiplier()): Float {
+        val density = level?.trafficDensity ?: 1f
+        return GameConfig.OBSTACLE_SPAWN_INTERVAL_SEC / (endlessTraffic * density)
     }
 
     private fun spawnCoin() {
@@ -441,7 +551,11 @@ class GameEngine(
         var i = obstacles.size - 1
         while (i >= 0) {
             val o = obstacles[i]
-            o.y += speed * GameConfig.WORLD_PX_PER_SPEED_UNIT * dt * o.speedMul
+            // Ekrandaki asagi hiz = YAKLASMA hizi. Zemin `speed * K` ile
+            // kaydigi icin aradaki fark kadar arac asfalta gore ILERI gider.
+            // Fark negatife donerse (oyuncu frende, trafigin altinda) arac
+            // yukari dogru uzaklasir; asagidaki ust sinir onu temizler.
+            o.y += (speed - o.ownSpeed) * GameConfig.WORLD_PX_PER_SPEED_UNIT * dt
 
             val obstacleHitLeft = o.x - hitW / 2f
             val obstacleHitTop = o.y + GameConfig.CAR_HITBOX_TOP_OFFSET
@@ -480,7 +594,14 @@ class GameEngine(
                 if (o.minDx <= GameConfig.perfectDodgeMaxDx(laneWidth)) registerPerfectDodge()
             }
 
-            if (o.y > viewHeight + GameConfig.OBSTACLE_DESPAWN_MARGIN_PX) {
+            // Iki yonlu temizlik. Ust sinir, oyuncu frene basip trafigin
+            // altina dustugu (yaklasma hizi negatif) durum icin: arac yukari
+            // dogru uzaklasir ve bir daha geri gelmez. `evaluated` bayragi
+            // korundugu icin geri gelse bile ikinci kez puan/dodge vermez.
+            val goneBelow = o.y > viewHeight + GameConfig.OBSTACLE_DESPAWN_MARGIN_PX
+            val goneAbove = o.y <
+                GameConfig.OBSTACLE_SPAWN_Y_PX - GameConfig.OBSTACLE_DESPAWN_TOP_MARGIN_PX
+            if (goneBelow || goneAbove) {
                 obstacles.removeAt(i)
             }
             i--
@@ -597,6 +718,23 @@ class GameEngine(
             finish(completed = true)
             return
         }
+        // Kariyer: TUM hedefler tutturulduysa bolum orada biter. Oyuncu
+        // "uc gorevi de tamamladim ama bolum bitmedi" dedi (2026-08-15) —
+        // hakliydi: bitis kosulu sure/mesafeydi, hedefler degil. Artik
+        // yapacak bir sey kalmayinca bekletilmiyor.
+        //
+        // Sart: hedeflerin HEPSI yukari sayan turden olmali. "Bolumu
+        // tamamla" (CompleteRun) ya da "frene en fazla N kez bas" gibi
+        // hedefler kosu bitmeden degerlendirilemez; oyle bir hedef varsa
+        // bolum yine kendi hedefiyle (sure/mesafe) biter.
+        if (mode == RunMode.CAREER && level != null && level.stars.isNotEmpty()) {
+            val stats = currentStats(completed = true)
+            if (level.stars.all { it.autoCompletes && it.isMet(stats) }) {
+                finish(completed = true)
+                return
+            }
+        }
+
         // Gunluk gorev: EN UST kademe tutturuldugu anda kosu basariyla biter
         // (sadece yukari sayan hedefler icin — bkz. Objective.autoCompletes).
         // Ilk kademede bitirmek yanlis olurdu: oyuncu ayni kosuda ustteki
@@ -654,6 +792,9 @@ class GameEngine(
             stats = stats,
             stars = stars,
             newStars = newStars,
+            // Kariyerde bolum ancak TUM gorevler tamamlandiysa gecilir.
+            passed = mode == RunMode.CAREER && level != null &&
+                level.awardsStars && stars == level.stars.size,
             coinsEarned = coinsEarned,
             xpEarned = xpEarned,
             dailyTiers = dailyTiers,
@@ -667,27 +808,6 @@ class GameEngine(
     /** Carpisma aninda "reklamla devam" teklif edilebilir mi. */
     fun canRevive(): Boolean =
         phase == RunPhase.CRASHED && revivesUsed < GameConfig.REVIVE_MAX_PER_RUN
-
-    // -----------------------------------------------------------------
-    // Duraklatma menusunden reklamli guclendirici
-    // -----------------------------------------------------------------
-
-    /**
-     * Duraklatma menusunde reklam izleyerek Ikinci Sans alinabilir mi
-     * (sahibi istegi, 2026-08-14). Kosu basina BIR KEZ ve yalnizca oyuncuda
-     * zaten Ikinci Sans yokken — aksi halde reklam izleyip hicbir sey
-     * almadigini dusunurdu.
-     */
-    fun canGrantPauseBooster(): Boolean =
-        phase == RunPhase.PAUSED && !pauseBoosterUsed && !secondChanceAvailable
-
-    /** Reklam gercekten izlendiginde cagrilir; bu kosu icin Ikinci Sans verir. */
-    fun grantPauseBooster() {
-        if (!canGrantPauseBooster()) return
-        pauseBoosterUsed = true
-        secondChanceAvailable = true
-        boost = GameConfig.BOOST_MAX
-    }
 
     // -----------------------------------------------------------------
     // Turetilmis degerler
@@ -729,6 +849,18 @@ class GameEngine(
         return (1f + GameConfig.ENDLESS_TRAFFIC_STEP * steps)
             .coerceAtMost(GameConfig.ENDLESS_TRAFFIC_MAX_MULTIPLIER)
     }
+
+    /**
+     * Boost SU AN tutusabilir mi.
+     *
+     * false olmasinin iki sebebi var: bar bosaldi ve parmak hala basili
+     * (kilit — bkz. [GameConfig.BOOST_REENGAGE_MIN]) ya da enerji yeniden
+     * tutusma esiginin altinda. Ikisinde de oyuncu butona basar, hicbir sey
+     * olmaz ve "boost yaptim ama saymadi" diye okur. Arayuz bu bayragi okuyup
+     * butonu soluklastiriyor — kilit dogru davraniş, ama sessiz kalmasi degil.
+     */
+    fun isBoostReady(): Boolean =
+        !boostLockedUntilRelease && (boost > GameConfig.BOOST_REENGAGE_MIN || freeBoostRemaining > 0f)
 
     /** Dokunulmazlik suresi devam ediyor mu (cizimde araci yanip sondurmek icin). */
     fun isInvulnerable(): Boolean = invulnerableFor > 0f

@@ -34,7 +34,6 @@ import com.miniappfactory.krondrive.R
 import com.miniappfactory.krondrive.data.DailyChallengeState
 import com.miniappfactory.krondrive.data.PlayerProgress
 import com.miniappfactory.krondrive.game.LevelCatalog
-import com.miniappfactory.krondrive.ui.common.CarPreview
 import com.miniappfactory.krondrive.ui.common.KronScreen
 import com.miniappfactory.krondrive.ui.common.PrimaryButton
 import com.miniappfactory.krondrive.ui.common.SecondaryButton
@@ -83,14 +82,10 @@ fun MainMenuScreen(
             // filigrani vardi — lisans riski nedeniyle tasinmadi, ikisi de
             // Canvas ile yeniden cizildi (bkz. PROVENANCE.md).
             Box(modifier = Modifier.fillMaxWidth()) {
-                // Soldaki araba, oyuncunun GARAJDA SECTIGI arac: menude kendi
-                // aracini gormek ozellestirmenin karsiligi (bkz. CarCatalog).
-                CarPreview(
-                    style = progress.carStyle,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .size(width = 46.dp, height = 62.dp)
-                )
+                // Soldaki arac KALDIRILDI (sahibi istegi, 2026-08-15).
+                // Secili arac zaten garajda ve oyun ekraninda gorunuyor;
+                // menude logonun yanina ikinci bir arac gorsel gurultu
+                // yaratiyordu. Sagdaki damali bayrak prototipteki yerinde kaldi.
                 Image(
                     painter = painterResource(R.drawable.kron_logo),
                     contentDescription = null,
@@ -101,7 +96,8 @@ fun MainMenuScreen(
                 CheckeredFlagBadge(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .size(width = 46.dp, height = 38.dp)
+                        // Soldaki aracla ayni gorsel agirlikta kalsin.
+                        .size(width = 34.dp, height = 28.dp)
                 )
             }
 
@@ -135,7 +131,7 @@ fun MainMenuScreen(
                     tint = KronColors.Coin
                 )
                 StatChip(
-                    label = language.pick(tr = "YILDIZ", en = "STARS"),
+                    label = language.pick(tr = "GÖREV", en = "TASKS"),
                     value = "${progress.totalStars}/${LevelCatalog.count * 3}",
                     tint = KronColors.Accent
                 )

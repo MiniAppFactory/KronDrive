@@ -1,0 +1,11 @@
+<resources>
+    <!--
+      Oyunun ICINDEKI metinler AppLanguage.pick(tr = …, en = …) uzerinden gelir;
+      burada yalnizca Android kaynak sisteminin gordugu ad var.
+
+      Bu dosya BOS kalirsa Play, bundle'in kaynak konfigurasyonundan uygulamayi
+      "yalnizca Ingilizce" olarak listeler ve Turkce magaza sayfasi acilamaz
+      (ASO denetimi, 2026-08-14).
+    -->
+    <string name="app_name">Kron Drive</string>
+</resources>

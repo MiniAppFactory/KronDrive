@@ -60,6 +60,92 @@ class LevelCatalogTest {
         }
     }
 
+    // -----------------------------------------------------------------
+    // Ogrenme egrisi (bolum 1-8), 2026-08-14
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `trafik yogunlugu pozitif ve tam yogunlugu asmaz`() {
+        LevelCatalog.levels.forEach { level ->
+            assertTrue("bolum ${level.id}", level.trafficDensity > 0f)
+            assertTrue(
+                "bolum ${level.id}: yogunluk 1'i asamaz (zorluk ekseni hiz ve hedefler)",
+                level.trafficDensity <= 1f
+            )
+        }
+    }
+
+    @Test
+    fun `ilk bolumler seyrek trafikle basliyor ve kademeli olarak doluyor`() {
+        val curve = LevelCatalog.levels.take(5)
+        assertTrue(
+            "bolum 1 neredeyse bos yol olmali: ${curve[0].trafficDensity}",
+            curve[0].trafficDensity <= 0.35f
+        )
+        curve.zipWithNext().forEach { (a, b) ->
+            assertTrue(
+                "bolum ${a.id} -> ${b.id}: yogunluk geriye gitmemeli " +
+                    "(${a.trafficDensity} -> ${b.trafficDensity})",
+                b.trafficDensity >= a.trafficDensity
+            )
+        }
+        assertEquals("bolum 5 ilk tam yogunluk bolumu", 1f, curve.last().trafficDensity, 1e-4f)
+    }
+
+    @Test
+    fun `ilk bolumler daha yavas basliyor ve hiz geriye gitmiyor`() {
+        val speeds = LevelCatalog.levels.take(5).map {
+            it.startSpeedKmh ?: GameConfig.speedToKmh(GameConfig.BASE_SPEED) + 1
+        }
+        assertEquals("bolum 1 en yavas acilis", 60, speeds.first())
+        speeds.zipWithNext().forEach { (a, b) ->
+            assertTrue("baslangic hizi geriye gitti: $a -> $b", b >= a)
+        }
+    }
+
+    @Test
+    fun `bolum 1 en kisa ve en kolay bolumdur`() {
+        val first = LevelCatalog.levels.first()
+        LevelCatalog.levels.drop(1).forEach { other ->
+            assertTrue(
+                "bolum ${other.id} bolum 1'den kisa",
+                other.goal.timeLimitSeconds >= first.goal.timeLimitSeconds
+            )
+            assertTrue(
+                "bolum ${other.id} bolum 1'den seyrek",
+                other.trafficDensity >= first.trafficDensity
+            )
+        }
+    }
+
+    @Test
+    fun `ogrenme bolumlerinde ilk hedef beceri hedefi degildir`() {
+        // Yildizlar SIRALI kazanilir ve bir sonraki bolum `stars > 0` ile
+        // acilir (GameStateRepository.recordLevelResult). Ilk hedef
+        // PerfectDodge/Combo/BoostDistance gibi bir beceri hedefi olursa
+        // oyuncu bolumde tikanir — ilk surumde bolum 3 ve 4 boyleydi.
+        LevelCatalog.levels.take(8).forEach { level ->
+            val first = level.stars.first()
+            assertTrue(
+                "bolum ${level.id}: ilk hedef beceri hedefi (${first::class.simpleName})",
+                first is Objective.CompleteRun ||
+                    first is Objective.PassVehicles ||
+                    first is Objective.CoinsAtLeast ||
+                    first is Objective.ScoreAtLeast
+            )
+        }
+    }
+
+    @Test
+    fun `9 ve sonrasi bolumler ogrenme egrisi degisikliginden etkilenmedi`() {
+        // trafficDensity varsayilani 1.0, startSpeedKmh varsayilani null:
+        // mevcut 22 bolumun dengesi aynen duruyor.
+        LevelCatalog.levels.drop(8).forEach { level ->
+            assertEquals("bolum ${level.id} yogunlugu", 1f, level.trafficDensity, 1e-4f)
+            assertNull("bolum ${level.id} baslangic hizi", level.startSpeedKmh)
+        }
+    }
+
     @Test
     fun `sure hedefli bolumlerde FinishUnderSeconds kullanilmaz`() {
         // SurviveTime bolumu her zaman sure dolunca biter; "N saniyenin altinda

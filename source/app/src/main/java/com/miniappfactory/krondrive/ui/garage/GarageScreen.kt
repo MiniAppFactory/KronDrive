@@ -363,6 +363,13 @@ private fun CarCustomizeCard(
                 }
             }
 
+            // Ozellikler satin almadan ONCE gorunur: kilitli bir govdeye
+            // dokunmak onu onizlemeye alir ve bu blok o govdenin degerlerini
+            // gosterir. Sahibinin tespiti (2026-08-15) tam olarak buydu —
+            // "neden super araba alsin", cunku ne aldigi hicbir yerde
+            // yazmiyordu.
+            CarStatPanel(shape = shape, language = language)
+
             UnlockAction(
                 item = shape,
                 state = shapeState,
@@ -433,6 +440,85 @@ private fun CarCustomizeCard(
                 }
             }
         }
+    }
+}
+
+/** Ozellik cubuklarinin etiket ve yuzde sutun genisligi (dort satir hizali dursun). */
+private val STAT_LABEL_WIDTH = 46.dp
+private val STAT_DELTA_WIDTH = 40.dp
+
+/**
+ * Bir govdenin dort surus ozelligi + karakter cumlesi.
+ *
+ * Cubuklar MUTLAK degil KARSILASTIRMALIdir ([CarCatalog.statFraction]):
+ * eksenin en iyisi dolu, en kotusu kisa. Carpanlar 0.90–1.12 arasinda
+ * gezdigi icin mutlak gosterim yedi araci da ayni gosterirdi.
+ *
+ * Gorsel dil yukseltme bolumunden aynen aliniyor — ayni etiketler
+ * ([UpgradeCatalog.title]), ayni [KronProgressBar], ayni renk rolleri
+ * (Blue = mevcut deger, AccentBright = kazanc). Yeni bir dil icat edilmedi.
+ */
+@Composable
+private fun CarStatPanel(shape: CarShapeDef, language: AppLanguage) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = shape.trait(language),
+            color = KronColors.BlueBright,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black
+        )
+
+        UpgradeType.entries.forEach { type ->
+            val delta = CarCatalog.statDeltaPercent(shape, type)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = UpgradeCatalog.title(type, language),
+                    modifier = Modifier.width(STAT_LABEL_WIDTH),
+                    color = KronColors.TextMuted,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black
+                )
+                KronProgressBar(
+                    progress = CarCatalog.statFraction(shape, type),
+                    modifier = Modifier.weight(1f),
+                    color = when {
+                        delta > 0 -> KronColors.AccentBright
+                        delta < 0 -> KronColors.Danger
+                        else -> KronColors.Blue
+                    }
+                )
+                Text(
+                    // Referans arac (Sehir) 0 gosterir: "bu eksende ortalama".
+                    text = when {
+                        delta > 0 -> "+$delta%"
+                        delta < 0 -> "$delta%"
+                        else -> "—"
+                    },
+                    modifier = Modifier.width(STAT_DELTA_WIDTH),
+                    textAlign = TextAlign.End,
+                    color = when {
+                        delta > 0 -> KronColors.AccentBright
+                        delta < 0 -> KronColors.Danger
+                        else -> KronColors.TextMuted
+                    },
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+
+        Text(
+            text = language.pick(
+                tr = "Yüzdeler Şehir aracına göre; yükseltmelerin üstüne eklenir",
+                en = "Percentages are vs. the City car; applied on top of upgrades"
+            ),
+            color = KronColors.TextMuted,
+            fontSize = 9.sp
+        )
     }
 }
 

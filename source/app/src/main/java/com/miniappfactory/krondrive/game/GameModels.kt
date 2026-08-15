@@ -212,12 +212,29 @@ data class LevelDef(
      * ilk kez acan biri icin fazla hizli (oyuncu geri bildirimi, 2026-08-13).
      * Skordan gelen hizlanma yine ayni, yani bolum yine hizlanarak ilerliyor.
      */
-    val startSpeedKmh: Int? = null
+    val startSpeedKmh: Int? = null,
+    /**
+     * Bu bolumdeki trafik yogunlugu carpani. 1.0 = tam yogunluk
+     * ([GameConfig.OBSTACLE_SPAWN_INTERVAL_SEC]); 0.5 = birim zamanda yarisi
+     * kadar arac. Dogma araligi bu carpana BOLUNUR.
+     *
+     * Neden var: ilk bolumler "hala fazla zor" geri bildirimi aldi (sahibi,
+     * 2026-08-14 — ikinci kez). Baslangic hizini dusurmek yetmedi, cunku
+     * zorlugun asil ekseni saniyedeki arac sayisi. Yogunluk en OKUNABILIR
+     * zorluk ekseni: oyuncu neyin degistigini gorur (bkz. `game-scenario`
+     * skill'i, "zorlugu artirmanin dogru sirasi").
+     *
+     * Varsayilan 1.0 — mevcut bolumlerin hicbiri etkilenmez.
+     */
+    val trafficDensity: Float = 1f
 ) {
     init {
         require(stars.isNotEmpty()) { "Level $id: en az bir hedef olmali" }
         require(!awardsStars || stars.size == 3) {
             "Level $id: yildiz veren bolumlerde tam olarak 3 hedef olmali"
+        }
+        require(trafficDensity > 0f) {
+            "Level $id: trafficDensity pozitif olmali (0 = hic arac dogmaz)"
         }
     }
 }
@@ -248,11 +265,24 @@ data class RunResult(
     val stats: RunStats,
     val stars: Int,
     /**
-     * Bu kosuda ILK KEZ kazanilan yildiz sayisi. Coin odulu buna gore verilir
-     * — daha once alinmis yildiz ikinci kez odenmez. Sonuc ekrani da bunu
-     * gosterir, yoksa "3 yildiz aldim ama coin gelmedi" gibi okunurdu.
+     * Bu kosuda ILK KEZ tamamlanan gorev sayisi. Coin odulu buna gore verilir
+     * — daha once alinmis gorev ikinci kez odenmez. Sonuc ekrani da bunu
+     * gosterir, yoksa "gorevleri yaptim ama coin gelmedi" gibi okunurdu.
      */
     val newStars: Int = 0,
+    /**
+     * Bolum GECILDI mi: kariyerde bolumun UC GOREVININ DE tamamlanmis olmasi.
+     *
+     * Sahibi karari (2026-08-15): *"gorevleri tamamlamadiysa neden geciyor ki
+     * bolumu, gorevleri yapmak bolumun gecmenin ilk sarti"*. Eskiden sureyi
+     * doldurmak yetiyordu ve tek bir gorevle bir sonraki bolum aciliyordu.
+     *
+     * `stats.completed` bundan FARKLIDIR: o, bolumun kendi hedefinin (sureyi
+     * doldur / mesafeye ulas) saglandigini soyler ve `Objective.CompleteRun`
+     * onu olcer. Ikisi ayri tutulmali, aksi halde "bolumu tamamla" gorevi
+     * kendi kendini olcerdi.
+     */
+    val passed: Boolean = false,
     val coinsEarned: Int,
     val xpEarned: Int,
     /**

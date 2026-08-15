@@ -69,6 +69,27 @@ object GameConfig {
      */
     const val LANE_LERP_RATE = 16f
 
+    // ---------------------------------------------------------------------
+    // Yol deseni (cizim) — goz yorgunlugu ayari
+    // ---------------------------------------------------------------------
+    //
+    // Oyuncu geri bildirimi (2026-08-15): "cizgiler cok sik, oynarken goz cok
+    // yoruluyor". Sebep dunyanin hizi degil, DESEN FREKANSI: prototipte kerb
+    // bloklari 24 px, serit cizgileri 20 dolu / 20 bos idi. Arac yuksekligi
+    // ~61 px; yani ekranda ~100 kerb blogu ve cizgi araligi ayni anda akiyor
+    // ve yuksek kontrastla birlesince stroboskop etkisi yapiyordu.
+    //
+    // Cozum: ayni desen KORUNDU ama frekansi dusuruldu (blok ve aralik
+    // uzatildi). Hiz hissi degismedi — o [WORLD_SPEED_SCALE] ile ayri
+    // ayarlaniyor. Renk kontrasti da cizim tarafinda biraz yumusatildi.
+
+    /** Kirmizi/beyaz kerb blogunun boyu (prototip: 24). */
+    const val KERB_BLOCK_HEIGHT_PX = 46f
+
+    /** Serit cizgisi: dolu ve bos parca boylari (prototip: 20 / 20). */
+    const val LANE_DASH_ON_PX = 42f
+    const val LANE_DASH_OFF_PX = 54f
+
     /** Engel/coin dogma yuksekligi (ekranin ustunde, negatif y). */
     const val OBSTACLE_SPAWN_Y_PX = -150f
     const val COIN_SPAWN_Y_PX = -60f
@@ -76,6 +97,20 @@ object GameConfig {
     /** Ekranin altinda bu kadar asagi inen nesne temizlenir. */
     const val OBSTACLE_DESPAWN_MARGIN_PX = 110f
     const val COIN_DESPAWN_MARGIN_PX = 40f
+
+    /**
+     * Ekranin USTUNDEN cikan arac bu kadar yukarida temizlenir.
+     *
+     * Trafik kendi hiziyla ilerlemeye baslayinca (bkz.
+     * [TRAFFIC_SPEED_RATIO_MIN]) yaklasma hizi `oyuncuHizi - aracHizi`
+     * oldu; oyuncu frene basip trafigin ALTINA duserse bu fark negatife
+     * doner ve araclar yukari dogru uzaklasir. Eskiden yalnizca alt sinir
+     * vardi, yani boyle bir arac listede sonsuza kadar kalirdi.
+     *
+     * Esik dogma yuksekliginin ([OBSTACLE_SPAWN_Y_PX]) UZERINDE olmali,
+     * aksi halde yeni dogan arac ayni karede silinirdi.
+     */
+    const val OBSTACLE_DESPAWN_TOP_MARGIN_PX = 160f
 
     // ---------------------------------------------------------------------
     // Hiz modeli (prototipteki currentSpeed())
@@ -166,12 +201,69 @@ object GameConfig {
     // Trafik ve toplanabilirler
     // ---------------------------------------------------------------------
 
+    /**
+     * Engel dogma araligi (prototip: `spawnAcc > 0.78`).
+     *
+     * 2026-08-14'te trafik kendi hiziyla ilerlemeye baslayinca (bkz.
+     * [TRAFFIC_SPEED_RATIO_MIN]) yaklasma hizi yariya indi; bu sabitin
+     * DEGISMEMESI gerektigi soyle turetildi:
+     *
+     *   Dogma ZAMANA baglidir, mesafeye degil. Yaklasma hizi pozitif
+     *   kaldigi surece dogan her arac er ya da gec oyuncuya varir:
+     *       saniyedeki gecilen arac = 1 / OBSTACLE_SPAWN_INTERVAL_SEC
+     *   Bu deger yaklasma hizindan BAGIMSIZDIR. Iki arac oyuncuya hep
+     *   0.78 s arayla ulasir, yani oyuncunun bir aractan otekine tepki
+     *   verme BUTCESI de aynen korunur (serit degistirme ~0.06 s).
+     *
+     *   Degisen tek sey aracin ekranda gorunur kalma suresi ve dolayisiyla
+     *   ayni anda ekranda kac arac oldugudur:
+     *       ekrandakiArac = yaklasmaMesafesi / (yaklasmaHizi x aralik)
+     *   Yaklasma hizi ~%48'e dustugu icin ekranda kabaca iki kat arac olur.
+     *   Bu ZORLUK degil GORUNURLUK degisikligidir: ayni tehdit daha
+     *   uzaktan goruluyor, tepki suresi ise sabit.
+     *
+     * Araligi buyutmek karsilasma sikligini gercekten dusururdu,
+     * kucultmek gercekten artirirdi — ikisi de istenmedigi icin bu sayiya
+     * dokunulmadi. Bolum bazinda seyreltme [LevelDef.trafficDensity] ile
+     * yapilir.
+     */
     const val OBSTACLE_SPAWN_INTERVAL_SEC = 0.78f
     const val COIN_SPAWN_INTERVAL_SEC = 1.05f
 
-    /** Engellerin kendi hiz carpani: 1.0 .. 1.14 arasi rastgele. */
-    const val OBSTACLE_SPEED_MUL_MIN = 1.0f
-    const val OBSTACLE_SPEED_MUL_MAX = 1.14f
+    /**
+     * Trafik araclarinin KENDI ileri hizi — kosunun taban hizinin orani.
+     *
+     * Sorun (sahibi geri bildirimi, 2026-08-14): *"Yoldaki arabalar hareket
+     * etmiyor, park etmis gibiler."* Sebep: engel `speed * K * dt * speedMul`
+     * (speedMul 1.00..1.14) ile asagi akiyordu, yol kaymasi ise tam olarak
+     * `speed * K * dt`. Yani engeller ASFALTLA ayni hizda — hatta biraz daha
+     * hizli — geriye gidiyordu; asfalta gore duruyor ya da geri geri
+     * gidiyorlardi.
+     *
+     * Cozum: her aracin kendi ileri hizi var ve ekranda
+     *     asagiHiz = (oyuncuHizi - aracHizi) * WORLD_PX_PER_SPEED_UNIT
+     * kadar akiyor. Zemin yine `oyuncuHizi` ile kaydigi icin arac ASFALTA
+     * GORE `aracHizi` kadar ILERI gider — goz bunu "onumdeki arac gidiyor"
+     * diye okur.
+     *
+     * Neden ANLIK hizin degil, kosunun TABAN hizinin orani: boost'a basmanin
+     * bir anlami olsun diye. Oran anlik hizdan turetilseydi hizlandikca trafik
+     * de hizlanir, yaklasma hizi hic degismezdi. Taban sabit oldugu icin
+     * boost (+1.8 birim) yaklasma hizina TAM olarak eklenir: taban hizda
+     * yaklasma 1.28 -> 3.08 birim, yani +%141 (eski modelde +%69 idi).
+     *
+     * Aralik neden dar (1.29 kat): fark buyudukce hizli araclar yavaslara
+     * yetisip ayni y'de kumelenir ve 3 seridi birden kapatabilir. Bu aralikta
+     * bir arac tum yaklasma boyunca en fazla ~120 px yetisir, iki arac arasi
+     * mesafe ise ~190 px — yani kumelenme var ama kapali duvar yok.
+     *
+     * Ust sinir MIN_SPEED'in altinda kalmali: aksi halde tam frende oyuncu
+     * trafigin altina duser ve araclar hic gecilemez. Varsayilan tabanda
+     * 0.58 * 2.63 = 1.53 < 2.0. Yine de motor bu durumu tolere eder
+     * ([OBSTACLE_DESPAWN_TOP_MARGIN_PX]).
+     */
+    const val TRAFFIC_SPEED_RATIO_MIN = 0.45f
+    const val TRAFFIC_SPEED_RATIO_MAX = 0.58f
 
     // ---------------------------------------------------------------------
     // Skor
@@ -292,8 +384,22 @@ object GameConfig {
     /** TURBO_START: kosunun ilk saniyelerinde boost enerjisi harcanmaz. */
     const val TURBO_START_FREE_BOOST_SEC = 3f
 
-    /** SECOND_CHANCE / revive sonrasi dokunulmazlik suresi. */
-    const val INVULNERABLE_SEC_AFTER_SAVE = 2f
+    /**
+     * SECOND_CHANCE / revive sonrasi dokunulmazlik suresi.
+     *
+     * 2 -> 3 saniye (2026-08-14): oyuncu reklami izleyip devam ettiginde
+     * "baslar baslamaz tekrar carpti" diye bildirdi. Iki sebebi vardi:
+     * dokunulmazlik kisaydi ve ekranin USTUNDE bekleyen araclar siliniyordu
+     * (bkz. [REVIVE_SPAWN_PAUSE_SEC] ve GameEngine.revive).
+     */
+    const val INVULNERABLE_SEC_AFTER_SAVE = 3f
+
+    /**
+     * Revive'dan sonra bu sure boyunca YENI arac dogmaz. Dokunulmazlik tek
+     * basina yetmiyordu: koruma bitesiye kadar yeni dogan araclar oyuncunun
+     * uzerine gelmis oluyordu. Once bos yol, sonra trafik.
+     */
+    const val REVIVE_SPAWN_PAUSE_SEC = 1.2f
 
     const val SCORE_BOOSTER_MULTIPLIER = 1.25f
     const val DOUBLE_REWARD_MULTIPLIER = 2
@@ -303,16 +409,20 @@ object GameConfig {
     // ---------------------------------------------------------------------
 
     /**
-     * HER kosu sonunda gecis reklami gosterilir (sahibi karari, 2026-08-14):
-     * sonuc ekranindan cikisin her yolu — "ana menu", "sonraki bolum" ve
-     * duraklatma menusunden "cik" — reklamdan gecer. Asagidaki N sayaclari
-     * yalnizca bu bayrak false yapilirsa devreye girer.
+     * true ise HER kosu sonunda gecis reklami cikar; false ise asagidaki
+     * N sayaclari devreye girer.
      *
-     * Not: bu agresif bir frekans. Play politikasina aykiri degil (reklam
-     * oyunun icinde degil, dogal gecis noktasinda), ama terk oranini
-     * yukseltebilir; sahibi bunu bilerek istedi.
+     * Once true yapildi (sahibi istegi: "her oyun sonrasi reklam cikmali"),
+     * ayni gun **lansman icin false'a alindi** (2026-08-14, ASO denetimi):
+     * bolumler 30-90 saniye surdugu icin oyuncu her 30-90 saniyede bir tam
+     * ekran reklam goruyordu. Bu turde 1 yildizli yorumlarin bir numarali
+     * sebebi budur ve magaza puani 3.8'in altina inerse hicbir anahtar
+     * kelime calismasi bunu telafi etmiyor.
+     *
+     * Plan: 30 gun veri toplanacak; puan 4.2 uzerinde kalirsa frekans
+     * kademeli artirilacak. Geri almak icin tek satir yeter.
      */
-    const val INTERSTITIAL_AFTER_EVERY_RUN = true
+    const val INTERSTITIAL_AFTER_EVERY_RUN = false
 
     /** Kac seviye tamamlaninca bir gecis reklami gosterilecek. */
     const val INTERSTITIAL_EVERY_N_LEVELS = 2

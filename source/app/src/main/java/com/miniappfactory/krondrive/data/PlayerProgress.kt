@@ -62,6 +62,11 @@ data class PlayerProgress(
     val endlessBestScore: Int = 0,
     val soundEnabled: Boolean = true,
     val language: AppLanguage = AppLanguage.EN,
+    /**
+     * Oyuncu dili KENDISI secti mi. false ise ilk acilis dil ekrani gosterilir;
+     * [language] o ana kadar cihazin dilinden tahmin edilmis demektir.
+     */
+    val languageChosen: Boolean = false,
     val hasSeenOnboarding: Boolean = false,
     /** Son gecis reklamindan bu yana tamamlanan bolum sayisi. */
     val levelsSinceInterstitial: Int = 0,

@@ -1,19 +1,25 @@
 # Yayın kontrol listesi
 
-## Şu anki durum (2026-08-13)
+## Şu anki durum (2026-08-14 güncellendi)
 
 | Adım | Durum |
 |---|---|
 | Debug APK derleniyor | ✅ `:app:assembleDebug` BUILD SUCCESSFUL |
 | Motor birim testleri | testler yazıldı, sonuç için CHANGELOG'a bak |
 | Gerçek cihaz/emülatör testi | ❌ **YAPILMADI** — bu makinede adb/emülatör yok |
-| Release imzalama | ❌ keystore yok |
-| Gerçek AdMob kimlikleri | ❌ test kimlikleri kullanılıyor |
-| Play Store listesi | ❌ hazırlanmadı |
+| Release imzalama | ✅ keystore var (`source/my-upload-key.jks`, alias `UPLOAD`) |
+| İmzalı AAB | ✅ üretildi — `source/app/build/outputs/bundle/release/app-release.aab` |
+| Gerçek AdMob kimlikleri | ❌ **hâlâ test kimlikleri** — mevcut AAB bu yüzden üretime uygun değil |
+| Uyum belgeleri | ✅ hazır — bkz. aşağıdaki tablo (bölüm 5) |
+| Play Store listesi (görsel + metin) | ❌ hazırlanmadı |
 
 Aşağıdaki hiçbir madde "yapıldı" sayılmamalı — hiçbiri cihazda doğrulanmadı.
 
-## 1. Keystore oluştur (bir kez)
+## 1. Keystore oluştur (bir kez) — ✅ **YAPILDI (2026-08-14)**
+
+> `source/my-upload-key.jks` ve `source/signing.properties` mevcut (alias `UPLOAD`),
+> ikisi de `.gitignore`'da. Aşağıdaki yordam yalnızca referans/yeniden kurulum içindir.
+> **Keystore'u yedekle — kaybolursa bu uygulamanın güncellemesi bir daha yayınlanamaz.**
 
 ```
 keytool -genkeypair -v -keystore my-upload-key.jks -keyalg RSA -keysize 2048 \
@@ -74,15 +80,28 @@ Kalıcılık:
 
 ## 5. Play Console
 
-- [ ] Uygulama ikonu 512×512 (`docs/play_store_assets/play-store-icon-512.png` hazır)
-- [ ] Özellik grafiği 1024×500 — **yok, üretilmeli**
-- [ ] En az 2 telefon ekran görüntüsü — **yok, cihazdan alınmalı**
-- [ ] Kısa/uzun açıklama (TR + EN)
-- [ ] Gizlilik politikası URL'si — **yok, gerekli** (reklam SDK'sı veri topluyor)
-- [ ] Data Safety formu: reklam kimliği + cihaz bilgisi (Mobile Ads SDK)
-- [ ] İçerik derecelendirme anketi
-- [ ] Hedef kitle: 13+ önerilir (reklam içeriği nedeniyle)
+> **Bu bölüm taşındı.** Politika, form ve mağaza beyanlarının tamamı artık
+> **`docs/STORE_SUBMISSION_CHECKLIST.md`** dosyasındadır — orada her madde için
+> hazır/eksik/beklenen durumu, kod uyum denetimi (C-1…C-9) ve hedef kitle
+> analizi var. Aynı listeyi iki yerde tutmamak için burada yalnızca özet ve
+> teknik olan tek madde bırakıldı.
+
+Destekleyici belgeler:
+
+| Belge | İçerik |
+|---|---|
+| `docs/STORE_SUBMISSION_CHECKLIST.md` | Play Console adım adım + kod uyum denetimi + hedef kitle kararı |
+| `docs/DATA_SAFETY_FORM.md` | Data Safety formunun her sorusuna cevap |
+| `docs/CONTENT_RATING.md` | IARC anketi cevapları ve beklenen derecelendirme |
+| `docs/PRIVACY_POLICY_EN.md` / `_TR.md` | Gizlilik politikası kaynak metni |
+| `docs/index.html` · `docs/tr/index.html` · `docs/app-ads.txt` | GitHub Pages'te yayınlanacak dosyalar |
+
+Teknik madde (bu dosyanın kapsamında kalan):
+
 - [ ] AAB üret: `./gradlew :app:bundleRelease`
+      → `source/app/build/outputs/bundle/release/app-release.aab`
+      **Not:** gerçek AdMob kimlikleri girildikten ve `appCategory="game"`
+      eklendikten sonra versionCode artırılıp **yeniden** üretilmelidir.
 
 ## 6. Yayın sonrası izlenecekler
 

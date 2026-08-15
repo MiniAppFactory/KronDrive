@@ -23,13 +23,15 @@ class GameEngineTest {
         upgrades: UpgradeLevels = UpgradeLevels(),
         boosters: Set<BoosterType> = emptySet(),
         endlessRecordSeconds: Int = 0,
-        seed: Int = 1234
+        seed: Int = 1234,
+        shape: CarShapeDef = CarCatalog.defaultShape
     ): GameEngine = GameEngine(
         mode = mode,
         level = level,
         upgrades = upgrades,
         boosters = boosters,
         endlessRecordSeconds = endlessRecordSeconds,
+        carStyle = CarStyle(shape, CarCatalog.defaultColor),
         random = Random(seed)
     ).apply {
         // Viewport verilmeden serit merkezleri ve oyuncu konumu 0 kalir.
@@ -69,7 +71,7 @@ class GameEngineTest {
                 x = playerX,
                 y = playerY - 10f,
                 colorIndex = 0,
-                speedMul = 1f
+                ownSpeed = 0f
             )
         )
     }
@@ -343,7 +345,7 @@ class GameEngineTest {
                 x = e.playerX + dodgeDx,
                 y = e.playerY + 10f,
                 colorIndex = 0,
-                speedMul = 1f
+                ownSpeed = 0f
             )
         )
 
@@ -373,7 +375,7 @@ class GameEngineTest {
                 x = e.playerX + e.laneWidth,
                 y = e.playerY + 10f,
                 colorIndex = 0,
-                speedMul = 1f
+                ownSpeed = 0f
             )
         )
 
@@ -468,6 +470,107 @@ class GameEngineTest {
     }
 
     @Test
+    fun `boost bosalinca hazir degil isaretlenir ve birakilinca geri gelir`() {
+        // Oyuncu "boost yaptim ama saymadi" dedi: bar bosaliyor, parmak
+        // basili kaldigi icin kilit aciliyor ve boost bir daha tutusmuyor.
+        // Motor dogru davraniyordu; eksik olan bu bayrakti (arayuz bununla
+        // butonu soluklastiriyor).
+        val e = engine()
+        e.startRun()
+        assertTrue("kosu basinda boost hazir olmali", e.isBoostReady())
+
+        e.setBoost(true)
+        e.advance(framesFor(6f))          // bar bosalir
+        assertFalse("bar bosaldi, boost hazir gorunmemeli", e.isBoostReady())
+
+        // Parmak basili kaldigi surece dolmaz.
+        e.advance(framesFor(4f))
+        assertFalse(e.isBoostReady())
+
+        // Birakinca dolar ve yeniden hazir olur.
+        e.setBoost(false)
+        e.advance(framesFor(4f))
+        assertTrue("birakildiktan sonra boost geri gelmeli", e.isBoostReady())
+    }
+
+    @Test
+    fun `hiz kilidi yalnizca sonsuz modda ve hizi sabitler`() {
+        // Kariyer ve gunluk gorevde kilit hic acilmamali.
+        listOf(RunMode.CAREER, RunMode.DAILY).forEach { mode ->
+            val e = engine(mode)
+            assertFalse(e.canLockSpeed())
+            e.toggleSpeedLock()
+            assertFalse("$mode modunda kilit acilmamali", e.speedLocked)
+        }
+
+        val e = engine(RunMode.ENDLESS)
+        assertTrue(e.canLockSpeed())
+        e.startRun()
+        e.advance(framesFor(20f))
+
+        val beforeLock = e.speed
+        e.toggleSpeedLock()
+        assertTrue(e.speedLocked)
+
+        // Kilitliyken skor birikmeye devam etse de hiz buyumemeli.
+        e.advance(framesFor(40f))
+        assertEquals("kilitli hiz sabit kalmali", beforeLock, e.speed, 0.05f)
+
+        // Kilit acilinca skordan gelen hizlanma geri gelir.
+        e.toggleSpeedLock()
+        assertFalse(e.speedLocked)
+        e.advance(framesFor(15f))
+        assertTrue("kilit acilinca hiz yeniden artmali", e.speed > beforeLock + 0.1f)
+    }
+
+    @Test
+    fun `KARIYER tum hedefler tutunca bolum hemen biter`() {
+        // Oyuncu uc hedefi de tuttugunda bekletilmemeli (2026-08-15).
+        val level = LevelDef(
+            id = 3,
+            goal = LevelGoal.SurviveTime(180),
+            stars = listOf(
+                Objective.DistanceAtLeast(80),
+                Objective.DistanceAtLeast(160),
+                Objective.DistanceAtLeast(240)
+            )
+        )
+        val e = engine(RunMode.CAREER, level)
+        e.startRun()
+
+        val finished = e.advance(3000).filterIsInstance<GameEvent.Finished>()
+        assertEquals(1, finished.size)
+        val result = finished[0].result
+        assertTrue("hedefler tutunca basarili sayilmali", result.stats.completed)
+        assertEquals("uc hedef de tuttuysa uc yildiz", 3, result.stars)
+        // Sure limiti 180 sn; bolum çok daha erken bitmis olmali.
+        assertTrue("bolum sure limitini beklememeli", result.stats.timeSurvivedSec < 60)
+    }
+
+    @Test
+    fun `KARIYER tamamlama hedefi varsa erken bitmez`() {
+        // CompleteRun kosu bitmeden degerlendirilemez; boyle bir hedef varsa
+        // bolum yine kendi sure/mesafe hedefiyle biter.
+        val level = LevelDef(
+            id = 1,
+            goal = LevelGoal.SurviveTime(8),
+            stars = listOf(
+                Objective.CompleteRun,
+                Objective.DistanceAtLeast(10),
+                Objective.DistanceAtLeast(20)
+            )
+        )
+        val e = engine(RunMode.CAREER, level)
+        e.startRun()
+        e.advance(120)
+        assertEquals("erken bitmemeli", RunPhase.RUNNING, e.phase)
+
+        val finished = e.advance(3000).filterIsInstance<GameEvent.Finished>()
+        assertEquals(1, finished.size)
+        assertTrue(finished[0].result.stats.completed)
+    }
+
+    @Test
     fun `DAILY ilk kademede bitmez son kademede biter`() {
         val level = LevelDef(
             id = -1,
@@ -538,6 +641,45 @@ class GameEngineTest {
         endless.advance(60)
         endless.finish(completed = false)
         assertEquals(0, requireNonNull(endless.lastResult).dailyTiers)
+    }
+
+    @Test
+    fun `revive sonrasi yol bos ve bir sure yeni arac dogmuyor`() {
+        val e = engine()
+        e.startRun()
+        // Ekranin USTUNDE bekleyen bir arac: eski kod bunu silmiyordu ve
+        // dokunulmazlik biter bitmez oyuncunun uzerine iniyordu.
+        e.obstacles.add(
+            GameEngine.Obstacle(
+                lane = e.playerLane,
+                x = e.playerX,
+                y = -GameConfig.CAR_HEIGHT_PX - 40f,
+                colorIndex = 0,
+                ownSpeed = 0f
+            )
+        )
+        e.placeObstacleOnPlayer()
+        e.step(dt)
+        assertEquals(RunPhase.CRASHED, e.phase)
+
+        e.revive()
+        assertEquals(RunPhase.RUNNING, e.phase)
+        assertTrue("revive yolu tamamen temizlemeli", e.obstacles.isEmpty())
+        assertTrue(e.isInvulnerable())
+
+        // Guvenli pencere boyunca hic arac dogmamali (trafik temizlenmeden
+        // ilerletiyoruz — advance(clearTraffic = false)).
+        val pauseFrames = (GameConfig.REVIVE_SPAWN_PAUSE_SEC / dt).toInt() - 2
+        e.advance(pauseFrames, clearTraffic = false)
+        assertTrue(
+            "guvenli pencerede arac dogdu: ${e.obstacles.size}",
+            e.obstacles.isEmpty()
+        )
+        assertTrue("dokunulmazlik pencere boyunca surmeli", e.isInvulnerable())
+
+        // Pencere bitince trafik geri gelir.
+        e.advance((1.2f / dt).toInt(), clearTraffic = false)
+        assertTrue("pencere bitti, trafik geri gelmeli", e.obstacles.isNotEmpty())
     }
 
     // -----------------------------------------------------------------
@@ -611,6 +753,233 @@ class GameEngineTest {
     private fun requireNonNull(result: RunResult?): RunResult {
         assertTrue("kosu sonucu olusmadi", result != null)
         return result!!
+    }
+
+    // -----------------------------------------------------------------
+    // 12) Trafik kendi hiziyla ilerliyor (2026-08-14)
+    //
+    // Sorun: engeller `speed * K * dt * speedMul` (1.00..1.14) ile
+    // akiyordu, zemin ise tam `speed * K * dt` — yani araclar asfalta gore
+    // duruyordu ("park etmis gibiler"). Artik her aracin kendi hizi var.
+    // -----------------------------------------------------------------
+
+    /** Bir karede tek bir engelin ekranda kac piksel asagi aktigini olcer. */
+    private fun GameEngine.measureApproachPx(ownSpeed: Float): Float {
+        obstacles.clear()
+        val o = GameEngine.Obstacle(
+            lane = 0,
+            x = laneCenter(0),
+            y = -100f,
+            colorIndex = 0,
+            ownSpeed = ownSpeed
+        )
+        obstacles.add(o)
+        val before = o.y
+        step(dt)
+        return o.y - before
+    }
+
+    @Test
+    fun `trafik araclari asfalta gore ILERI gider`() {
+        val e = engine()
+        e.startRun()
+        e.advance(30)
+
+        val ownSpeed = GameConfig.BASE_SPEED * GameConfig.TRAFFIC_SPEED_RATIO_MIN
+        val roadBefore = e.roadOffset
+        val approach = e.measureApproachPx(ownSpeed)
+        val roadTravel = e.roadOffset - roadBefore
+
+        // Isaret testi: arac hala oyuncuya yaklasiyor (asagi akiyor) ...
+        assertTrue("arac oyuncuya yaklasmiyor: $approach", approach > 0f)
+        // ... ama zeminden DAHA YAVAS akiyor, yani asfalta gore ILERI gidiyor.
+        // Eski modelde bu fark negatifti (speedMul >= 1.0).
+        assertTrue(
+            "arac asfaltla ayni ya da daha hizli akiyor: $approach vs zemin $roadTravel",
+            approach < roadTravel
+        )
+        // Asfalta gore ileri hizi tam olarak aracin kendi hizidir.
+        val relativeToRoad = roadTravel - approach
+        assertEquals(
+            ownSpeed * GameConfig.WORLD_PX_PER_SPEED_UNIT * dt,
+            relativeToRoad,
+            0.5f
+        )
+    }
+
+    @Test
+    fun `park etmis arac (ownSpeed 0) asfaltla ayni hizda akar`() {
+        // Eski davranisin ta kendisi — testlerin deterministik engelleri bunu
+        // kullaniyor. Kontrol grubu olarak duruyor.
+        val e = engine()
+        e.startRun()
+        e.advance(30)
+        val roadBefore = e.roadOffset
+        val approach = e.measureApproachPx(ownSpeed = 0f)
+        assertEquals(e.roadOffset - roadBefore, approach, 0.5f)
+    }
+
+    @Test
+    fun `boost yaklasma hizini oransal olarak dunyadan daha cok artirir`() {
+        // Trafigin hizi kosunun TABAN hizina bagli (anlik hiza degil), bu
+        // yuzden boost'un +1.8 birimi dogrudan yaklasma hizina eklenir.
+        // Eski modelde trafik oyuncunun anlik hiziyla olceklendigi icin
+        // boost yaklasma hizini yalnizca dunya kadar artiriyordu.
+        val ownSpeed = GameConfig.BASE_SPEED * GameConfig.TRAFFIC_SPEED_RATIO_MAX
+
+        val calm = engine()
+        calm.startRun()
+        calm.advance(30)
+        val calmRoadBefore = calm.roadOffset
+        val calmApproach = calm.measureApproachPx(ownSpeed)
+        val calmRoad = calm.roadOffset - calmRoadBefore
+
+        val boosted = engine()
+        boosted.startRun()
+        boosted.setBoost(true)
+        boosted.advance(30)
+        val boostRoadBefore = boosted.roadOffset
+        val boostApproach = boosted.measureApproachPx(ownSpeed)
+        val boostRoad = boosted.roadOffset - boostRoadBefore
+
+        assertTrue("boost aktif degil", boosted.boosting)
+        assertTrue("boost hizlandirmadi", boosted.speed > calm.speed)
+        assertTrue("boost yaklasmayi artirmadi", boostApproach > calmApproach)
+        assertTrue(
+            "boost yaklasma hizini dunyadan daha cok artirmali: " +
+                "yaklasma x${boostApproach / calmApproach}, dunya x${boostRoad / calmRoad}",
+            boostApproach / calmApproach > boostRoad / calmRoad + 0.05f
+        )
+    }
+
+    @Test
+    fun `ekranin ustunden cikan arac temizlenir ve puan vermez`() {
+        // Oyuncu frene basip trafigin ALTINA duserse yaklasma hizi negatife
+        // doner ve arac yukari uzaklasir. Eskiden sadece alt sinir vardi;
+        // boyle bir arac listede sonsuza kadar kalirdi.
+        val e = engine()
+        e.startRun()
+        e.advance(30)
+
+        e.obstacles.clear()
+        e.obstacles.add(
+            GameEngine.Obstacle(
+                lane = 0,
+                x = e.laneCenter(0),
+                y = -100f,
+                colorIndex = 0,
+                // Oyuncudan cok daha hizli: yaklasma hizi negatif.
+                ownSpeed = e.speed * 3f
+            )
+        )
+
+        val events = ArrayList<GameEvent>()
+        var guard = 0
+        while (e.obstacles.isNotEmpty() && guard++ < 600) {
+            events.addAll(e.step(dt))
+            // Dogan yeni araclari saymayalim; sadece bizimkini izliyoruz.
+            e.obstacles.removeAll { it.ownSpeed < e.speed }
+        }
+
+        assertTrue("yukari giden arac temizlenmedi", e.obstacles.isEmpty())
+        assertTrue(
+            "gecilmeyen arac puan verdi",
+            events.none { it is GameEvent.VehiclePassed }
+        )
+    }
+
+    @Test
+    fun `ayni arac iki kez sayilmaz`() {
+        // Yaklasma hizi isaret degistirirse (fren) gecilmis bir arac yeniden
+        // oyuncunun ustune cikabilir. `evaluated` bayragi bunu bir kez
+        // saymali — yoksa fren/gaz ile sinirsiz gecis puani basilirdi.
+        val e = engine()
+        e.startRun()
+        e.advance(30)
+
+        e.obstacles.clear()
+        val target = GameEngine.Obstacle(
+            lane = 0,
+            x = e.laneCenter(0),
+            y = e.playerY - 40f,
+            colorIndex = 0,
+            ownSpeed = 0f
+        )
+        e.obstacles.add(target)
+
+        fun tickIsolated(frames: Int): List<GameEvent> {
+            val out = ArrayList<GameEvent>()
+            repeat(frames) {
+                out.addAll(e.step(dt))
+                // Motorun dogurdugu diger araclari at, hedefi koru.
+                e.obstacles.removeAll { it !== target }
+                if (!e.obstacles.contains(target)) e.obstacles.add(target)
+            }
+            return out
+        }
+
+        val first = tickIsolated(40)
+        assertEquals(1, first.count { it is GameEvent.VehiclePassed })
+        assertTrue(target.evaluated)
+
+        // Araci elle geri yukari tasi (fren ile trafigin altina dusmus gibi)
+        // ve bir kez daha gecir.
+        target.y = e.playerY - 60f
+        val second = tickIsolated(60)
+        assertEquals("ayni arac ikinci kez sayildi", 0, second.count { it is GameEvent.VehiclePassed })
+        assertEquals("ayni arac ikinci kez dodge verdi", 0, second.count { it is GameEvent.PerfectDodge })
+    }
+
+    @Test
+    fun `varsayilan tabanda trafik hep gecilebilir kalir`() {
+        // Trafigin en hizlisi bile MIN_SPEED'in altinda olmali: aksi halde tam
+        // frende oyuncu trafigin altina duser ve hicbir araci gecemez.
+        val fastest = GameConfig.BASE_SPEED * GameConfig.TRAFFIC_SPEED_RATIO_MAX
+        assertTrue("trafik MIN_SPEED'i asiyor: $fastest", fastest < GameConfig.MIN_SPEED)
+
+        LevelCatalog.levels.forEach { level ->
+            val base = level.startSpeedKmh?.let { GameConfig.speedFromKmh(it) }
+                ?: GameConfig.BASE_SPEED
+            assertTrue(
+                "bolum ${level.id}: trafik MIN_SPEED'i asiyor",
+                base * GameConfig.TRAFFIC_SPEED_RATIO_MAX < GameConfig.MIN_SPEED
+            )
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // 13) Bolum trafik yogunlugu
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `trafficDensity dogma araligini bolumler`() {
+        fun spawnCount(density: Float): Int {
+            val level = LevelDef(
+                id = 1,
+                goal = LevelGoal.SurviveTime(60),
+                stars = threeObjectives(),
+                trafficDensity = density
+            )
+            val e = engine(RunMode.CAREER, level)
+            e.startRun()
+            var spawned = 0
+            repeat(framesFor(30f)) {
+                val before = e.obstacles.size
+                e.step(dt)
+                spawned += (e.obstacles.size - before).coerceAtLeast(0)
+                e.obstacles.clear()
+            }
+            return spawned
+        }
+
+        val full = spawnCount(1f)
+        val sparse = spawnCount(0.3f)
+        val expectedFull = (30f / GameConfig.OBSTACLE_SPAWN_INTERVAL_SEC).toInt()
+        val expectedSparse = (30f / (GameConfig.OBSTACLE_SPAWN_INTERVAL_SEC / 0.3f)).toInt()
+
+        assertEquals("tam yogunluk", expectedFull.toFloat(), full.toFloat(), 2f)
+        assertEquals("seyrek trafik", expectedSparse.toFloat(), sparse.toFloat(), 2f)
+        assertTrue("yogunluk seyreltmedi: $full -> $sparse", sparse * 2 < full)
     }
 
     // -----------------------------------------------------------------
@@ -723,6 +1092,124 @@ class GameEngineTest {
         assertEquals(0, e.distanceMeters())
         assertEquals(0f, e.score, 1e-4f)
         assertTrue(e.countdownRemaining < GameConfig.COUNTDOWN_SECONDS.toFloat())
+    }
+
+    // -----------------------------------------------------------------
+    // 12) Arac carpanlari gercekten fizige giriyor mu (2026-08-15)
+    // -----------------------------------------------------------------
+    //
+    // Her test AYNI yukseltme seviyesinde iki arac calistirir; tek degisken
+    // govdedir. Karsilastirilan ciftler, olculen eksen DISINDA ayni carpana
+    // sahip olacak sekilde secildi (ornegin fren testinde iki aracin da son
+    // hiz carpani 1.00) — aksi halde test neyi olctugunu bilemezdi.
+
+    /** Skordan gelen hiz tavani dolana kadar surer; ~64 s yeter. */
+    private fun GameEngine.driveToTopSpeed(): Float {
+        startRun()
+        advance(framesFor(64f))
+        return speed
+    }
+
+    @Test
+    fun `son hiz carpani ayni yukseltmede farkli tavan verir`() {
+        val upgrades = UpgradeLevels(speed = 4, acceleration = 4, brake = 4, boost = 4)
+        val city = engine(upgrades = upgrades, shape = CarCatalog.defaultShape).driveToTopSpeed()
+        val supercar = engine(
+            upgrades = upgrades,
+            shape = CarCatalog.shape(CarCatalog.SHAPE_SUPERCAR)
+        ).driveToTopSpeed()
+
+        assertTrue(
+            "super araba daha yuksek tavana ulasmali: sehir=$city super=$supercar",
+            supercar > city + 0.2f
+        )
+        // Fark yukseltmenin YERINE gecmiyor: seviye 8 Sehir, seviye 4 Super
+        // Araba'yi hâlâ geciyor.
+        val maxedCity = engine(
+            upgrades = UpgradeLevels(speed = 8, acceleration = 8, brake = 8, boost = 8),
+            shape = CarCatalog.defaultShape
+        ).driveToTopSpeed()
+        assertTrue(
+            "yukseltme aracin onunde kalmali: maxSehir=$maxedCity sv4Super=$supercar",
+            maxedCity > supercar
+        )
+    }
+
+    @Test
+    fun `ivme carpani hedefe yaklasma hizini degistirir`() {
+        // Skor 0 iken hiz tavani baglayici degil; boost'a basinca iki aracin
+        // HEDEFI ayni olur, yalnizca yaklasma orani ayrisir.
+        fun speedAfterBoostFrames(shape: CarShapeDef): Float {
+            val e = engine(shape = shape)
+            e.startRun()
+            e.setBoost(true)
+            e.advance(5)
+            return e.speed
+        }
+
+        val city = speedAfterBoostFrames(CarCatalog.defaultShape)
+        val supercar = speedAfterBoostFrames(CarCatalog.shape(CarCatalog.SHAPE_SUPERCAR))
+        val goat = speedAfterBoostFrames(CarCatalog.shape(CarCatalog.SHAPE_MOUNTAIN_GOAT))
+
+        assertTrue("ivmesi yuksek arac daha cabuk toparlamali: $supercar > $city", supercar > city)
+        assertTrue("ivmesi dusuk arac daha yavas toparlamali: $goat < $city", goat < city)
+    }
+
+    @Test
+    fun `fren carpani ayni yukseltmede farkli yavaslama verir`() {
+        // Araclarin son hiz tavani farkli oldugu icin MUTLAK hiz degil,
+        // frenin ACTIGI FARK olculuyor: tavan hizi eksi frenli hiz.
+        fun brakeDrop(shape: CarShapeDef): Float {
+            val e = engine(shape = shape)
+            val top = e.driveToTopSpeed()
+            e.setBrake(true)
+            e.advance(framesFor(3f))
+            return top - e.speed
+        }
+
+        val city = brakeDrop(CarCatalog.defaultShape)
+        val goat = brakeDrop(CarCatalog.shape(CarCatalog.SHAPE_MOUNTAIN_GOAT))
+        val muscle67 = brakeDrop(CarCatalog.shape(CarCatalog.SHAPE_MUSCLE_67))
+
+        assertTrue("freni iyi arac daha cok yavaslamali: kecisi=$goat sehir=$city", goat > city)
+        assertTrue("freni zayif arac daha az yavaslamali: boga=$muscle67 sehir=$city", muscle67 < city)
+    }
+
+    @Test
+    fun `boost carpani bar bosalma suresini degistirir`() {
+        fun framesUntilEmpty(shape: CarShapeDef): Int {
+            val e = engine(shape = shape)
+            e.startRun()
+            e.setBoost(true)
+            var frames = 0
+            while (e.boost > 0f && frames < 2000) {
+                e.step(dt)
+                e.obstacles.clear()
+                e.coins.clear()
+                frames++
+            }
+            return frames
+        }
+
+        val city = framesUntilEmpty(CarCatalog.defaultShape)
+        val slx = framesUntilEmpty(CarCatalog.shape(CarCatalog.SHAPE_KUS_SLX))
+
+        assertTrue("uzun boostlu arac barini daha gec bitirmeli: slx=$slx sehir=$city", slx > city)
+        assertTrue("fark olculebilir olmali", slx - city >= 5)
+    }
+
+    @Test
+    fun `carpisma kutusu araca gore DEGISMEZ`() {
+        // PROVENANCE #6: govde secimi carpismayi etkilemez. Ayni kareye
+        // konulan engel her arac icin ayni sonucu vermeli.
+        CarCatalog.shapes.forEach { shape ->
+            val e = engine(shape = shape)
+            e.startRun()
+            e.advance(60)
+            e.placeObstacleOnPlayer()
+            e.step(dt)
+            assertEquals("${shape.id}: carpisma davranisi degisti", RunPhase.CRASHED, e.phase)
+        }
     }
 
     @Test

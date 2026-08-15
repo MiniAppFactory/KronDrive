@@ -1,6 +1,5 @@
 package com.miniappfactory.krondrive.ui.game
 
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -19,9 +18,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
+import com.miniappfactory.krondrive.game.CarCatalog
 import com.miniappfactory.krondrive.game.GameConfig
 import com.miniappfactory.krondrive.game.GameEngine
 import com.miniappfactory.krondrive.game.RoadTheme
+import com.miniappfactory.krondrive.ui.common.drawCarParts
+import com.miniappfactory.krondrive.ui.common.drawCarShadow
 import com.miniappfactory.krondrive.ui.common.drawStyledCar
 import kotlin.math.max
 import kotlin.math.min
@@ -54,19 +56,27 @@ fun DrawScope.drawGameScene(
     scale(density, density, pivot = Offset.Zero) {
         engine.coins.forEach { drawCoin(it) }
         engine.obstacles.forEach {
-            drawObstacleCar(it.x, it.y, Color(GameEngine.OBSTACLE_COLORS[it.colorIndex]))
+            drawObstacleCar(
+                it.x,
+                it.y,
+                GameEngine.OBSTACLE_COLORS[it.colorIndex].toLong() and 0xFFFFFFFFL
+            )
         }
         drawNightHeadlights(engine)
         // Dokunulmazlik sirasinda arac yanip soner (Second Chance / reklamla devam).
         val blink = engine.isInvulnerable() && ((engine.timeElapsed * 10f).toInt() % 2 == 0)
         if (!blink) {
-            // Oyuncu araci garajda secilen sekil + boya ile cizilir; trafik
-            // ARABALARI DEGISMEZ (tehdit gorunumu sabit kalmali).
+            // Oyuncu araci garajda secilen sekil + boya ile cizilir. Trafik
+            // ayni cizici ile ama SABIT bir sekil/palet ile cizilir
+            // (drawObstacleCar) — tehdidin gorunumu her kosuda ayni olmali.
             drawStyledCar(
                 x = engine.playerX,
                 y = engine.playerY,
                 style = engine.carStyle,
-                boosting = engine.boosting
+                boosting = engine.boosting,
+                // Alevin titremesi kosunun zamanindan beslenir; ayri bir
+                // animasyon durumu tutmuyoruz (motor zaten her kare adiyor).
+                flamePhase = engine.timeElapsed
             )
         }
         drawParticles(engine)
@@ -212,26 +222,31 @@ private fun DrawScope.drawTrack(engine: GameEngine) {
     if (h <= 0f) return
     drawRect(Color(0xFF3A4048), Offset(engine.roadX, 0f), Size(engine.roadWidth, h))
 
-    // Kirmizi/beyaz kerb bloklari
-    var y = -30f
-    while (y < h + 30f) {
-        val red = ((((y + engine.roadOffset / 12f) / 24f).toInt()) % 2) == 0
-        val color = if (red) Color(0xFFD62828) else Color(0xFFEFEFEF)
-        drawRect(color, Offset(engine.roadX - 8f, y), Size(8f, 24f))
-        drawRect(color, Offset(engine.roadX + engine.roadWidth, y), Size(8f, 24f))
-        y += 24f
+    // Kirmizi/beyaz kerb bloklari. Blok boyu ve renk kontrasti bilerek
+    // dusuruldu — bkz. GameConfig.KERB_BLOCK_HEIGHT_PX (goz yorgunlugu).
+    val block = GameConfig.KERB_BLOCK_HEIGHT_PX
+    var y = -block
+    while (y < h + block) {
+        val red = ((((y + engine.roadOffset / 12f) / block).toInt()) % 2) == 0
+        val color = if (red) Color(0xFFC8393B) else Color(0xFFDCE2E9)
+        drawRect(color, Offset(engine.roadX - 8f, y), Size(8f, block))
+        drawRect(color, Offset(engine.roadX + engine.roadWidth, y), Size(8f, block))
+        y += block
     }
 
-    // Kesik serit cizgileri
-    val dash = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f)
-    val lineStart = -40f + (engine.roadOffset % 40f)
+    // Kesik serit cizgileri: daha uzun ve daha seyrek, biraz da soluk.
+    val on = GameConfig.LANE_DASH_ON_PX
+    val off = GameConfig.LANE_DASH_OFF_PX
+    val dash = PathEffect.dashPathEffect(floatArrayOf(on, off), 0f)
+    val period = on + off
+    val lineStart = -period + (engine.roadOffset % period)
     for (i in 1 until GameConfig.LANE_COUNT) {
         val x = engine.roadX + engine.laneWidth * i
         drawLine(
-            color = Color(0xEBFFFFFF),
+            color = Color(0xC2FFFFFF),
             start = Offset(x, lineStart),
-            end = Offset(x, h + 40f),
-            strokeWidth = 4f,
+            end = Offset(x, h + period),
+            strokeWidth = 5f,
             pathEffect = dash
         )
     }
@@ -261,47 +276,53 @@ private fun DrawScope.drawSpeedometer(
     val kmh = engine.speedKmh()
     val pct = kmh / GameConfig.SPEEDOMETER_MAX_KMH
 
-    val leftGrassW = max(150f, engine.roadX)
-    val size = min(min(leftGrassW * 0.78f, engine.viewHeight * 0.23f), 235f)
-    val r = size * 0.44f * density
-    val cx = leftGrassW * 0.50f * density
-    val cy = engine.viewHeight * 0.50f * density
+    // Gosterge YOLUN USTUNE TASMAZ ve ekranin ortasinda durmaz.
+    // Oyuncu geri bildirimi (2026-08-15): "hiz gostergesi cok buyuk bence ve
+    // cok ortada". Eskiden `max(150, roadX)` ile taban genislik zorlaniyordu;
+    // dar ekranlarda bu deger yolun ic tarafina tasiyor ve gosterge tam
+    // oynanis alaninin uzerine oturuyordu.
+    //
+    // Artik yalnizca GERCEK sol bosluk (roadX) kullaniliyor: yaricap bosluga
+    // gore kirpiliyor, merkez de dairenin sag kenari yola degmeyecek sekilde
+    // sinirlaniyor. Dikeyde de ortadan yukari alindi (%32) — orta seride
+    // bakan goz artik gostergeye takilmiyor.
+    val marginPx = engine.roadX * density
+    val r = min(min(marginPx * 0.40f, engine.viewHeight * density * 0.055f), 34f * density)
+    if (r <= 8f * density) return
+    val cx = min(marginPx * 0.5f, marginPx - r - 4f * density)
+    val cy = engine.viewHeight * 0.32f * density
 
     val startDeg = -0.78f * 180f
     val sweepDeg = 0.78f * 2f * 180f
     val valueSweep = sweepDeg * pct
 
-    // Gostergenin yumusak zemini
+    // Gostergenin yumusak zemini (halkanin biraz disina tasar).
     drawCircle(
         brush = Brush.linearGradient(
             listOf(Color(0x2E061226), Color(0x8C000C1C)),
             start = Offset(cx - r, cy - r),
             end = Offset(cx + r, cy + r)
         ),
-        radius = r + 20f * density,
+        radius = r + 7f * density,
         center = Offset(cx, cy)
     )
 
     val arcTopLeft = Offset(cx - r, cy - r)
     val arcSize = Size(r * 2, r * 2)
 
+    // Cizgi kalinliklari da yaricapla olceklenir; sabit kalirlarsa kucuk
+    // gostergede halka tamamen kapanip disk gibi gorunuyordu.
+    val trackStroke = r * 0.20f
+    val valueStroke = r * 0.16f
+
     drawArc(
-        color = Color(0x0FFFFFFF),
+        color = Color(0x14FFFFFF),
         startAngle = startDeg,
         sweepAngle = sweepDeg,
         useCenter = false,
         topLeft = arcTopLeft,
         size = arcSize,
-        style = Stroke(width = 10f * density)
-    )
-    drawArc(
-        color = Color(0x3356E9FF),
-        startAngle = startDeg,
-        sweepAngle = valueSweep,
-        useCenter = false,
-        topLeft = arcTopLeft,
-        size = arcSize,
-        style = Stroke(width = 16f * density)
+        style = Stroke(width = trackStroke)
     )
     drawArc(
         color = Color(0xFF56E9FF),
@@ -310,7 +331,7 @@ private fun DrawScope.drawSpeedometer(
         useCenter = false,
         topLeft = arcTopLeft,
         size = arcSize,
-        style = Stroke(width = 10f * density, cap = StrokeCap.Round)
+        style = Stroke(width = valueStroke, cap = StrokeCap.Round)
     )
 
     fun text(value: String, color: Color, fontSize: TextUnit, italic: Boolean, center: Offset) {
@@ -330,21 +351,16 @@ private fun DrawScope.drawSpeedometer(
         )
     }
 
-    text("$kmh", Color(0xFFF8F0E2), valueSize, italic = true, center = Offset(cx, cy - 4f * density))
-    text("K M / H", Color(0xFF56E9FF), labelSize, italic = false, center = Offset(cx, cy + 34f * density))
+    // Yalnizca hiz ve birimi. Prototipteki "375nm" (tork) ve "%100" (boost)
+    // yazilari KALDIRILDI: tork tamamen susleme bir sayiydi, boost zaten
+    // ekranin en ustundeki serit. Gosterge kuculunce ikisi de okunmuyordu.
+    text("$kmh", Color(0xFFF8F0E2), valueSize, italic = true, center = Offset(cx, cy - r * 0.10f))
     text(
-        "${(340 + pct * 140).roundToInt()}nm",
-        Color(0xFFFFE7BE),
-        smallSize,
-        italic = true,
-        center = Offset(cx + r * 0.52f, cy - r + 21f * density)
-    )
-    text(
-        "${max(22f, engine.boost).roundToInt()}%",
-        Color(0xFFFFFFFF),
-        smallSize,
-        italic = true,
-        center = Offset(cx - r * 0.55f, cy + r * 0.85f)
+        "KM/H",
+        Color(0xFF56E9FF),
+        labelSize,
+        italic = false,
+        center = Offset(cx, cy + r * 0.62f)
     )
 }
 
@@ -353,48 +369,29 @@ private fun DrawScope.drawSpeedometer(
 // ---------------------------------------------------------------------------
 
 /**
- * Trafikteki engel araci. Prototipin ORIJINAL cizimi — arac ozellestirmesi
- * (2026-08-14) yalnizca oyuncuyu etkiler, bu fonksiyon bilerek degismedi:
- * tehdidin gorunumu her kosuda ayni olmali ki oyuncu 60 Hz'de taniyabilsin.
+ * Trafikteki engel araci.
+ *
+ * 2026-08-15'te oyuncu araciyla AYNI cizim boru hattina bagladi
+ * ([CarCatalog.trafficShape] + [drawCarParts]); onceden burada elle yazilmis
+ * bir kopya vardi ve oyuncu araci yenilenince trafik geride kalirdi.
+ *
+ * Tehdit yine ayirt edilebilir kalir, iki ayri kanaldan:
+ *  * palet — govde [GameEngine.OBSTACLE_COLORS]'tan gelir, surucu basi mavi
+ *    (oyuncuda sari) ve oyuncu boyalari bu tonlarin DISINDA secilmistir;
+ *  * siluet — trafik gövdesi bilerek daha kutu (kucuk kose yaricapi, kunt
+ *    burun, serit yok denecek kadar soluk).
+ *
+ * Govde boyutu ve carpisma kutusu DEGISMEDI.
  */
-private fun DrawScope.drawObstacleCar(x: Float, y: Float, color: Color) {
+private fun DrawScope.drawObstacleCar(x: Float, y: Float, bodyArgb: Long) {
     translate(x, y) {
-      // Cizim koordinatlari prototipin 42x90'lik aracina ait; tek bir olcek
-      // carpaniyla kucultuluyor ki carpisma kutusu (GameConfig'te ayni
-      // carpandan turetiliyor) gorselle birebir ortussun.
-      scale(GameConfig.CAR_ART_SCALE, GameConfig.CAR_ART_SCALE, pivot = Offset.Zero) {
-        // Golge
-        drawOval(
-            color = Color(0x3D000000),
-            topLeft = Offset(-21f, 46f - 34f),
-            size = Size(42f, 68f)
-        )
-        drawRect(Color(0xFF0A0D11), Offset(-18f, 66f), Size(36f, 8f))
-        drawRect(Color(0xFF0A0D11), Offset(-16f, 4f), Size(32f, 6f))
-        // Tekerlekler
-        val tire = Color(0xFF050505)
-        drawRect(tire, Offset(-20f, 14f), Size(8f, 18f))
-        drawRect(tire, Offset(12f, 14f), Size(8f, 18f))
-        drawRect(tire, Offset(-20f, 50f), Size(8f, 18f))
-        drawRect(tire, Offset(12f, 50f), Size(8f, 18f))
-        // Govde
-        drawRoundRect(color, Offset(-10f, 8f), Size(20f, 62f), CornerRadius(8f))
-        drawRoundRect(color, Offset(-6f, -2f), Size(12f, 18f), CornerRadius(6f))
-        // Cam
-        drawRoundRect(
-            Color(0xFF1E2A47),
-            Offset(-7f, 23f),
-            Size(14f, 18f),
-            CornerRadius(6f)
-        )
-        drawRect(color, Offset(-14f, 29f), Size(28f, 8f))
-        drawCircle(
-            color = Color(0xFF8ECAE6),
-            radius = 5f,
-            center = Offset(0f, 29f)
-        )
-        drawRect(Color(0xFFFFFFFF), Offset(-4f, 11f), Size(8f, 34f))
-      }
+        // Cizim koordinatlari prototipin ham arac uzayina ait; tek bir olcek
+        // carpaniyla kucultuluyor ki carpisma kutusu (GameConfig'te ayni
+        // carpandan turetiliyor) gorselle birebir ortussun.
+        scale(GameConfig.CAR_ART_SCALE, GameConfig.CAR_ART_SCALE, pivot = Offset.Zero) {
+            drawCarShadow()
+            drawCarParts(CarCatalog.trafficStyle(bodyArgb))
+        }
     }
 }
 

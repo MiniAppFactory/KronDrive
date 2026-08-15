@@ -2,6 +2,7 @@ package com.miniappfactory.krondrive.ui.game
 
 import android.app.Activity
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -16,12 +17,17 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -34,8 +40,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -68,8 +77,16 @@ import com.miniappfactory.krondrive.ui.common.KronCard
 import com.miniappfactory.krondrive.ui.common.KronProgressBar
 import com.miniappfactory.krondrive.ui.common.PrimaryButton
 import com.miniappfactory.krondrive.ui.common.SecondaryButton
-import com.miniappfactory.krondrive.ui.common.StarRow
+import com.miniappfactory.krondrive.ui.common.ObjectiveDots
 import com.miniappfactory.krondrive.ui.theme.KronColors
+
+/** HUD'daki tek bir hedef satiri: "GEÇİŞ 4/10" + durumu. */
+private data class HudObjective(
+    val label: String,
+    /** "4/10" bicimi; sayilamayan hedeflerde bos. */
+    val value: String,
+    val met: Boolean
+)
 
 /** HUD'un okudugu, kare kare degil de seyrek guncellenen ozet. */
 private data class HudState(
@@ -77,10 +94,16 @@ private data class HudState(
     val timeLabel: String = "",
     val boost: Float = GameConfig.BOOST_MAX,
     val combo: Int = 0,
-    /** Kisa hedef etiketi, ornek: "DODGE". */
-    val objectiveLabel: String = "",
-    /** Hedefin sayisal durumu, ornek: "3/8". */
-    val objectiveValue: String = ""
+    /**
+     * Bolumun TUM hedefleri (kariyerde uc yildiz, gunluk gorevde uc kademe).
+     * Sonsuz modda bos. Oyuncu neyin eksik oldugunu ekranda gormeli.
+     */
+    val objectives: List<HudObjective> = emptyList(),
+    /** Hiz kilidi butonu gosterilsin mi (yalnizca sonsuz mod). */
+    val speedLockAvailable: Boolean = false,
+    val speedLocked: Boolean = false,
+    /** Boost su an tutusabilir mi (bos/kilitliyse buton soluklasir). */
+    val boostReady: Boolean = true
 )
 
 /**
@@ -141,7 +164,11 @@ fun GameScreen(
     }
 
     // Sesi ekran omru boyunca ac/kapat; ayarlarda ses kapaliysa hic baslatma.
-    DisposableEffect(progress.soundEnabled) {
+    // Motor ve korna sesi SECILI GOVDEYE gore degisir (sahibi istegi,
+    // 2026-08-15); profil tablosu `audio/CarSoundProfile.kt` icinde, gövde
+    // id'siyle eslesir ve bilinmeyen id varsayilana duser.
+    DisposableEffect(progress.soundEnabled, engine) {
+        EngineSoundManager.setProfile(engine.carStyle.shape.id)
         EngineSoundManager.setEnabled(progress.soundEnabled)
         if (progress.soundEnabled) EngineSoundManager.start()
         onDispose { EngineSoundManager.stop() }
@@ -232,24 +259,14 @@ fun GameScreen(
                 engine = engine,
                 density = density,
                 textMeasurer = textMeasurer,
-                gaugeValueSize = 42.sp,
-                gaugeLabelSize = 11.sp,
-                gaugeSmallSize = 12.sp
+                // Gosterge kucultuldu (sahibi geri bildirimi, 2026-08-15:
+                // "hiz gostergesi cok buyuk ve cok ortada"). Rakam yolun
+                // uzerine tasmayacak kadar kucuk, yine de tek bakista okunur.
+                gaugeValueSize = 24.sp,
+                gaugeLabelSize = 8.sp,
+                gaugeSmallSize = 9.sp
             )
         }
-
-        GameHud(
-            hud = hud,
-            onPause = {
-                if (engine.phase == RunPhase.RUNNING) {
-                    engine.pause()
-                    paused = true
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-        )
 
         dodgeBanner?.let { text ->
             Text(
@@ -295,12 +312,48 @@ fun GameScreen(
             DrivingControls(
                 engine = engine,
                 language = language,
+                boostReady = hud.boostReady,
+                // Korna oynanisi HIC etkilemez; ses kapaliyken buton hic
+                // gosterilmez (olu butona basmak "bozuk" hissi verir).
+                hornAvailable = progress.soundEnabled,
+                onHorn = {
+                    // Bekleme suresi dolmadiysa ses calmaz; titresim de
+                    // ancak ses gercekten caldiysa verilir.
+                    if (EngineSoundManager.playHorn()) {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                },
                 onSteer = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing)
             )
         }
+
+        // HUD, kaydirma katmaninin ve kontrollerin USTUNDE cizilir.
+        // Eskiden altta kaliyordu: tam ekran kaydirma katmani (serit
+        // degistirme) dokunusu yutuyor ve DURAKLAT TUSU CALISMIYORDU
+        // (cihazda dogrulandi, 2026-08-15). Kontrol butonlari calisiyordu
+        // cunku onlar zaten kaydirma katmanindan SONRA ciziliyordu.
+        GameHud(
+            hud = hud,
+            onPause = {
+                if (engine.phase == RunPhase.RUNNING) {
+                    engine.pause()
+                    paused = true
+                }
+            },
+            onToggleSpeedLock = {
+                engine.toggleSpeedLock()
+                // HUD ~3 karede bir guncelleniyor; kilit durumu ANINDA
+                // gorunsun diye burada da yansitiliyor.
+                hud = hud.copy(speedLocked = engine.speedLocked)
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+        )
+
 
         if (phase == RunPhase.COUNTDOWN) {
             CountdownOverlay(engine.countdownRemaining, language)
@@ -319,23 +372,6 @@ fun GameScreen(
                     // Duraklatmadan cikmak da bir kosu sonudur: reklamsiz
                     // cikis yolu birakilmiyor (sahibi karari, 2026-08-14).
                     withOptionalInterstitial(viewModel, mode, activity) { onExit() }
-                },
-                canBuyBooster = engine.canGrantPauseBooster(),
-                adInFlight = adInFlight,
-                onWatchBoosterAd = {
-                    if (activity != null && !adInFlight) {
-                        adInFlight = true
-                        RewardedAdManager.loadAndShow(
-                            context = context,
-                            activity = activity,
-                            onRewardEarned = {
-                                // Odul SADECE SDK "kazanildi" derse verilir.
-                                engine.grantPauseBooster()
-                            },
-                            onFailure = { },
-                            onAdClosed = { adInFlight = false }
-                        )
-                    }
                 }
             )
         }
@@ -371,15 +407,23 @@ fun GameScreen(
 
         result?.let { runResult ->
             val nextLevelId = runResult.levelId?.plus(1)
+            // "Sonraki bolum" ancak bolum GERCEKTEN gecildiyse cikar; aksi
+            // halde buton oyuncuyu kilitli bir bolume goturuyordu.
             val hasNext = mode == RunMode.CAREER &&
                 nextLevelId != null &&
                 nextLevelId <= LevelCatalog.count &&
-                runResult.stars > 0
+                runResult.passed
 
             RunResultOverlay(
                 result = runResult,
                 language = language,
-                objectiveLabels = level?.stars?.map { it.label(language) }.orEmpty(),
+                // Her hedef icin etiket + "1280/1400" bicimi ilerleme
+                // (sahibi istegi, 2026-08-15): oyuncu neyi ne kadar
+                // kacirdigini gormeli, yalnizca "olmadi" degil.
+                objectiveLabels = level?.stars?.map { objective ->
+                    objective.label(language) to
+                        objective.progressText(runResult.stats).orEmpty()
+                }.orEmpty(),
                 tierRewards = if (mode == RunMode.DAILY) {
                     daily.challenge.tiers.map { it.rewardCoins }
                 } else {
@@ -458,25 +502,74 @@ private fun buildHud(
         null -> formatTime(engine.timeElapsed.toInt())
     }
     val stats = engine.currentStats()
-    // Gunluk gorevde HUD, o an PESINDE OLUNAN kademeyi gosterir: ilk
-    // saglanmamis hedef (hepsi saglandiysa sonuncusu dolu gorunur).
-    // Kariyerde davranis degismedi — orada birinci yildiz hedefi gosterilir.
-    val objective = if (engine.mode == RunMode.DAILY) {
-        level?.stars?.firstOrNull { !it.isMet(stats) } ?: level?.stars?.lastOrNull()
-    } else {
-        level?.stars?.firstOrNull()
+    // Tum hedefler listelenir (kariyerde uc yildiz, gunlukte uc kademe).
+    // Tam cumle yerine kisa etiket: HUD ekranin ustunu kapatmasin.
+    val objectives = level?.stars.orEmpty().map { objective ->
+        HudObjective(
+            label = objective.shortLabel(language),
+            value = objective.progressText(stats).orEmpty(),
+            met = objective.isMet(stats)
+        )
     }
-    val objectiveValue = objective?.progressText(stats)
     return HudState(
         score = stats.score,
         timeLabel = timeLabel,
         boost = engine.boost,
         combo = engine.combo,
-        // Tam cumle yerine kisa etiket: HUD ekranin ustunu kapatmasin.
-        objectiveLabel = if (objectiveValue != null) objective.shortLabel(language) else "",
-        objectiveValue = objectiveValue.orEmpty()
+        objectives = objectives,
+        speedLockAvailable = engine.canLockSpeed(),
+        speedLocked = engine.speedLocked,
+        boostReady = engine.isBoostReady()
     )
 }
+
+/**
+ * Tek hedef satiri: ici bos yuvarlak + kisa etiket + "4/10".
+ * Hedef saglaninca yuvarlak yesile doner ve icine tik gelir — oyuncu
+ * ilerledigini aninda gorur.
+ */
+@Composable
+private fun ObjectiveRow(row: HudObjective, style: TextStyle) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier = Modifier.padding(top = 3.dp)
+    ) {
+        Text(
+            text = if (row.value.isEmpty()) row.label else "${row.label} ${row.value}",
+            style = style,
+            color = if (row.met) OBJECTIVE_DONE else KronColors.Accent,
+            fontSize = 11.sp
+        )
+        Box(
+            modifier = Modifier.size(13.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (row.met) {
+                Box(
+                    modifier = Modifier
+                        .size(13.dp)
+                        .background(OBJECTIVE_DONE, CircleShape)
+                )
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = KronColors.Background,
+                    modifier = Modifier.size(10.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(13.dp)
+                        .border(1.5.dp, KronColors.Accent, CircleShape)
+                )
+            }
+        }
+    }
+}
+
+/** Tamamlanan hedefin rengi — yolun her temasinda okunacak kadar parlak. */
+private val OBJECTIVE_DONE = Color(0xFF3DDC84)
 
 private fun formatTime(totalSeconds: Int): String {
     val safe = totalSeconds.coerceAtLeast(0)
@@ -491,6 +584,7 @@ private fun formatTime(totalSeconds: Int): String {
 private fun GameHud(
     hud: HudState,
     onPause: () -> Unit,
+    onToggleSpeedLock: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Panel YOK: gostergeler dogrudan yolun uzerinde, sadece golgeyle okunakli.
@@ -551,26 +645,62 @@ private fun GameHud(
                 color = KronColors.TextPrimary,
                 fontSize = 18.sp
             )
-            if (hud.objectiveValue.isNotEmpty()) {
-                Text(
-                    text = "${hud.objectiveLabel} ${hud.objectiveValue}",
-                    style = hudText,
-                    color = KronColors.Accent,
-                    fontSize = 12.sp
-                )
+            // Bolumu gecmek icin gereken hedefler, YOLUN DISINDA bir kontrol
+            // listesi olarak (sahibi istegi, 2026-08-15): "oyuncular ne
+            // yapmalari gerektigini ezberlemek zorunda kalmasin". Ici bos
+            // yuvarlak = henuz yapilmadi, yesil tik = tamam.
+            if (hud.objectives.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                hud.objectives.forEach { row ->
+                    ObjectiveRow(row = row, style = hudText)
+                }
             }
         }
 
-        Box(
+        Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 10.dp)
-                .size(36.dp)
-                .background(Color(0x66040C16), RoundedCornerShape(12.dp))
-                .pointerInput(Unit) { detectTapGestures(onPress = { onPause() }) },
-            contentAlignment = Alignment.Center
+                .padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("II", color = KronColors.Accent, fontSize = 14.sp)
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(Color(0x66040C16), RoundedCornerShape(12.dp))
+                    .pointerInput(Unit) { detectTapGestures(onPress = { onPause() }) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("II", color = KronColors.Accent, fontSize = 14.sp)
+            }
+
+            // Hiz kilidi YALNIZCA sonsuz modda (sahibi istegi, 2026-08-15):
+            // "uzun sure gitmek isteyen varsa sabitlesin, yavas yavas gitsin".
+            // Kariyer ve gunluk gorevde hedefler sureye/hiza bagli oldugu icin
+            // boyle bir dugme dengeyi bozardi, o yuzden hic gosterilmiyor.
+            if (hud.speedLockAvailable) {
+                Box(
+                    modifier = Modifier
+                        .heightIn(min = 36.dp)
+                        .background(
+                            if (hud.speedLocked) KronColors.Accent.copy(alpha = 0.85f)
+                            else Color(0x66040C16),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 10.dp)
+                        .pointerInput(Unit) {
+                            detectTapGestures(onPress = { onToggleSpeedLock() })
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (hud.speedLocked) "🔒 HIZ" else "HIZ",
+                        color = if (hud.speedLocked) KronColors.Background else KronColors.TextSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
         }
     }
 }
@@ -586,10 +716,74 @@ private fun GameHud(
  * (aradaki bosluk 30 -> 12 dp). Bir parmak fren/boost ile yon butonu arasinda
  * kisa bir kaydirmayla gidip gelebiliyor.
  */
-private val CONTROL_SIZE = 76.dp
-private val CONTROL_EDGE_PADDING = 14.dp
-private val CONTROL_BOTTOM_PADDING = 26.dp
-private val CONTROL_VERTICAL_GAP = 12.dp
+private val CONTROL_SIZE = 64.dp
+private val CONTROL_EDGE_PADDING = 16.dp
+private val CONTROL_BOTTOM_PADDING = 24.dp
+
+/**
+ * Ayni taraftaki iki buton arasindaki dikey bosluk.
+ * 30 -> 12 -> 8 -> 5 dp (uc tur oyuncu geri bildirimi, 2026-08-14/15).
+ * Butonlar 64 dp'ye kuculdugu icin 5 dp'de bile iki dokunma hedefi arasinda
+ * ~1.5 mm bosluk kaliyor; sifirlamak yanlis butona basma riskini gercekten
+ * artirirdi.
+ */
+private val CONTROL_VERTICAL_GAP = 5.dp
+
+/**
+ * Buton govdeleri OPAK ve kabartmali (sahibi: "silik olmasin, buton gibi
+ * kabartmali olsun"). Once %10 beyaz saydam kutulardi ve yol uzerinde
+ * kayboluyorlardi.
+ *
+ * Kabartma uc katmanla yapiliyor: (1) dikey gradyan — ust acik, alt koyu,
+ * (2) ust kenarda ince acik cizgi (isik), (3) altta golge (elevation).
+ * Basiliyken gradyan TERSINE doner ve golge kaybolur: parmak butonu iceri
+ * itmis gibi gorunur.
+ */
+private val CONTROL_SHAPE = CircleShape
+private val CONTROL_ELEVATION = 5.dp
+private val CONTROL_ELEVATION_PRESSED = 1.dp
+
+private val STEER_TOP = Color(0xFF32496C)
+private val STEER_BOTTOM = Color(0xFF0E1A2E)
+private val BRAKE_TOP = Color(0xFFB03A46)
+private val BRAKE_BOTTOM = Color(0xFF48111A)
+private val BOOST_TOP = Color(0xFF2189D6)
+private val BOOST_BOTTOM = Color(0xFF08375F)
+
+/** Boost bos/kilitliyken: renk kacar, buton "simdi olmaz" der. */
+private val BOOST_EMPTY_TOP = Color(0xFF2C3B4F)
+private val BOOST_EMPTY_BOTTOM = Color(0xFF141D2B)
+
+/**
+ * Korna (2026-08-15, sahibi istegi: *"bir tane de korna efekti koyalim, ise
+ * yaramasa da eglencelik olur"*). Oynanisa etkisi YOKTUR.
+ *
+ * **Yeri: alt orta.** Uc secenek vardi ve ikisi elendi:
+ *  - Ustteki HUD satiri (duraklat + hiz kilidi): oyuncunun iki basparmagi
+ *    alt koselerde duruyor, surerken ekranin tepesine uzanmak gerekirdi.
+ *  - Kontrol kumelerinin yanina: yon/fren/boost butonlari arasindaki bosluk
+ *    2026-08-14/15'te uc kez oyuncu geri bildirimiyle daraltildi
+ *    ([CONTROL_VERTICAL_GAP] 30 -> 5 dp); araya bir buton daha sokmak o
+ *    calismayi geri alirdi.
+ *
+ * Alt ortada 64 dp'lik kumelerin arasinda genis bir bosluk zaten var: 360 dp
+ * genisliginde fren 16–80, boost 280–344 dp'de; 48 dp'lik korna ~156–204'e
+ * oturuyor ve iki yanda ~76 dp bosluk kaliyor. Butonun kendisi de bilerek
+ * KUCUK ve sonuk: bir kontrol degil, bir suslemedir. Kontrollerle ayni
+ * katmanda oldugu icin ustundeki kaydirma (serit degistirme) katmanini da
+ * bozmaz ve sonuc/carpisma ekranlarinda kontrollerle birlikte kaybolur.
+ */
+private val HORN_SIZE = 48.dp
+private val HORN_TOP = Color(0xFF6E5B2C)
+private val HORN_BOTTOM = Color(0xFF251F10)
+
+/** Korna, fren/boost ile dikeyde ayni hizada dursun diye. */
+private val HORN_BOTTOM_PADDING =
+    CONTROL_BOTTOM_PADDING + (CONTROL_SIZE - HORN_SIZE) / 2f
+
+/** Ust kenardaki isik cizgisi ve dis cerceve. */
+private val CONTROL_HIGHLIGHT = Color(0x59FFFFFF)
+private val CONTROL_BORDER = Color(0x40FFFFFF)
 
 /** Yon butonu, alttaki fren/boost butonunun tam ustunde durur. */
 private val STEER_BOTTOM_PADDING =
@@ -599,12 +793,17 @@ private val STEER_BOTTOM_PADDING =
 private fun DrivingControls(
     engine: com.miniappfactory.krondrive.game.GameEngine,
     language: AppLanguage,
+    boostReady: Boolean,
+    hornAvailable: Boolean,
+    onHorn: () -> Unit,
     onSteer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
         ControlButton(
             label = "◀",
+            topColor = STEER_TOP,
+            bottomColor = STEER_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = CONTROL_EDGE_PADDING, bottom = STEER_BOTTOM_PADDING)
@@ -616,6 +815,8 @@ private fun DrivingControls(
         )
         ControlButton(
             label = "▶",
+            topColor = STEER_TOP,
+            bottomColor = STEER_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = CONTROL_EDGE_PADDING, bottom = STEER_BOTTOM_PADDING)
@@ -627,7 +828,8 @@ private fun DrivingControls(
         )
         HoldButton(
             label = language.pick(tr = "FREN", en = "BRAKE"),
-            background = Color(0x38FF5050),
+            topColor = BRAKE_TOP,
+            bottomColor = BRAKE_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = CONTROL_EDGE_PADDING, bottom = CONTROL_BOTTOM_PADDING)
@@ -636,26 +838,110 @@ private fun DrivingControls(
         )
         HoldButton(
             label = "⚡",
-            background = Color(0x3318A0FF),
+            // Boost bosaldiginda ve parmak basiliyken KILITLENIR (bkz.
+            // GameConfig.BOOST_REENGAGE_MIN). Buton eskiden bunu hic belli
+            // etmiyordu: oyuncu basiyor, hicbir sey olmuyor ve "boost yaptim
+            // ama saymadi" diyordu (2026-08-15). Artik hazir degilken soluk.
+            topColor = if (boostReady) BOOST_TOP else BOOST_EMPTY_TOP,
+            bottomColor = if (boostReady) BOOST_BOTTOM else BOOST_EMPTY_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = CONTROL_EDGE_PADDING, bottom = CONTROL_BOTTOM_PADDING)
                 .size(CONTROL_SIZE),
             onHoldChanged = { engine.setBoost(it) }
         )
+        if (hornAvailable) {
+            ControlButton(
+                label = "📣",
+                topColor = HORN_TOP,
+                bottomColor = HORN_BOTTOM,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = HORN_BOTTOM_PADDING)
+                    .size(HORN_SIZE),
+                labelSize = 18.sp,
+                onPress = onHorn
+            )
+        }
+    }
+}
+
+/**
+ * Kabartma efektinin ortak govdesi. [pressed] true iken gradyan ters doner
+ * ve golge kaybolur — buton iceri itilmis gibi durur.
+ */
+@Composable
+private fun RaisedControl(
+    topColor: Color,
+    bottomColor: Color,
+    pressed: Boolean,
+    modifier: Modifier,
+    content: @Composable () -> Unit
+) {
+    val elevation by animateDpAsState(
+        targetValue = if (pressed) CONTROL_ELEVATION_PRESSED else CONTROL_ELEVATION,
+        label = "controlElevation"
+    )
+    Box(
+        modifier = modifier
+            .shadow(elevation, CONTROL_SHAPE)
+            .background(
+                brush = Brush.verticalGradient(
+                    if (pressed) listOf(bottomColor, topColor) else listOf(topColor, bottomColor)
+                ),
+                shape = CONTROL_SHAPE
+            )
+            .border(1.dp, CONTROL_BORDER, CONTROL_SHAPE),
+        contentAlignment = Alignment.Center
+    ) {
+        // Ust yaridaki parlaklik: dairede duz bir cizgi yamuk duruyordu,
+        // onun yerine yukaridan asagi sonumlenen bir cam parlamasi.
+        if (!pressed) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.45f)
+                    .clip(CONTROL_SHAPE)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(CONTROL_HIGHLIGHT, Color.Transparent)
+                        )
+                    )
+            )
+        }
+        content()
     }
 }
 
 @Composable
-private fun ControlButton(label: String, modifier: Modifier, onPress: () -> Unit) {
-    Box(
-        modifier = modifier
-            .background(Color(0x1AFFFFFF), RoundedCornerShape(22.dp))
-            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(22.dp))
-            .pointerInput(Unit) { detectTapGestures(onPress = { onPress() }) },
-        contentAlignment = Alignment.Center
+private fun ControlButton(
+    label: String,
+    topColor: Color,
+    bottomColor: Color,
+    modifier: Modifier,
+    labelSize: androidx.compose.ui.unit.TextUnit = 22.sp,
+    onPress: () -> Unit
+) {
+    // Yon butonu bir DOKUNUS butonu; basili kalma suresi oyunu etkilemez ama
+    // parmak degdiginde gorsel olarak da cokmesi gerekiyor.
+    var pressed by remember { mutableStateOf(false) }
+    RaisedControl(
+        topColor = topColor,
+        bottomColor = bottomColor,
+        pressed = pressed,
+        modifier = modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onPress = {
+                    pressed = true
+                    onPress()
+                    tryAwaitRelease()
+                    pressed = false
+                }
+            )
+        }
     ) {
-        Text(label, color = Color.White, fontSize = 26.sp)
+        Text(label, color = Color.White, fontSize = labelSize, fontWeight = FontWeight.Black)
     }
 }
 
@@ -663,27 +949,30 @@ private fun ControlButton(label: String, modifier: Modifier, onPress: () -> Unit
 @Composable
 private fun HoldButton(
     label: String,
-    background: Color,
+    topColor: Color,
+    bottomColor: Color,
     modifier: Modifier,
     onHoldChanged: (Boolean) -> Unit
 ) {
-    Box(
-        modifier = modifier
-            .background(background, RoundedCornerShape(22.dp))
-            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(22.dp))
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        onHoldChanged(true)
-                        // Parmak kalkana (veya hareket iptal olana) kadar basili sayilir.
-                        tryAwaitRelease()
-                        onHoldChanged(false)
-                    }
-                )
-            },
-        contentAlignment = Alignment.Center
+    var pressed by remember { mutableStateOf(false) }
+    RaisedControl(
+        topColor = topColor,
+        bottomColor = bottomColor,
+        pressed = pressed,
+        modifier = modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onPress = {
+                    pressed = true
+                    onHoldChanged(true)
+                    // Parmak kalkana (veya hareket iptal olana) kadar basili sayilir.
+                    tryAwaitRelease()
+                    pressed = false
+                    onHoldChanged(false)
+                }
+            )
+        }
     ) {
-        Text(label, color = Color.White, fontSize = 20.sp)
+        Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
     }
 }
 
@@ -728,10 +1017,7 @@ private fun CountdownOverlay(remaining: Float, language: AppLanguage) {
 @Composable
 private fun PausedOverlay(
     language: AppLanguage,
-    canBuyBooster: Boolean,
-    adInFlight: Boolean,
     onResume: () -> Unit,
-    onWatchBoosterAd: () -> Unit,
     onQuit: () -> Unit
 ) {
     OverlayScrim {
@@ -748,35 +1034,6 @@ private fun PausedOverlay(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = onResume
                 )
-
-                // Reklam karsiligi guclendirici: kosu basina bir kez, yalnizca
-                // oyuncuda zaten Ikinci Sans yokken teklif edilir.
-                if (canBuyBooster) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    SecondaryButton(
-                        text = if (adInFlight) {
-                            language.pick(tr = "YÜKLENİYOR…", en = "LOADING…")
-                        } else {
-                            language.pick(
-                                tr = "REKLAM İZLE → İKİNCİ ŞANS",
-                                en = "WATCH AD → SECOND CHANCE"
-                            )
-                        },
-                        enabled = !adInFlight,
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = onWatchBoosterAd
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = language.pick(
-                            tr = "İlk çarpışmanı yok sayar, boost barın dolar",
-                            en = "Ignores your first crash, refills your boost"
-                        ),
-                        color = KronColors.TextMuted,
-                        fontSize = 11.sp,
-                        textAlign = TextAlign.Center
-                    )
-                }
 
                 Spacer(modifier = Modifier.height(10.dp))
                 SecondaryButton(
@@ -856,7 +1113,8 @@ private fun CrashOverlay(
 private fun RunResultOverlay(
     result: RunResult,
     language: AppLanguage,
-    objectiveLabels: List<String>,
+    /** (hedef metni, "1280/1400" ilerleme metni) ciftleri. */
+    objectiveLabels: List<Pair<String, String>>,
     /** Gunluk gorevde her kademenin coin odulu; kariyerde bos. */
     tierRewards: List<Int>,
     /** Bu kosuda gunluk gorevden GERCEKTEN odenen coin (0 = yeni kademe yok). */
@@ -876,21 +1134,40 @@ private fun RunResultOverlay(
     OverlayScrim {
         KronCard(modifier = Modifier.fillMaxWidth()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Kariyerde "TAMAMLANDI" yalnizca TUM gorevler bittiginde
+                // yazar. Sureyi doldurmak ama gorevleri yapmamak bolumu
+                // gecirmiyor (bkz. RunResult.passed) — baslik da bunu
+                // durustce soylemeli, aksi halde oyuncu bolumun acildigini
+                // sanip haritada kilitli buluyordu.
+                val careerFailed = result.mode == RunMode.CAREER && !result.passed
                 Text(
                     text = when {
                         result.mode == RunMode.ENDLESS && result.newRecord ->
                             language.pick(tr = "YENİ REKOR!", en = "NEW RECORD!")
 
+                        careerFailed -> language.pick(tr = "GÖREVLER EKSİK", en = "OBJECTIVES LEFT")
                         stats.completed -> language.pick(tr = "TAMAMLANDI", en = "COMPLETED")
                         else -> language.pick(tr = "KOŞU BİTTİ", en = "RUN OVER")
                     },
-                    color = KronColors.Accent,
+                    color = if (careerFailed) KronColors.TextSecondary else KronColors.Accent,
                     fontSize = 28.sp
                 )
+                if (careerFailed) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = language.pick(
+                            tr = "Bölümü geçmek için üç görevin üçü de gerekli.",
+                            en = "All three objectives are required to pass."
+                        ),
+                        color = KronColors.TextMuted,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
 
                 if (result.mode == RunMode.CAREER) {
                     Spacer(modifier = Modifier.height(10.dp))
-                    StarRow(earned = result.stars, starSize = 34)
+                    ObjectiveDots(earned = result.stars, dotSize = 30)
                 }
 
                 result.secondsFromRecord?.let { gap ->
@@ -926,7 +1203,7 @@ private fun RunResultOverlay(
                 // ama coin gelmedi" diye okur.
                 if (result.mode == RunMode.CAREER && result.stars > 0) {
                     ResultRow(
-                        language.pick(tr = "Yıldız ödülü", en = "Star reward"),
+                        language.pick(tr = "Görev ödülü", en = "Objective reward"),
                         if (result.newStars > 0) {
                             "+${result.newStars * GameConfig.COINS_PER_STAR}"
                         } else {
@@ -944,7 +1221,7 @@ private fun RunResultOverlay(
                 }
                 if (objectiveLabels.isNotEmpty() && result.mode != RunMode.ENDLESS) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    objectiveLabels.forEachIndexed { index, label ->
+                    objectiveLabels.forEachIndexed { index, (label, progress) ->
                         val earned = index < earnedRows
                         Row(
                             modifier = Modifier
@@ -952,14 +1229,12 @@ private fun RunResultOverlay(
                                 .padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = when {
-                                    result.mode == RunMode.DAILY -> if (earned) "✓" else "○"
-                                    earned -> "★"
-                                    else -> "☆"
-                                },
-                                color = if (earned) KronColors.Accent else KronColors.TextMuted,
-                                fontSize = 15.sp
+                            // Yildiz simgesi kaldirildi: her yerde ayni dil —
+                            // tamamlanan yesil tik, kalan ici bos yuvarlak.
+                            ObjectiveDots(
+                                earned = if (earned) 1 else 0,
+                                total = 1,
+                                dotSize = 15
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
@@ -968,6 +1243,15 @@ private fun RunResultOverlay(
                                 color = if (earned) KronColors.TextPrimary else KronColors.TextMuted,
                                 fontSize = 12.sp
                             )
+                            if (progress.isNotEmpty()) {
+                                Text(
+                                    text = progress,
+                                    color = if (earned) KronColors.ObjectiveDone else KronColors.TextSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
+                            }
                             tierRewards.getOrNull(index)?.let { reward ->
                                 Text(
                                     text = "+$reward",

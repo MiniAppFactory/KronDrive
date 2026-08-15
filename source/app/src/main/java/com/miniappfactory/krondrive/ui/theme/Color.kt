@@ -41,6 +41,9 @@ object KronColors {
     /** Coin. */
     val Coin = Color(0xFFF6C000)
 
+    /** Tamamlanan gorev: yolun her temasinda okunacak kadar parlak yesil. */
+    val ObjectiveDone = Color(0xFF3DDC84)
+
     /** Kilitli bolum/kart. */
     val Locked = Color(0xFF1C2740)
 }

@@ -14,24 +14,23 @@ import com.miniappfactory.krondrive.BuildConfig
  * reklamlarina tiklayip AdMob "invalid traffic" ihlali olusturmak imkansiz.
  */
 object AdIds {
-    // PLACEHOLDER — gercek ID ile degistirilecek.
-    private const val PRODUCTION_BANNER_AD_UNIT_ID = "ca-app-pub-0000000000000000/0000000000"
+    private const val PRODUCTION_BANNER_AD_UNIT_ID = "ca-app-pub-8582550349019790/6482084182"
     private const val TEST_BANNER_AD_UNIT_ID = "ca-app-pub-3940256099942544/9214589741"
 
-    // PLACEHOLDER — gercek ID ile degistirilecek.
-    private const val PRODUCTION_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-0000000000000000/0000000000"
+    private const val PRODUCTION_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-8582550349019790/2236501231"
     private const val TEST_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-3940256099942544/1033173712"
 
-    // PLACEHOLDER — gercek ID ile degistirilecek.
-    private const val PRODUCTION_REWARDED_AD_UNIT_ID = "ca-app-pub-0000000000000000/0000000000"
+    private const val PRODUCTION_REWARDED_AD_UNIT_ID = "ca-app-pub-8582550349019790/5169002519"
     private const val TEST_REWARDED_AD_UNIT_ID = "ca-app-pub-3940256099942544/5224354917"
 
     /**
-     * Gercek ID'ler girilene kadar release build'lerde de test reklamlari
-     * kullanilir — yanlislikla gecersiz bir ID ile yayina cikilmasin diye.
-     * Gercek ID girildiginde bu bayrak `false` yapilmalidir.
+     * Gercek ID'ler 2026-08-15'te girildi (AdMob konsolu, sahibi tarafindan
+     * olusturuldu) ve bayrak kapatildi: release build artik GERCEK reklam
+     * gosterir. Debug build hala test reklami kullanir (bkz. [useTestIds]) —
+     * gelistirirken kendi reklamina tiklayip "invalid traffic" ihlali
+     * olusturmak imkansiz.
      */
-    private const val USE_TEST_IDS_IN_RELEASE = true
+    private const val USE_TEST_IDS_IN_RELEASE = false
 
     private val useTestIds: Boolean get() = BuildConfig.DEBUG || USE_TEST_IDS_IN_RELEASE
 

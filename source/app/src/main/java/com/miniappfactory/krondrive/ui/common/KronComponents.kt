@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -198,30 +200,47 @@ fun SecondaryButton(
     }
 }
 
-/** ★☆☆ / ★★☆ / ★★★ gosterimi. */
+/**
+ * Bolumun uc gorevinin durumu: tamamlanan yesil tik, kalan ici bos yuvarlak.
+ *
+ * Eskiden ★☆☆ yildiz gosterimiydi. Proje sahibi karari (2026-08-15): bolum
+ * zaten gorevleri tamamlayinca bitiyor, oyuncuya ayrica "yildiz" diye ikinci
+ * bir kavram ogretmenin anlami yok. Oyun ici HUD'daki kontrol listesiyle ayni
+ * dil kullaniliyor. Arka planda sayac ayni kaldi (kilit acma ve coin odulu
+ * degismedi), degisen yalnizca ARAYUZ.
+ */
 @Composable
-fun StarRow(
+fun ObjectiveDots(
     earned: Int,
     total: Int = 3,
-    starSize: Int = 18,
+    dotSize: Int = 18,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(total) { index ->
-            if (index < earned) {
-                Icon(
-                    Icons.Filled.Star,
-                    contentDescription = null,
-                    tint = KronColors.Accent,
-                    modifier = Modifier.size(starSize.dp)
-                )
-            } else {
-                Icon(
-                    Icons.Outlined.StarBorder,
-                    contentDescription = null,
-                    tint = KronColors.TextMuted,
-                    modifier = Modifier.size(starSize.dp)
-                )
+            Box(
+                modifier = Modifier.size(dotSize.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (index < earned) {
+                    Box(
+                        modifier = Modifier
+                            .size(dotSize.dp)
+                            .background(KronColors.ObjectiveDone, CircleShape)
+                    )
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = KronColors.Background,
+                        modifier = Modifier.size((dotSize * 0.72f).dp)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(dotSize.dp)
+                            .border((dotSize * 0.1f).dp, KronColors.TextMuted, CircleShape)
+                    )
+                }
             }
         }
     }

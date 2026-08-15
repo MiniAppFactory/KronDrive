@@ -38,8 +38,14 @@ oraya yazmadan sapma yapma.
    "kazanıldı" geri çağrısında verilir. Oyun ekranında banner yok.
 5. **Web3 kapalı.** Token, cüzdan, gerçek para, "kazan" vaadi yok; sahibi
    açıkça istemedikçe eklenmez.
-6. **Cihaz iddiası yok.** Bu makinede adb ve emülatör yok. "Cihazda test
-   edildi / çalışıyor" denmez; ne doğrulandıysa o yazılır.
+6. **Cihaz doğrulaması artık MÜMKÜN (2026-08-15'ten beri).** Samsung S8
+   (SM-G950F) USB ile bağlı. adb PATH'te değil, tam yolla çağrılır:
+   `AppData\Local\Android\Sdk\platform-tools\adb.exe` (kullanıcı klasörü
+   altında). `install -r`, `shell input tap`, `exec-out screencap`, logcat
+   çalışıyor — bir davranışı iddia etmeden önce **cihazda dene**. Pause
+   tuşunun çalışmadığı böyle bulundu.
+   Kural değişmedi: yalnızca gerçekten doğrulanan yazılır; denenmediyse
+   "denenmedi" denir. Emülatör hâlâ yok.
 7. **Metinler `AppLanguage.pick(tr = …, en = …)` üzerinden.** Tek dilli
    sabit metin yazma.
 

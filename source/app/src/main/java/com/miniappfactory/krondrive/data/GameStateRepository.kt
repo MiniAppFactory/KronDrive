@@ -54,6 +54,14 @@ class GameStateRepository(private val context: Context) {
 
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val LANGUAGE = stringPreferencesKey("language")
+
+        /**
+         * Oyuncu dili kendisi secti mi. Yalnizca [LANGUAGE] anahtarina bakmak
+         * yetmez: eski surumler dili hic secmeden de yazabiliyordu ve o
+         * kayitlar icin dil ekranini bir kez gostermek dogru davranis.
+         */
+        val LANGUAGE_CHOSEN = booleanPreferencesKey("language_chosen")
+
         val HAS_SEEN_ONBOARDING = booleanPreferencesKey("has_seen_onboarding")
 
         val LEVELS_SINCE_INTERSTITIAL = intPreferencesKey("levels_since_interstitial")
@@ -102,6 +110,7 @@ class GameStateRepository(private val context: Context) {
             // ayarlardaki tercihi kalicidir.
             language = prefs[Keys.LANGUAGE]?.let { AppLanguage.fromCode(it) }
                 ?: AppLanguage.fromSystemLocale(),
+            languageChosen = prefs[Keys.LANGUAGE_CHOSEN] ?: false,
             hasSeenOnboarding = prefs[Keys.HAS_SEEN_ONBOARDING] ?: false,
             levelsSinceInterstitial = prefs[Keys.LEVELS_SINCE_INTERSTITIAL] ?: 0,
             endlessRunsSinceInterstitial = prefs[Keys.ENDLESS_RUNS_SINCE_INTERSTITIAL] ?: 0,
@@ -227,12 +236,21 @@ class GameStateRepository(private val context: Context) {
     // ---------------------------------------------------------------
 
     /** Bolum sonucu: en iyi yildiz sayisi saklanir, sonraki bolum acilir. */
-    suspend fun recordLevelResult(levelId: Int, stars: Int) {
+    /**
+     * Bolum sonucu. [passed] yalnizca TUM gorevler tamamlandiysa true gelir ve
+     * bir sonraki bolumun kilidi ancak o zaman acilir.
+     *
+     * Eskiden tek bir gorev (`stars > 0`) yetiyordu; sahibi karari
+     * (2026-08-15): gorevleri yapmak bolumu gecmenin ilk sarti.
+     * Tamamlanan gorev sayisi yine kaydediliyor — haritadaki ilerleme
+     * isaretleri ve gorev odulu ondan besleniyor.
+     */
+    suspend fun recordLevelResult(levelId: Int, stars: Int, passed: Boolean) {
         context.gameDataStore.edit { prefs ->
             val starsMap = decodeIntMap(prefs[Keys.LEVEL_STARS]).toMutableMap()
             starsMap[levelId] = maxOf(starsMap[levelId] ?: 0, stars)
             prefs[Keys.LEVEL_STARS] = encodeIntMap(starsMap)
-            if (stars > 0) {
+            if (passed) {
                 val highest = prefs[Keys.HIGHEST_LEVEL] ?: 1
                 if (levelId >= highest) prefs[Keys.HIGHEST_LEVEL] = levelId + 1
             }
@@ -404,6 +422,18 @@ class GameStateRepository(private val context: Context) {
 
     suspend fun setLanguage(language: AppLanguage) {
         context.gameDataStore.edit { it[Keys.LANGUAGE] = language.code }
+    }
+
+    /**
+     * Ilk acilistaki dil ekranindan gelen secim: dil ve "secildi" bayragi TEK
+     * atomik islemde yazilir — biri yazilip digeri yazilamazsa ekran tekrar
+     * cikardi ya da dil kaydedilmemis olurdu.
+     */
+    suspend fun chooseLanguage(language: AppLanguage) {
+        context.gameDataStore.edit { prefs ->
+            prefs[Keys.LANGUAGE] = language.code
+            prefs[Keys.LANGUAGE_CHOSEN] = true
+        }
     }
 
     suspend fun markOnboardingSeen() {

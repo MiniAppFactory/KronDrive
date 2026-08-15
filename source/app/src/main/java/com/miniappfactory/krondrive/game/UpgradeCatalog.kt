@@ -104,6 +104,38 @@ object UpgradeCatalog {
     fun boostSpeedBonus(boostLevel: Int): Float =
         GameConfig.BOOST_SPEED_BONUS_BASE + 0.36f * curve(boostLevel)
 
+    // -----------------------------------------------------------------
+    // Arac carpanlariyla birlesik degerler (2026-08-15)
+    // -----------------------------------------------------------------
+    //
+    // Kural: carpan yukseltmeden gelen degerin USTUNE uygulanir, yerine
+    // GECMEZ. Yani seviye 8 bir "Sehir" hâlâ seviye 1 bir "Super Araba"dan
+    // cok daha hizlidir; arac secimi ilerlemenin yerini almaz, uzerine
+    // karakter ekler (bkz. `docs/BALANCE.md` — Arac ozellikleri, sinir 1).
+    //
+    // Varsayilan govdede dort carpan da tam 1.0 oldugu icin bu asiri
+    // yuklemeler eski davranisi BIT BIT ayni uretir (`x * 1f == x`).
+
+    fun scoreSpeedCap(speedLevel: Int, car: CarShapeDef): Float =
+        scoreSpeedCap(speedLevel) * car.topSpeedMul
+
+    fun accelRate(accelerationLevel: Int, car: CarShapeDef): Float =
+        accelRate(accelerationLevel) * car.accelMul
+
+    fun brakePenalty(brakeLevel: Int, car: CarShapeDef): Float =
+        brakePenalty(brakeLevel) * car.brakeMul
+
+    /**
+     * Carpan SUREYI olcekler, tuketimi degil — bu yuzden BOLME.
+     * `boostMul = 1.12` => tuketim 38 / 1.12 = 33.9 => bar %12 daha uzun surer.
+     *
+     * [boostDrain] icindeki 12/s alt siniri asilmaz: bolen 1.25'i gecmedigi
+     * icin (katalog testi bunu zorunlu kiliyor) sonuc hicbir zaman sifira
+     * ya da negatife inemez.
+     */
+    fun boostDrain(boostLevel: Int, car: CarShapeDef): Float =
+        boostDrain(boostLevel) / car.boostMul
+
     // --- Garaj ekraninda gosterilen somut degerler ---
 
     /** Ornek: SPEED icin "181 km/h", BOOST icin "2.6 s". */

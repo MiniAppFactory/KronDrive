@@ -13,85 +13,138 @@ package com.miniappfactory.krondrive.game
 object LevelCatalog {
 
     val levels: List<LevelDef> = listOf(
-        // --- Ogrenme egrisi: temel kontroller ---
-        // Ilk dort bolum daha yavas basliyor (60 -> 75 km/h). Varsayilan 80 km/h
-        // ile acilis, oyunu ilk kez acan biri icin fazla hizliydi; skordan gelen
-        // hizlanma ayni oldugu icin bolumler yine hizlanarak ilerliyor.
+        // -----------------------------------------------------------------
+        // OGRENME EGRISI (bolum 1-8) — 2026-08-14'te yeniden tasarlandi
+        //
+        // Sahibi ikinci kez "ilk bolumler fazla zor" dedi. Ilk turda sadece
+        // baslangic hizi dusurulmustu (60/65/70/75 km/h) ama zorlugun ASIL
+        // ekseni saniyedeki arac sayisiydi: her bolum tam yogunlukla
+        // (0.78 s'de bir arac) basliyordu. Artik yogunluk de rampali
+        // ([LevelDef.trafficDensity]).
+        //
+        // Ogretme sirasi — her bolum TEK yeni sey ogretir:
+        //   1 serit degistirme (neredeyse bos yol)  4 perfect dodge
+        //   2 trafik                                 5 tam trafik (ilk "normal")
+        //   3 boost                                  6 combo (nefes bolumu)
+        //   7 baski altinda combo                    8 mesafe + sure
+        //
+        // Yildiz esikleri docs/BALANCE.md'deki skor egrisinden turetildi:
+        //   skor(t) ~ 600 * tabanHiz * (e^(t/54.5) - 1) + 8*gecilenArac + 35*coin
+        // ve beklenenin %75-80'ine ayarlandi. Eski bolum 2'nin
+        // ScoreAtLeast(2200) hedefi bu egride ~%92'ye denk geliyordu, yani
+        // pratikte ulasilamazdi — "fazla zor" sikayetinin somut kaynagi.
+        //
+        // SIRA ONEMLI: yildizlar SIRALI kazanilir (bkz. LevelEvaluator) ve
+        // bir sonraki bolum ancak EN AZ 1 yildizla acilir. Yani ilk hedef
+        // her zaman en kolayi olmali; PerfectDodge/Combo gibi beceri
+        // hedefleri ilk siraya konursa oyuncu bolumde tikanir. Eski bolum
+        // 3 (`PerfectDodges(3)` ilk sirada) ve bolum 4 (`BoostDistance(500)`
+        // ilk sirada) tam olarak bu hatayi yapiyordu.
+        // -----------------------------------------------------------------
+
+        // 1 — SADECE SERIT DEGISTIRME. 25 s, 60 km/h, yogunluk 0.30:
+        // arac 2.6 s'de bir doguyor, kosu boyunca ~7 arac geliyor. Coin
+        // toplamak icin serit degistirmek gerekiyor; kaybetmek neredeyse
+        // imkansiz. Uc yildiz da kolay — ilk bolum oyuncuyu odullendirmeli.
         LevelDef(
             id = 1,
-            goal = LevelGoal.SurviveTime(30),
+            goal = LevelGoal.SurviveTime(25),
             startSpeedKmh = 60,
+            trafficDensity = 0.30f,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(10),
-                Objective.CoinsAtLeast(5)
+                Objective.PassVehicles(3),
+                Objective.CoinsAtLeast(3)
             )
         ),
+        // 2 — TRAFIK. Yogunluk yariya cikiyor (1.42 s'de bir arac), hiz ve
+        // sure ayni rampada. Hedefler hala "oyna, gec" seviyesinde.
         LevelDef(
             id = 2,
-            goal = LevelGoal.SurviveTime(45),
+            goal = LevelGoal.SurviveTime(30),
             startSpeedKmh = 65,
+            trafficDensity = 0.55f,
             stars = listOf(
-                Objective.PassVehicles(5),
-                Objective.ScoreAtLeast(2200),
-                Objective.CoinsAtLeast(8)
+                Objective.CompleteRun,
+                Objective.CoinsAtLeast(6),
+                Objective.PassVehicles(14)
             )
         ),
+        // 3 — BOOST. BoostDistance(200) tam bir bar dolusu boost'un biraz
+        // altinda (dolu bar ~2.6 s x ~35 m/s ~ 90 m; sarjla birlikte kosu
+        // boyunca ~450 m yapilabilir), yani "boost'a birkac kez bas" demek.
         LevelDef(
             id = 3,
-            goal = LevelGoal.SurviveTime(45),
+            goal = LevelGoal.SurviveTime(35),
             startSpeedKmh = 70,
+            trafficDensity = 0.70f,
             stars = listOf(
-                Objective.PerfectDodges(3),
-                Objective.PerfectDodges(6),
-                Objective.ScoreAtLeast(2400)
+                Objective.PassVehicles(10),
+                Objective.BoostDistance(200),
+                Objective.ScoreAtLeast(1400)
             )
         ),
+        // 4 — PERFECT DODGE. Yogunluk 0.85; uc dodge, mekanigi taniyacak
+        // kadar, zorlamayacak kadar.
         LevelDef(
             id = 4,
-            goal = LevelGoal.SurviveTime(60),
+            goal = LevelGoal.SurviveTime(40),
             startSpeedKmh = 75,
+            trafficDensity = 0.85f,
             stars = listOf(
-                Objective.BoostDistance(500),
-                Objective.CoinsAtLeast(12),
-                Objective.ScoreAtLeast(3000)
+                Objective.CompleteRun,
+                Objective.ScoreAtLeast(1800),
+                Objective.PerfectDodges(3)
             )
         ),
+        // 5 — ILK "NORMAL" BOLUM: varsayilan 80 km/h, tam yogunluk. Buraya
+        // gelen oyuncu dort mekanigi de gormus oluyor.
         LevelDef(
             id = 5,
-            goal = LevelGoal.SurviveTime(60),
+            goal = LevelGoal.SurviveTime(45),
+            trafficDensity = 1f,
             stars = listOf(
-                Objective.BrakeTapsAtMost(2),
-                Objective.PassVehicles(20),
-                Objective.ScoreAtLeast(3000)
+                Objective.CompleteRun,
+                Objective.PassVehicles(30),
+                Objective.ScoreAtLeast(2500)
             )
         ),
+        // 6 — NEFES BOLUMU + COMBO. Bilerek 5'ten KOLAY (75 km/h, yogunluk
+        // 0.85): yeni mekanik once guvenli ortamda ogrenilir. Testere disi
+        // egri — bkz. `game-scenario` skill'i.
         LevelDef(
             id = 6,
-            goal = LevelGoal.SurviveTime(60),
+            goal = LevelGoal.SurviveTime(45),
+            startSpeedKmh = 75,
+            trafficDensity = 0.85f,
             stars = listOf(
-                Objective.ScoreAtLeast(3200),
+                Objective.CoinsAtLeast(10),
                 Objective.PerfectDodges(4),
-                Objective.CoinsAtLeast(14)
+                Objective.ComboAtLeast(3)
             )
         ),
+        // 7 — Ayni combo, bu kez tam trafikte ve daha uzun kosuda.
         LevelDef(
             id = 7,
-            goal = LevelGoal.SurviveTime(60),
+            goal = LevelGoal.SurviveTime(50),
             stars = listOf(
-                Objective.ComboAtLeast(5),
-                Objective.PerfectDodges(8),
-                Objective.ScoreAtLeast(3200)
+                Objective.ScoreAtLeast(2900),
+                Objective.PerfectDodges(6),
+                Objective.ComboAtLeast(4)
             )
         ),
         // --- Mesafe bolumleri: "carpmadan git" baskisi ---
+        // 8 — MESAFE. Boost'suz temiz bir kosu 1200 m'yi ~37.5 s'de bitirir
+        // (skor egrisinden: 1212 * (e^(t/54.5) - 1) metre). FinishUnder(36)
+        // bu yuzden "boost'u kullanmayi ogren" hedefi; 60 s limit ise ilk
+        // mesafe bolumunde panik yaratmayacak kadar genis.
         LevelDef(
             id = 8,
-            goal = LevelGoal.ReachDistance(meters = 1500, timeLimitSec = 75),
+            goal = LevelGoal.ReachDistance(meters = 1200, timeLimitSec = 60),
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.FinishUnderSeconds(50),
-                Objective.PerfectDodges(5)
+                Objective.FinishUnderSeconds(36),
+                Objective.PerfectDodges(4)
             )
         ),
         LevelDef(

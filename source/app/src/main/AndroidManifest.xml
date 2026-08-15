@@ -7,6 +7,7 @@
 
     <application
         android:allowBackup="true"
+        android:appCategory="game"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -15,12 +16,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.KronDrive">
 
-        <!-- PLACEHOLDER: Google'in herkese acik TEST App ID'si.
-             Yayin oncesi AdMob konsolunda olusturulan GERCEK App ID ile
-             degistirilmeli (bkz. docs/ADMOB_SETUP.md). -->
+        <!-- GERCEK AdMob App ID (2026-08-15, sahibinin AdMob konsolundan).
+             App ID sirdir DEGIL — APK'nin icinde zaten okunabilir olmak
+             zorunda. Reklam BIRIMI id'leri ads/AdIds.kt icinde; debug build
+             yine test reklami gosterir. Bkz. docs/ADMOB_SETUP.md. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-8582550349019790~2279115293" />
 
         <!-- Oyun dikey (portrait) tasarlandi: HTML prototipteki yol/serit
              duzeni, HUD ve kontrol yerlesimi dikey ekrana gore olculuyor.

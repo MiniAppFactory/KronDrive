@@ -21,6 +21,7 @@ import com.miniappfactory.krondrive.ui.garage.GarageScreen
 import com.miniappfactory.krondrive.ui.levels.LevelMapScreen
 import com.miniappfactory.krondrive.ui.menu.MainMenuScreen
 import com.miniappfactory.krondrive.ui.missions.MissionsScreen
+import com.miniappfactory.krondrive.ui.onboarding.LanguageGateScreen
 import com.miniappfactory.krondrive.ui.settings.SettingsScreen
 
 private object Routes {
@@ -46,6 +47,18 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
     val navController = rememberNavController()
     val activity = LocalContext.current as? Activity
     val progress by viewModel.playerProgress.collectAsStateWithLifecycle()
+    val progressLoaded by viewModel.progressLoaded.collectAsStateWithLifecycle()
+
+    // Kayit okunana kadar hicbir sey cizilmez: aksi halde mevcut oyuncuya da
+    // bir an dil ekrani gorunurdu (varsayilan languageChosen = false).
+    if (!progressLoaded) return
+
+    // Ilk acilis: dil secilmeden menuye girilmez. NavHost'un DISINDA duruyor —
+    // geri tusuyla donulebilen bir ekran degil, bir kapi.
+    if (!progress.languageChosen) {
+        LanguageGateScreen(onChoose = viewModel::chooseLanguage)
+        return
+    }
     val missions by viewModel.weeklyMissions.collectAsStateWithLifecycle()
     val daily by viewModel.dailyChallenge.collectAsStateWithLifecycle()
     val selectedBoosters by viewModel.selectedBoosters.collectAsStateWithLifecycle()

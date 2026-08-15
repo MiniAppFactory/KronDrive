@@ -1,5 +1,6 @@
 package com.miniappfactory.krondrive.game
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -27,6 +28,59 @@ class UpgradeCatalogTest {
             assertTrue(UpgradeCatalog.cost(type, levels) == UpgradeCatalog.cost(levels.levelOf(type)))
         }
         assertNull(UpgradeCatalog.cost(UpgradeType.BOOST, levels))
+    }
+
+    // -----------------------------------------------------------------
+    // Arac carpanlariyla birlesim (2026-08-15)
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `varsayilan arac eski degerleri BIT BIT ayni birakir`() {
+        val city = CarCatalog.defaultShape
+        for (level in 1..UpgradeCatalog.MAX_LEVEL) {
+            assertEquals(
+                UpgradeCatalog.scoreSpeedCap(level), UpgradeCatalog.scoreSpeedCap(level, city), 0f
+            )
+            assertEquals(UpgradeCatalog.accelRate(level), UpgradeCatalog.accelRate(level, city), 0f)
+            assertEquals(
+                UpgradeCatalog.brakePenalty(level), UpgradeCatalog.brakePenalty(level, city), 0f
+            )
+            assertEquals(UpgradeCatalog.boostDrain(level), UpgradeCatalog.boostDrain(level, city), 0f)
+        }
+    }
+
+    @Test
+    fun `carpan yukseltmenin USTUNE uygulanir yerine gecmez`() {
+        val city = CarCatalog.defaultShape
+        val supercar = CarCatalog.shape(CarCatalog.SHAPE_SUPERCAR)
+        // Yukseltme her zaman aracin onunde olmali: tam yukseltilmis referans
+        // arac, yukseltmesiz en iyi aractan acik ara hizli kalmali. Aksi halde
+        // dort dalin 7.000 coinlik yolu anlamsizlasir.
+        assertTrue(
+            UpgradeCatalog.scoreSpeedCap(UpgradeCatalog.MAX_LEVEL, city) >
+                UpgradeCatalog.scoreSpeedCap(1, supercar)
+        )
+        // Ayni seviyede ise arac farki gercekten hissedilir.
+        assertTrue(
+            UpgradeCatalog.scoreSpeedCap(4, supercar) > UpgradeCatalog.scoreSpeedCap(4, city)
+        )
+    }
+
+    @Test
+    fun `boost carpani SUREYI uzatir yani tuketimi dusurur`() {
+        val city = CarCatalog.defaultShape
+        val slx = CarCatalog.shapes.maxByOrNull { it.boostMul }!!
+        assertTrue("uzun boostlu arac daha AZ tuketmeli",
+            UpgradeCatalog.boostDrain(1, slx) < UpgradeCatalog.boostDrain(1, city))
+        // Tuketim hicbir arac/seviye bilesiminde sifira ya da negatife inemez.
+        CarCatalog.shapes.forEach { shape ->
+            for (level in 1..UpgradeCatalog.MAX_LEVEL) {
+                assertTrue(
+                    "${shape.id} sv$level: boost tuketimi pozitif kalmali",
+                    UpgradeCatalog.boostDrain(level, shape) > 0f
+                )
+            }
+        }
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.miniappfactory.krondrive.ui.settings
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miniappfactory.krondrive.data.AppLanguage
 import com.miniappfactory.krondrive.data.PlayerProgress
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.miniappfactory.krondrive.ads.ConsentManager
 import com.miniappfactory.krondrive.ui.common.KronCard
 import com.miniappfactory.krondrive.ui.common.KronScreen
 import com.miniappfactory.krondrive.ui.common.PrimaryButton
@@ -66,7 +73,57 @@ fun SettingsScreen(
 
             LanguageCard(current = language, onLanguage = onLanguage)
 
+            PrivacyCard(language = language)
+
             AboutCard(language = language)
+        }
+    }
+}
+
+/**
+ * Reklam gizliligi. Buton YALNIZCA UMP "gerekli" dediginde (AEA/Birlesik
+ * Krallik gibi bolgelerde) gorunur; baska yerde onay formu zaten hic
+ * gosterilmedigi icin bos bir dugme koymanin anlami yok.
+ *
+ * Google'in EU User Consent Policy'si onayi degistirmek icin "gorunur ve
+ * tiklanabilir" bir giris noktasi sart kosuyor; bu giris noktasi hic yoktu
+ * (uyum denetimi, 2026-08-14).
+ */
+@Composable
+private fun PrivacyCard(language: AppLanguage) {
+    val context = LocalContext.current
+    val activity = context as? Activity ?: return
+    // Form durumu Activity yeniden olusunca degisebilir; her bestede sorulur.
+    var required by remember { mutableStateOf(ConsentManager.isPrivacyOptionsRequired(context)) }
+    if (!required) return
+
+    KronCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = language.pick(tr = "REKLAM GİZLİLİĞİ", en = "AD PRIVACY"),
+                color = KronColors.TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Black
+            )
+            Text(
+                text = language.pick(
+                    tr = "Kişiselleştirilmiş reklam tercihini buradan değiştirebilirsin.",
+                    en = "You can change your personalised ads choice here."
+                ),
+                color = KronColors.TextSecondary,
+                fontSize = 12.sp
+            )
+            SecondaryButton(
+                text = language.pick(tr = "GİZLİLİK SEÇENEKLERİ", en = "PRIVACY OPTIONS"),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = ROW_MIN_HEIGHT),
+                onClick = {
+                    ConsentManager.showPrivacyOptions(activity) {
+                        required = ConsentManager.isPrivacyOptionsRequired(context)
+                    }
+                }
+            )
         }
     }
 }

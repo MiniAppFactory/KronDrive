@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -38,6 +39,16 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
 
     val playerProgress: StateFlow<PlayerProgress> = repository.playerProgress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlayerProgress())
+
+    /**
+     * DataStore'dan ILK deger geldi mi. Baslangic degeri bos bir
+     * [PlayerProgress] oldugu icin, bu bayrak olmadan mevcut oyuncuya da
+     * bir kare boyunca dil ekrani gosterilirdi (`languageChosen` varsayilani
+     * false). Yuklenene kadar ekran cizilmez.
+     */
+    val progressLoaded: StateFlow<Boolean> = repository.playerProgress
+        .map { true }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val weeklyMissions: StateFlow<WeeklyMissionProgress> = repository.weeklyMissionProgress
         .stateIn(
@@ -155,7 +166,10 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
                 RunMode.CAREER -> {
                     val levelId = result.levelId
                     if (levelId != null && stats.completed) {
-                        repository.recordLevelResult(levelId, result.stars)
+                        // Tamamlanan gorev sayisi her zaman kaydedilir (harita
+                        // isaretleri), ama bir sonraki bolumun kilidi ancak
+                        // TUM gorevler tamamlandiysa acilir (result.passed).
+                        repository.recordLevelResult(levelId, result.stars, result.passed)
                         repository.incrementMissionProgress(MissionType.COMPLETE_LEVELS, 1)
                         repository.incrementLevelsSinceInterstitial()
                     }
@@ -325,6 +339,11 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setLanguage(language: AppLanguage) {
         viewModelScope.launch { repository.setLanguage(language) }
+    }
+
+    /** Ilk acilistaki dil ekranindan secim (dil + "secildi" bayragi birlikte). */
+    fun chooseLanguage(language: AppLanguage) {
+        viewModelScope.launch { repository.chooseLanguage(language) }
     }
 
     fun markOnboardingSeen() {

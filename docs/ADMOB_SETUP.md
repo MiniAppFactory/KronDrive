@@ -1,8 +1,36 @@
-# AdMob kurulumu — yayın öncesi yapılacaklar
+# AdMob kurulumu
 
-Şu an projede **yalnızca Google'ın herkese açık test reklam kimlikleri** var.
-Uygulama bu haliyle çalışır ve test reklamları gösterir; gerçek gelir için
-aşağıdaki adımlar gerekir.
+## Durum: TAMAMLANDI (2026-08-15)
+
+Gerçek kimlikler girildi ve `USE_TEST_IDS_IN_RELEASE = false` yapıldı.
+**Release build artık gerçek reklam gösterir; debug build hâlâ test reklamı
+gösterir** (kendi reklamına tıklayıp "invalid traffic" ihlali oluşturmamak
+için `AdIds.useTestIds` içinde `BuildConfig.DEBUG` kontrolü var).
+
+| Ne | Değer | Nerede |
+|---|---|---|
+| App ID | `ca-app-pub-8582550349019790~2279115293` | `AndroidManifest.xml` |
+| Banner | `ca-app-pub-8582550349019790/6482084182` | `ads/AdIds.kt` |
+| Interstitial | `ca-app-pub-8582550349019790/2236501231` | `ads/AdIds.kt` |
+| Rewarded | `ca-app-pub-8582550349019790/5169002519` | `ads/AdIds.kt` |
+
+`app-ads.txt` (`docs/app-ads.txt`) aynı yayıncı kimliğini taşıyor ve
+gizlilik politikasıyla birlikte GitHub Pages'ten yayınlanacak — AdMob'un
+doğrulaması için gereklidir.
+
+Yeni reklam birimleri saatler içinde dolmaya başlar; ilk saatlerde "no fill"
+görmek normaldir, ID'ler yanlış demek değildir.
+
+## Geriye kalan tek kontrol
+
+Release APK'yı kendi telefonuna kurup reklamların gerçekten geldiğini
+doğrula. Kendi reklamlarına **tıklama** — AdMob hesabı askıya alınabilir.
+Test cihazı tanımlamak istersen `AdIds.developerTestDeviceIds` listesine
+logcat'te "Ads" etiketiyle yazılan cihaz kimliğini ekle.
+
+---
+
+# Aşağısı: kurulum sırasında izlenen adımlar (tarihçe)
 
 ## 1. AdMob konsolunda oluşturulacaklar
 

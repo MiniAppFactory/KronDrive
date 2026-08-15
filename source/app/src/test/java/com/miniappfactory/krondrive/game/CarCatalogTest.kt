@@ -40,9 +40,12 @@ class CarCatalogTest {
         var previousShape = -1
         CarCatalog.shapes.forEach { shape ->
             assertTrue("${shape.id} fiyati negatif olamaz", shape.priceCoins >= 0)
+            // AYNI fiyat serbest: iki nostalji aracı (Kus SLX / Dag Kecisi)
+            // bilerek ayni basamakta (1500) — biri otekinin ucuz alternatifi
+            // olmasin diye (sahibi karari, 2026-08-15). Geriye gitmek yine yasak.
             assertTrue(
                 "sekiller artan fiyatla siralanmali: $previousShape -> ${shape.priceCoins}",
-                shape.priceCoins > previousShape
+                shape.priceCoins >= previousShape
             )
             previousShape = shape.priceCoins
         }
@@ -130,6 +133,143 @@ class CarCatalogTest {
     }
 
     // -----------------------------------------------------------------
+    // Surus ozellikleri (2026-08-15) — katalog akli
+    // -----------------------------------------------------------------
+
+    /** Fiyati olan araclar; Sehir referans oldugu icin ayri degerlendirilir. */
+    private val paidShapes get() = CarCatalog.shapes.filter { it.priceCoins > 0 }
+
+    @Test
+    fun `varsayilan arac dort eksende de tam referans`() {
+        // Bu test kirilirsa TUM denge kayar: yukseltme egrileri, bolum
+        // hedefleri ve skor egrisi bu aracin davranisina gore hesaplandi.
+        UpgradeType.entries.forEach { type ->
+            assertEquals(
+                "varsayilan govde ${type.name} ekseninde 1.0 olmali",
+                1f,
+                CarCatalog.defaultShape.multiplier(type),
+                0f
+            )
+        }
+    }
+
+    @Test
+    fun `hicbir carpan asiri degil`() {
+        // Band sahibinin karari (docs/BALANCE.md): fark ~%10 civarinda kalmali,
+        // yoksa 8 seviyelik dort yukseltme dali anlamsizlasir.
+        CarCatalog.shapes.forEach { shape ->
+            UpgradeType.entries.forEach { type ->
+                val mul = shape.multiplier(type)
+                assertTrue(
+                    "${shape.id}.${type.name} = $mul, 0.80–1.25 bandi disinda",
+                    mul in 0.80f..1.25f
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `her ucretli aracin en az bir gucu var`() {
+        paidShapes.forEach { shape ->
+            assertTrue(
+                "${shape.id}: hicbir eksende referansi gecmiyor, alma sebebi yok",
+                UpgradeType.entries.any { shape.multiplier(it) > 1f }
+            )
+        }
+    }
+
+    @Test
+    fun `zayif yonu olmayan tek arac giris seviyesi aracidir`() {
+        // Tasarim kurali: pahali arac ucuz araci COPE CEVIRMEZ, her aracin bir
+        // bedeli olur. Tek istisna bilerek birakildi — 900 coinlik ilk satin
+        // alma tereddutsuz "iyi" hissettirmeli (docs/BALANCE.md tablosu bu
+        // arac icin fren ve boost sutununu bos birakiyor).
+        val flawless = paidShapes.filter { shape ->
+            UpgradeType.entries.none { shape.multiplier(it) < 1f }
+        }
+        assertEquals(
+            "zayifsiz arac sayisi 1 olmali, bulunan: ${flawless.map { it.id }}",
+            1,
+            flawless.size
+        )
+        assertEquals(
+            "zayifsiz olabilecek tek arac en ucuz ucretli aractir",
+            paidShapes.minByOrNull { it.priceCoins }?.id,
+            flawless.single().id
+        )
+    }
+
+    @Test
+    fun `hicbir ucretli arac digerini dort eksende birden gecmiyor`() {
+        paidShapes.forEach { a ->
+            paidShapes.filter { it.id != a.id }.forEach { b ->
+                val dominates = UpgradeType.entries.all { a.multiplier(it) >= b.multiplier(it) } &&
+                    UpgradeType.entries.any { a.multiplier(it) > b.multiplier(it) }
+                assertFalse(
+                    "${a.id}, ${b.id} aracini her eksende geciyor — ${b.id} copa dondu",
+                    dominates
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `her sekilde tek satirlik karakter cumlesi var`() {
+        AppLanguage.entries.forEach { language ->
+            val traits = CarCatalog.shapes.map { it.trait(language) }
+            CarCatalog.shapes.forEach { shape ->
+                val trait = shape.trait(language)
+                assertTrue("${shape.id}: karakter cumlesi bos", trait.isNotBlank())
+                assertFalse("${shape.id}: karakter cumlesi tek satir olmali", trait.contains('\n'))
+            }
+            assertEquals("karakter cumleleri ayni olamaz", traits.size, traits.toSet().size)
+        }
+    }
+
+    @Test
+    fun `garaj cubuklari karsilastirmali - en iyi dolu en kotu kisa`() {
+        UpgradeType.entries.forEach { type ->
+            val best = CarCatalog.shapes.maxByOrNull { it.multiplier(type) }!!
+            val worst = CarCatalog.shapes.minByOrNull { it.multiplier(type) }!!
+            assertEquals(
+                "${type.name}: en iyi arac (${best.id}) cubugu dolu olmali",
+                1f,
+                CarCatalog.statFraction(best, type),
+                1e-4f
+            )
+            assertTrue(
+                "${type.name}: en kotu arac (${worst.id}) cubugu belirgin kisa olmali",
+                CarCatalog.statFraction(worst, type) < 0.5f
+            )
+            assertTrue(
+                "${type.name}: en kotu cubuk bile gorunur kalmali",
+                CarCatalog.statFraction(worst, type) > 0f
+            )
+        }
+    }
+
+    @Test
+    fun `cubuk uzunlugu carpanla ayni siradadir`() {
+        UpgradeType.entries.forEach { type ->
+            val sortedByMul = CarCatalog.shapes.sortedBy { it.multiplier(type) }
+            sortedByMul.zipWithNext { low, high ->
+                assertTrue(
+                    "${type.name}: ${low.id} cubugu ${high.id} aracindan uzun olmamali",
+                    CarCatalog.statFraction(low, type) <= CarCatalog.statFraction(high, type) + 1e-5f
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `yuzde gosterimi carpanla tutarli`() {
+        assertEquals(0, CarCatalog.statDeltaPercent(CarCatalog.defaultShape, UpgradeType.SPEED))
+        val supercar = CarCatalog.shapes.maxByOrNull { it.priceCoins }!!
+        assertEquals(12, CarCatalog.statDeltaPercent(supercar, UpgradeType.SPEED))
+        assertEquals(-6, CarCatalog.statDeltaPercent(supercar, UpgradeType.BRAKE))
+    }
+
+    // -----------------------------------------------------------------
     // Cizim kutusu (carpisma adaleti)
     // -----------------------------------------------------------------
 
@@ -208,14 +348,192 @@ class CarCatalogTest {
     }
 
     @Test
-    fun `ilk sekil prototipin orijinal cizimidir`() {
-        // Guncelleme sonrasi mevcut oyuncular araclarini AYNI gormeli.
+    fun `ilk sekil cizim kutusunu tam olarak doldurur`() {
+        // Varsayilan gövde 2026-08-15'te yeniden cizildi (PROVENANCE #11), ama
+        // kutuyu TAM doldurmasi degismez bir sart: hem sanat olcegi hem de
+        // carpisma kutusu bu dort sayidan turetiliyor.
         val classic = CarCatalog.defaultShape
         assertEquals(CarCatalog.SHAPE_HATCHBACK, classic.id)
         assertEquals(-2f, classic.artTop, 0.001f)
         assertEquals(74f, classic.artBottom, 0.001f)
         assertEquals(-20f, classic.artLeft, 0.001f)
         assertEquals(20f, classic.artRight, 0.001f)
+    }
+
+    // -----------------------------------------------------------------
+    // 2026-08-15'te eklenen iki govde (Kus SLX + Dag Kecisi)
+    //
+    // Ikisi de SAF KOZMETIK. Asagidaki testler bunu veriden dogruluyor:
+    // ayni kutu, ayni siniflar, oyuna hicbir avantaj/dezavantaj tasimiyor.
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `yeni govdeler kutuyu birebir doldurur`() {
+        listOf(
+            CarCatalog.SHAPE_KUS_SLX,
+            CarCatalog.SHAPE_MOUNTAIN_GOAT,
+            CarCatalog.SHAPE_MUSCLE_67
+        ).forEach { id ->
+            val shape = CarCatalog.shapes.first { it.id == id }
+            assertEquals("$id sol kenar", CarCatalog.ART_LEFT, shape.artLeft, 0.001f)
+            assertEquals("$id sag kenar", CarCatalog.ART_RIGHT, shape.artRight, 0.001f)
+            assertEquals("$id ust kenar", CarCatalog.ART_TOP, shape.artTop, 0.001f)
+            assertEquals("$id alt kenar", CarCatalog.ART_BOTTOM, shape.artBottom, 0.001f)
+        }
+    }
+
+    @Test
+    fun `govde fiyat merdiveni beklenen sirada`() {
+        // Iki nostalji araci AYNI basamakta (1500, sahibi karari 2026-08-15):
+        // biri otekinin ucuz alternatifi olmamali, secim zevke kalmali.
+        // Boga 67 (2400) 1800 ile 3200 arasindaki EN GENIS bosluga girdi.
+        assertEquals(
+            listOf(
+                CarCatalog.SHAPE_HATCHBACK to 0,
+                CarCatalog.SHAPE_RACE_SEDAN to 900,
+                CarCatalog.SHAPE_KUS_SLX to 1500,
+                CarCatalog.SHAPE_MOUNTAIN_GOAT to 1500,
+                CarCatalog.SHAPE_MUSCLE to 1800,
+                CarCatalog.SHAPE_MUSCLE_67 to 2400,
+                CarCatalog.SHAPE_SUPERCAR to 3200
+            ),
+            CarCatalog.shapes.map { it.id to it.priceCoins }
+        )
+    }
+
+    @Test
+    fun `Kus SLX kimligi kare hat ve krom uzerine kurulu`() {
+        val kus = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_KUS_SLX }
+        // Kimligin tasiyicisi kose yaricapi: garajin EN kare govdesi olmali.
+        val corner = kus.parts.filterIsInstance<CarPart.Box>()
+            .first { it.paint == CarPaint.BODY && it.height > 40f }.corner
+        CarCatalog.shapes.filter { it.id != CarCatalog.SHAPE_KUS_SLX }.forEach { other ->
+            val otherCorner = other.parts.filterIsInstance<CarPart.Box>()
+                .filter { it.paint == CarPaint.BODY && it.height > 40f }
+                .minOfOrNull { it.corner } ?: Float.MAX_VALUE
+            assertTrue(
+                "${other.id} Kus SLX'ten daha kare (${otherCorner} <= $corner)",
+                otherCorner > corner
+            )
+        }
+        // Krom: farlar + izgara cubugu + iki yan serit. Baska govdede yan
+        // serit yok, 60 Hz'de ayirt edici tek isaret bu.
+        assertTrue(
+            "Kus SLX'te krom parca yok",
+            kus.parts.count { it.paint == CarPaint.TRIM } >= 4
+        )
+    }
+
+    @Test
+    fun `Dag Kecisi tavani digerlerinden belirgin uzun`() {
+        val goat = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_MOUNTAIN_GOAT }
+        // SW kimligi tavan uzunlugundan okunuyor: kokpit camindan SONRA gelen
+        // en uzun BODY paneli tavandir.
+        // Pencere 25..40: alt sinir SUPERCAR'in 24'ten baslayan 22 birimlik
+        // GÖVDE panelini disarida tutuyor (o tavan degil), ust sinir ise
+        // kokpiti geriye alan govdelere (Boga 67, tavan tepesi 34.6) yer
+        // birakiyor. Daraltirsan bir govdenin tavani hic eslesmez ve
+        // maxOf bos listede PATLAR — bilerek boyle genis.
+        fun roofHeight(shape: CarShapeDef): Float = shape.parts
+            .filterIsInstance<CarPart.Box>()
+            .filter { it.paint == CarPaint.BODY && it.top > 25f && it.top < 40f }
+            .maxOf { it.height }
+
+        val goatRoof = roofHeight(goat)
+        assertTrue("Dag Kecisi tavani cok kisa ($goatRoof)", goatRoof >= 20f)
+        CarCatalog.shapes.filter { it.id != CarCatalog.SHAPE_MOUNTAIN_GOAT }.forEach {
+            assertTrue(
+                "${it.id} tavani Dag Kecisi kadar uzun",
+                roofHeight(it) < goatRoof * 0.75f
+            )
+        }
+    }
+
+    /**
+     * Iki kas arabasi ayni garajda: [CarCatalog.SHAPE_MUSCLE] ve
+     * [CarCatalog.SHAPE_MUSCLE_67]. Ikisini almanin anlami olmasi icin 32
+     * px'te AYRILMALARI gerekiyor; asagidaki uc olcut o ayrimin VERIDEKI
+     * karsiligi. Biri bozulursa iki arac tek arac gibi gorunmeye baslar.
+     */
+    @Test
+    fun `iki kas arabasi siluetle ayrisir`() {
+        val old = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_MUSCLE }
+        val new = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_MUSCLE_67 }
+
+        fun widestStripe(shape: CarShapeDef): Float = shape.parts
+            .filterIsInstance<CarPart.Box>()
+            .filter { it.paint == CarPaint.ACCENT }
+            .maxOf { it.width }
+
+        // 1) Serit deseni: Boga 67'de TEK kalin bar, Kas Arabasi'nda iki ince.
+        assertTrue(
+            "Boga 67'nin orta seridi kalin degil (${widestStripe(new)})",
+            widestStripe(new) >= widestStripe(old) * 2f
+        )
+
+        // 2) Kola-sisesi bel: gövde konturu ortada DARALIP arkada tekrar
+        //    genisliyor. Kas Arabasi'nin yanlari bastan sona duz.
+        val outline = new.parts.filterIsInstance<CarPart.Wedge>()
+            .first { it.paint == CarPaint.BODY }
+        val shoulder = outline.points.filter { it.y in 12f..16f }.maxOf { it.x }
+        val waist = outline.points.filter { it.y in 28f..42f }.maxOf { it.x }
+        val hip = outline.points.filter { it.y in 54f..72f }.maxOf { it.x }
+        assertTrue("bel omuzdan dar degil ($waist >= $shoulder)", waist < shoulder - 1f)
+        assertTrue("kalca belden genis degil ($hip <= $waist)", hip > waist + 1f)
+
+        // 3) Kokpit ARKADA: uzun kaput / kisa bagaj. On camin basladigi y,
+        //    Kas Arabasi'ndan belirgin buyuk olmali.
+        fun windshieldTop(shape: CarShapeDef): Float = shape.parts
+            .filterIsInstance<CarPart.Box>()
+            .filter { it.paint == CarPaint.GLASS }
+            .minOf { it.top }
+        assertTrue(
+            "Boga 67'nin kokpiti yeterince arkada degil",
+            windshieldTop(new) >= windshieldTop(old) + 3f
+        )
+    }
+
+    @Test
+    fun `her govde her boyayla kullanilabilir`() {
+        // Sahibin sorusu (2026-08-15): "hepsinin renkleri degistirilebilir
+        // olsun". Sekil ve boya BAGIMSIZ secilir; katalogda gövdeye ozel renk
+        // kisiti YOKTUR. Test bunu carpim kumesi uzerinde dogruluyor: her
+        // (sekil, boya) ciftinde her parca turu icin opak bir renk cikiyor.
+        CarCatalog.shapes.forEach { shape ->
+            CarCatalog.colors.forEach { color ->
+                val style = CarStyle(shape, color)
+                assertEquals(color.bodyArgb, style.argbOf(CarPaint.BODY))
+                shape.parts.map { it.paint }.toSet().forEach { paint ->
+                    assertEquals(
+                        "${shape.id} + ${color.id}: $paint saydam cikti",
+                        0xFFL,
+                        (style.argbOf(paint) ushr 24) and 0xFFL
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `beyaz boya var ve trafik beyaziyla karismiyor`() {
+        val white = CarCatalog.colors.first { it.id == CarCatalog.COLOR_GLACIER }
+        // Gercekten beyaz okunmali: her kanal en az 0xE0.
+        listOf(16, 8, 0).forEach { shiftBits ->
+            val channel = (white.bodyArgb ushr shiftBits) and 0xFFL
+            assertTrue("Buzul Beyazi yeterince acik degil ($channel)", channel >= 0xE0L)
+        }
+        // ...ama trafikteki BEYAZ engelle (FFFFFF) ayni olmamali.
+        assertNotEquals(0xFFFFFFFFL, white.bodyArgb)
+        val trafficArgb = GameEngine.OBSTACLE_COLORS.map { it.toLong() and 0xFFFFFFFFL }
+        assertFalse(
+            "oyuncu beyazi bir engel rengiyle ayni",
+            (white.bodyArgb and 0xFFFFFFFFL) in trafficArgb
+        )
+        // Serit koyu olmali: beyaz uzerine beyaz tavan rayi gorunmez olurdu.
+        assertTrue(
+            "Buzul Beyazi'nin serit rengi acik kalmis",
+            ((white.accentArgb ushr 16) and 0xFFL) < 0x80L
+        )
     }
 
     @Test
