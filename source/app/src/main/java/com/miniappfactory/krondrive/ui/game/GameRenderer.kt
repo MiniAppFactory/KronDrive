@@ -22,7 +22,8 @@ import com.miniappfactory.krondrive.game.CarCatalog
 import com.miniappfactory.krondrive.game.GameConfig
 import com.miniappfactory.krondrive.game.GameEngine
 import com.miniappfactory.krondrive.game.RoadTheme
-import com.miniappfactory.krondrive.ui.common.drawCarParts
+import com.miniappfactory.krondrive.ui.common.CarSpriteSet
+import com.miniappfactory.krondrive.ui.common.drawCarBody
 import com.miniappfactory.krondrive.ui.common.drawCarShadow
 import com.miniappfactory.krondrive.ui.common.drawStyledCar
 import kotlin.math.max
@@ -46,7 +47,10 @@ fun DrawScope.drawGameScene(
     textMeasurer: TextMeasurer,
     gaugeValueSize: TextUnit,
     gaugeLabelSize: TextUnit,
-    gaugeSmallSize: TextUnit
+    gaugeSmallSize: TextUnit,
+    // Sprite kumesi disaridan gelir: yukleme Composable bir istir, cizim ise
+    // her karede yurur. null verilirse cizim vektor yoluna duser.
+    sprites: CarSpriteSet? = null
 ) {
     scale(density, density, pivot = Offset.Zero) {
         drawSideBackgrounds(engine)
@@ -59,7 +63,8 @@ fun DrawScope.drawGameScene(
             drawObstacleCar(
                 it.x,
                 it.y,
-                GameEngine.OBSTACLE_COLORS[it.colorIndex].toLong() and 0xFFFFFFFFL
+                GameEngine.OBSTACLE_COLORS[it.colorIndex].toLong() and 0xFFFFFFFFL,
+                sprites
             )
         }
         drawNightHeadlights(engine)
@@ -76,7 +81,8 @@ fun DrawScope.drawGameScene(
                 boosting = engine.boosting,
                 // Alevin titremesi kosunun zamanindan beslenir; ayri bir
                 // animasyon durumu tutmuyoruz (motor zaten her kare adiyor).
-                flamePhase = engine.timeElapsed
+                flamePhase = engine.timeElapsed,
+                sprites = sprites
             )
         }
         drawParticles(engine)
@@ -372,7 +378,7 @@ private fun DrawScope.drawSpeedometer(
  * Trafikteki engel araci.
  *
  * 2026-08-15'te oyuncu araciyla AYNI cizim boru hattina bagladi
- * ([CarCatalog.trafficShape] + [drawCarParts]); onceden burada elle yazilmis
+ * ([CarCatalog.trafficShape] + [drawCarBody]); onceden burada elle yazilmis
  * bir kopya vardi ve oyuncu araci yenilenince trafik geride kalirdi.
  *
  * Tehdit yine ayirt edilebilir kalir, iki ayri kanaldan:
@@ -383,14 +389,19 @@ private fun DrawScope.drawSpeedometer(
  *
  * Govde boyutu ve carpisma kutusu DEGISMEDI.
  */
-private fun DrawScope.drawObstacleCar(x: Float, y: Float, bodyArgb: Long) {
+private fun DrawScope.drawObstacleCar(
+    x: Float,
+    y: Float,
+    bodyArgb: Long,
+    sprites: CarSpriteSet?
+) {
     translate(x, y) {
         // Cizim koordinatlari prototipin ham arac uzayina ait; tek bir olcek
         // carpaniyla kucultuluyor ki carpisma kutusu (GameConfig'te ayni
         // carpandan turetiliyor) gorselle birebir ortussun.
         scale(GameConfig.CAR_ART_SCALE, GameConfig.CAR_ART_SCALE, pivot = Offset.Zero) {
             drawCarShadow()
-            drawCarParts(CarCatalog.trafficStyle(bodyArgb))
+            drawCarBody(CarCatalog.trafficStyle(bodyArgb), sprites)
         }
     }
 }

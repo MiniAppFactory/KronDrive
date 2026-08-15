@@ -206,6 +206,22 @@ data class CarShapeDef(
     val brakeMul: Float = 1f,
     /** Boost SURESINI olcekler — tuketimi boler ([UpgradeCatalog.boostDrain]). */
     val boostMul: Float = 1f,
+    /**
+     * FABRIKA BOYASI: bu gövde satin alindiginda otomatik acilan ve secilen
+     * boya (proje sahibi karari, 2026-08-15).
+     *
+     * Neden var: gövde cizimleri artik referans sprite'lardan geliyor ve her
+     * aracin bir "kendi rengi" var — Kuş SLX petrol, Dağ Keçisi beyaz. Bu
+     * renkler katalogda pahali ([CarCatalog.COLOR_TEAL] 1400 coin); araci
+     * alan oyuncu onu tasarlandigi renkte GORMEDEN once bir 1400 daha
+     * odemek zorunda kalmamali.
+     *
+     * Sonuc: gövdeye sahip olmak fabrika boyasini da acar
+     * ([CarCatalog.effectiveOwnedColors]). Oyuncu boyayi degistirebilir ve
+     * secimi O GOVDE ICIN hatirlanir — baska bir gövdeye gecince onun kendi
+     * boyasi gelir.
+     */
+    val defaultColorId: String = CarCatalog.DEFAULT_COLOR_ID,
     /** Garajda gosterilen tek satirlik karakter cumlesi. */
     val traitTr: String = "",
     val traitEn: String = ""
@@ -575,6 +591,8 @@ object CarCatalog {
         boostMul = 1.12f,
         traitTr = "Acelesi yok ama nitrosu bir türlü bitmez",
         traitEn = "In no hurry, but the nitro never runs dry",
+        // Referans cizim petrol yesili; arac bu renkte tasarlandi.
+        defaultColorId = COLOR_TEAL,
         parts = listOf(
             // Donem lastigi: dar ve kare (yaricap 1.4, en kucugu).
             CarPart.Box(CarPaint.TIRE, -20f, 12f, 7f, 19f, 1.4f, WHEEL_ROLL),
@@ -763,6 +781,9 @@ object CarCatalog {
         boostMul = 1.06f,
         traitTr = "Ağır kalkar, ama frende kimse onu geçemez",
         traitEn = "Slow off the line, unbeatable under braking",
+        // Beyaz tasarlandi (bkz. yukaridaki not: tavan raylari beyaz gövdede
+        // okunsun diye koyu birakildi).
+        defaultColorId = COLOR_GLACIER,
         parts = listOf(
             // Kalin lastik: yaricap 2.0, arka aks one gore genis.
             CarPart.Box(CarPaint.TIRE, -20f, 11f, 7f, 21f, 2f, WHEEL_ROLL),
@@ -1038,8 +1059,15 @@ object CarCatalog {
     private const val TRAFFIC_SHADE_ARGB: Long = 0xFF0A0D11
     private const val TRAFFIC_DRIVER_ARGB: Long = 0xFF8ECAE6
 
+    /**
+     * Trafik govdesinin kimligi. Sabit, cunku cizici sprite'i bu adla ariyor
+     * ([com.miniappfactory.krondrive.ui.common.CarSpriteSet]); elle yazilmis
+     * bir dize iki yerde birden degistirilmeyi bekliyordu.
+     */
+    const val TRAFFIC_SHAPE_ID = "traffic"
+
     val trafficShape = CarShapeDef(
-        id = "traffic",
+        id = TRAFFIC_SHAPE_ID,
         nameTr = "Trafik",
         nameEn = "Traffic",
         descriptionTr = "Yoldaki engel aracı",
@@ -1268,6 +1296,18 @@ object CarCatalog {
     /** Bedava olanlar satin alinmadan da sahiplenilmis sayilir. */
     fun isOwned(item: CarItem, owned: Set<String>): Boolean =
         item.priceCoins == 0 || item.id in owned
+
+    /**
+     * Gercekten satin alinan boyalar + sahip olunan gövdelerin FABRIKA
+     * BOYALARI (bkz. [CarShapeDef.defaultColorId]).
+     *
+     * Garaj, secim dogrulamasi ve satin alma durumu hep bu genisletilmis
+     * kumeye bakar; boylece kural tek yerde kaliyor. Ornek: Kuş SLX'i alan
+     * oyuncu Petrol boyasini da acmis olur, ama Petrol'u baska gövdelere de
+     * surebilir — fabrika boyasi gövdeye kilitli DEGIL, hediye.
+     */
+    fun effectiveOwnedColors(ownedShapes: Set<String>, ownedColors: Set<String>): Set<String> =
+        ownedColors + shapes.filter { isOwned(it, ownedShapes) }.map { it.defaultColorId }
 
     /**
      * Kayitli secim gecerli mi: yoksa, bilinmiyorsa veya sahip olunmuyorsa

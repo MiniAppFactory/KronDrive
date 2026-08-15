@@ -6,18 +6,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import com.miniappfactory.krondrive.game.CarAxis
 import com.miniappfactory.krondrive.game.CarCatalog
 import com.miniappfactory.krondrive.game.CarGradient
 import com.miniappfactory.krondrive.game.CarPart
 import com.miniappfactory.krondrive.game.CarStyle
 import com.miniappfactory.krondrive.game.GameConfig
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -156,6 +161,45 @@ fun DrawScope.drawCarParts(style: CarStyle) {
 }
 
 /**
+ * Sprite yolu: gri govde katmani secili boyayla CARPILIR, uzerine renkli
+ * detay katmani cizilir. Ikisi de [CarCatalog]'un cizim kutusunun TAMAMINA
+ * oturtulur — sprite'lar ayni oranda uretildigi ve dar araclar saydam dolguyla
+ * ortalandigi icin bu tek dikdortgen dogru hizalamayi veriyor.
+ *
+ * Carpim ([BlendMode.Modulate]) secildi cunku gri katman isik/golge bilgisini
+ * 0..1 arasi bir carpan olarak tutuyor: `boya x golge` dogru gölgeli boyayi
+ * verir. Duz [BlendMode.SrcIn] tinti butun hacmi duz renge cevirirdi.
+ *
+ * Kutu tam sayi koordinatlara oturur (x -20..20, y -2..74) — [drawImage] zaten
+ * tam sayi istiyor ve bu degerler [GameConfig] sabitlerinden turedigi icin
+ * yuvarlama kaybi yok.
+ */
+private fun DrawScope.drawCarSprite(style: CarStyle, sprite: CarSprite) {
+    val left = CarCatalog.ART_LEFT.roundToInt()
+    val top = CarCatalog.ART_TOP.roundToInt()
+    val offset = IntOffset(left, top)
+    val size = IntSize(CarCatalog.ART_RIGHT.roundToInt() - left, CarCatalog.ART_BOTTOM.roundToInt() - top)
+    drawImage(
+        image = sprite.body,
+        dstOffset = offset,
+        dstSize = size,
+        colorFilter = ColorFilter.tint(Color(style.color.bodyArgb), BlendMode.Modulate)
+    )
+    drawImage(image = sprite.detail, dstOffset = offset, dstSize = size)
+}
+
+/**
+ * Aracin govdesini cizer: sprite varsa sprite, yoksa katalog geometrisi.
+ *
+ * Cagiranlarin hangisinin kullanildigini bilmesi GEREKMEZ; golge ve alev her
+ * iki yolda da ayni yerden geliyor.
+ */
+fun DrawScope.drawCarBody(style: CarStyle, sprites: CarSpriteSet?) {
+    val sprite = sprites?.of(style.shape.id)
+    if (sprite != null) drawCarSprite(style, sprite) else drawCarParts(style)
+}
+
+/**
  * Boost alevi. Dort katman: halo + dis pluma + ic pluma + sicak cekirdek.
  *
  * Her pluma ucuna dogru hem DARALIR hem SAYDAMLASIR — kenarlarin sonumlenmesi
@@ -249,12 +293,13 @@ fun DrawScope.drawStyledCar(
     y: Float,
     style: CarStyle,
     boosting: Boolean,
-    flamePhase: Float = 0f
+    flamePhase: Float = 0f,
+    sprites: CarSpriteSet? = null
 ) {
     translate(x, y) {
         scale(GameConfig.CAR_ART_SCALE, GameConfig.CAR_ART_SCALE, pivot = Offset.Zero) {
             drawCarShadow()
-            drawCarParts(style)
+            drawCarBody(style, sprites)
             if (boosting) drawCarBoostFlame(style, flamePhase)
         }
     }
@@ -266,7 +311,14 @@ fun DrawScope.drawStyledCar(
  * doldurur (kutu sabit — bkz. CarCatalog kutu kurali).
  */
 @Composable
-fun CarPreview(style: CarStyle, modifier: Modifier = Modifier, boosting: Boolean = false) {
+fun CarPreview(
+    style: CarStyle,
+    modifier: Modifier = Modifier,
+    boosting: Boolean = false,
+    // Varsayilan degeri Composable: cagiranlarin sprite'i ayrica tasimasi
+    // gerekmiyor, garaj/harita/menu ekranlari degismeden sprite'a gecti.
+    sprites: CarSpriteSet = rememberCarSprites()
+) {
     Canvas(modifier = modifier) {
         // Onizleme kutusu = katalogun garanti ettigi arac kutusu + golge alani.
         val left = minOf(CarCatalog.ART_LEFT, CarCatalog.SHADOW_LEFT)
@@ -282,7 +334,7 @@ fun CarPreview(style: CarStyle, modifier: Modifier = Modifier, boosting: Boolean
             scale(fit, fit, pivot = Offset.Zero) {
                 translate(-(left + right) / 2f, -(top + bottom) / 2f) {
                     drawCarShadow()
-                    drawCarParts(style)
+                    drawCarBody(style, sprites)
                     if (boosting) drawCarBoostFlame(style)
                 }
             }

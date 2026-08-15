@@ -11,9 +11,14 @@ from PIL import Image, ImageDraw, ImageFilter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kron_art as K
+import sprite_car as SC
 
 OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 S = 512
+
+# Ikonda gorunen govde. Sprite'i varsa sprite kullanilir; degistirmek icin
+# tek yer burasi (adaylari uretmek icin `gen_icon_candidates.py`).
+ICON_CAR_SHAPE = 'supercar'
 CENTER = S / 2.0
 SAFE_R = S * 0.66 / 2.0          # adaptive maske guvenli dairesi (169 px)
 
@@ -37,11 +42,22 @@ def player_car(body_h, flame=False, tilt=0.58, squash=0.62):
 
     body_h = govdenin (76 birimlik arac kutusu) cikti yuksekligi. Olcek
     buradan turetilir; boylece kare tuvale sigdigi ONCEDEN bilinir.
+
+    Govde [ICON_CAR_SHAPE] ile secilir ve SPRITE varsa sprite kullanilir
+    (2026-08-15) — magaza ikonundaki arac ile oyundaki arac ayni pikseller
+    olsun diye. Sprite yoksa eski vektor cizimine duser.
     """
     pad = 3.0
     ppu = body_h / (76.0 * squash)            # piksel / arac birimi (yatay)
     layer_w = (40.0 + 2 * pad) * ppu
-    car, _, _, _ = K.car_layer(K.PLAYER_PALETTE, unit=16, pad=pad, flame=flame)
+    if SC.has_sprite(ICON_CAR_SHAPE):
+        car, _, _, _ = SC.car_layer(
+            K.BODY, unit=16, pad=pad, flame=flame, shape=ICON_CAR_SHAPE
+        )
+    else:
+        car, _, _, _ = K.car_layer(
+            K.PLAYER_PALETTE, unit=16, pad=pad, flame=flame, shape=ICON_CAR_SHAPE
+        )
     w, h = car.size
     ss = 2
     ow = int(layer_w * ss)

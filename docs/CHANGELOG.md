@@ -1,5 +1,38 @@
 # Değişiklik günlüğü
 
+## 2026-08-15 (akşam) — Araç sprite'ları, fabrika boyası, kontrol tuşu düzeltmesi
+
+**Araçlar artık sprite.** `incoming/car_refs/` altındaki referans çizimler
+oyuna alındı. Her gövde iki katman: gri tonlamalı boyanabilir gövde +
+renkli detay; gövde çalışma anında seçili boyayla çarpılıyor, böylece tek
+dosyadan 10 boya çıkıyor. Üretici: `tools/build_car_sprites.py`. 8 gövde
+(7 oynanabilir + trafik), 552 KB. Vektör çizim geri düşüş olarak duruyor.
+Çarpışma kutusu değişmedi. Ayrıntı: `PROVENANCE.md` #16.
+
+**Fabrika boyası.** Kuş SLX petrol yeşili, Dağ Keçisi beyaz olarak geliyor.
+Gövdeye sahip olmak fabrika boyasını da açıyor; boya araç başına
+hatırlanıyor (`car_color_by_shape`). Garaj çipleri her aracı kendi renginde
+gösteriyor. Ayrıntı: `PROVENANCE.md` #17.
+
+**Cihazda bulunan hata — kontrol tuşlarındaki "gölge çerçeve".** Sahibi yön
+tuşlarının arkasında, özellikle gece temasında kötü duran yuvarlak-kare bir
+leke bildirdi. Gölge sanıldı; `CONTROL_ELEVATION` 0 yapılıp ölçülünce leke
+DURDU, yani sebep gölge değildi. Gerçek sebep: üstteki cam parlaması kutusu
+butonun yalnızca üst %45'ini kaplıyor (64×28.8 dp) ve kendini `CircleShape`
+ile kırpıyordu — `CircleShape` = %50 köşe yarıçapı, kare olmayan bir kutuda
+**daire değil hap** üretir ve hapın köşeleri dairenin omuzlarından taşıyordu.
+Parlama kutusu artık butonun tamamını kaplıyor (kare → kırpma gerçek daire),
+sönümlemeyi gradyan durakları yapıyor.
+
+**Mağaza görselleri.** İkon ve feature graphic sprite'larla yenilendi
+(`tools/sprite_car.py`); ikonda Süper Araba (sahibi seçti). `gen_feature.py`
+içindeki bir öz-denetim düzeltildi: bütün araçların farklı açıda olmasını
+bekliyordu, oysa açı yalnızca şeridin fonksiyonu — aynı şeritte iki araç
+olduğu için denetim her zaman patlıyordu.
+
+**Performans.** Sprite geçişi ölçüldü (S8): kare süresi medyanı 24–27 ms,
+vektörde 25 ms — regresyon yok. Sprite'lar süreç boyunca tek kopya tutuluyor.
+
 ## 2026-08-15 — Araca özel motor sesi + korna
 
 Sahibinin isteği: *"Araba seslerini arabaya göre yapabilir miyiz? Mesela Boğa

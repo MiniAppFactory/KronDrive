@@ -35,7 +35,13 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kron_art as K
+import sprite_car as SC
 from kron_car3d import realistic_car
+
+# Feature gorselindeki govdeler. Oyuncu araci ortada; trafik SPRITE'i
+# oyundaki engel araciyla ayni.
+FEATURE_PLAYER_SHAPE = 'supercar'
+FEATURE_TRAFFIC_SHAPE = 'traffic'
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.abspath(os.path.join(TOOLS, '..'))
@@ -166,12 +172,21 @@ def road(img):
 # arac yerlestirme — konum/olcek/aci TAMAMEN modelden
 # ---------------------------------------------------------------------------
 
-def place_car(img, s, lane, base, flame=False):
-    """Araci (serit, derinlik s) ile yerlestirir. Elle x/y/aci/olcek YOK."""
+def place_car(img, s, lane, base, flame=False, shape=None):
+    """Araci (serit, derinlik s) ile yerlestirir. Elle x/y/aci/olcek YOK.
+
+    [shape] verilir ve o govdenin SPRITE'i varsa oyunun sprite'i kullanilir
+    (2026-08-15); yoksa eski `kron_car3d` cizimine duser. Iki yol da ayni
+    (katman, govde_merkezi_y) sozlesmesini dondurdugu icin yerlestirme
+    matematigi degismiyor.
+    """
     u = LANE_U[lane]
     half = half_of_s(s)
     body_w = (2.0 * half / 3.0) * CAR_LANE_RATIO      # olcek = derinligin fonksiyonu
-    car, bcy = realistic_car(body_w, base, flame=flame)
+    if shape is not None and SC.has_sprite(shape):
+        car, bcy = SC.realistic_car(body_w, base, flame=flame, shape=shape)
+    else:
+        car, bcy = realistic_car(body_w, base, flame=flame)
 
     # Govde merkezini goruntunun merkezine tasi ki rotate(expand) etrafinda donsun.
     pad_top = max(0.0, car.height - 2 * bcy)
@@ -238,10 +253,10 @@ def main():
 
     # (serit, derinlik) — uzaktan yakina cizilir ki yakindaki ustte kalsin.
     placed = [
-        place_car(img, 0.205, 2, K.OBSTACLE_COLORS[3]),                  # turuncu, uzak
-        place_car(img, 0.462, 0, K.OBSTACLE_COLORS[0]),                  # sari, sol serit
-        place_car(img, 0.560, 2, K.OBSTACLE_COLORS[1]),                  # camgobegi, sag
-        place_car(img, 0.544, 1, K.BODY, flame=True),                    # oyuncu, orta
+        place_car(img, 0.205, 2, K.OBSTACLE_COLORS[3], shape=FEATURE_TRAFFIC_SHAPE),
+        place_car(img, 0.462, 0, K.OBSTACLE_COLORS[0], shape=FEATURE_TRAFFIC_SHAPE),
+        place_car(img, 0.560, 2, K.OBSTACLE_COLORS[1], shape=FEATURE_TRAFFIC_SHAPE),
+        place_car(img, 0.544, 1, K.BODY, flame=True, shape=FEATURE_PLAYER_SHAPE),
     ]
     img, text_right = wordmark(img)
 
@@ -262,8 +277,17 @@ def main():
               (p['lane'], p['s'], p['body_w'], p['angle'], p['y'],
                lane_half - car_half))
         assert car_half < lane_half, 'arac serit sinirini asiyor'
-    angles = sorted(round(p['angle'], 2) for p in placed)
-    assert len(set(angles)) == len(angles), 'farkli seritlerde ayni aci'
+    # Aci yalnizca SERIDIN fonksiyonudur (isin acisi), derinligin degil.
+    # Onceki denetim butun acilarin farkli olmasini bekliyordu ve ayni seritte
+    # iki arac oldugu icin HER ZAMAN patliyordu (2026-08-15'te fark edildi).
+    # Dogru beklenti: ayni seritte tek aci, farkli seritlerde farkli aci.
+    by_lane = {}
+    for p in placed:
+        by_lane.setdefault(p['lane'], set()).add(round(p['angle'], 2))
+    for lane, lane_angles in by_lane.items():
+        assert len(lane_angles) == 1, f'{lane}. seritte farkli aci: {lane_angles}'
+    distinct = {next(iter(v)) for v in by_lane.values()}
+    assert len(distinct) == len(by_lane), 'farkli seritlerde ayni aci'
     assert text_right < road_pt(s_of_y(float(H)), -1.0)[0], 'yazi yola giriyor'
     print(path)
 

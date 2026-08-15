@@ -612,7 +612,12 @@ private fun ShapeChip(
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         CarPreview(
-            style = CarStyle(shape, color),
+            // SECILI arac kendi boyasiyla, digerleri FABRIKA boyasiyla
+            // cizilir (2026-08-15). Cipler bir vitrin: oyuncu Kuş SLX'i
+            // almadan once onun petrol yesili, Dağ Keçisi'nin beyaz
+            // oldugunu gormeli. Hepsini secili boyayla cizmek butun vitrini
+            // tek renge boyuyor ve araclarin kimligini siliyordu.
+            style = CarStyle(shape, if (selected) color else CarCatalog.color(shape.defaultColorId)),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(SHAPE_CHIP_PREVIEW_HEIGHT)

@@ -42,6 +42,8 @@ import com.miniappfactory.krondrive.data.AppLanguage
 import com.miniappfactory.krondrive.game.CarCatalog
 import com.miniappfactory.krondrive.game.GameConfig
 import com.miniappfactory.krondrive.game.GameEngine
+import com.miniappfactory.krondrive.ui.common.CarSpriteSet
+import com.miniappfactory.krondrive.ui.common.rememberCarSprites
 import com.miniappfactory.krondrive.ui.common.drawStyledCar
 import com.miniappfactory.krondrive.ui.theme.KronColors
 import kotlin.math.min
@@ -70,10 +72,11 @@ import kotlin.math.min
 @Composable
 fun LanguageGateScreen(onChoose: (AppLanguage) -> Unit) {
     val density = LocalDensity.current.density
+    val carSprites = rememberCarSprites()
 
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawNightTrackBackdrop(density)
+            drawNightTrackBackdrop(density, carSprites)
         }
 
         Column(
@@ -192,7 +195,7 @@ private fun LanguagePill(label: String, modifier: Modifier, onClick: () -> Unit)
  * Ustteki %58'lik bant koyu bir perde ile kapatiliyor: yazilar her cihazda
  * okunsun, alttaki sahne de gorunur kalsin.
  */
-private fun DrawScope.drawNightTrackBackdrop(density: Float) {
+private fun DrawScope.drawNightTrackBackdrop(density: Float, sprites: CarSpriteSet) {
     val w = size.width
     val h = size.height
     if (w <= 0f || h <= 0f) return
@@ -263,19 +266,22 @@ private fun DrawScope.drawNightTrackBackdrop(density: Float) {
             x = laneCenter(0) / carScale,
             y = trafficY / carScale,
             style = CarCatalog.trafficStyle(GameEngine.OBSTACLE_COLORS[0].toLong() and 0xFFFFFFFFL),
-            boosting = false
+            boosting = false,
+            sprites = sprites
         )
         drawStyledCar(
             x = laneCenter(2) / carScale,
             y = (trafficY - 26f * carScale) / carScale,
             style = CarCatalog.trafficStyle(GameEngine.OBSTACLE_COLORS[1].toLong() and 0xFFFFFFFFL),
-            boosting = false
+            boosting = false,
+            sprites = sprites
         )
         drawStyledCar(
             x = laneCenter(1) / carScale,
             y = playerY / carScale,
             style = CarCatalog.defaultStyle,
-            boosting = true
+            boosting = true,
+            sprites = sprites
         )
     }
 

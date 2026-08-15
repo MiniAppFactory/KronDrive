@@ -367,6 +367,72 @@ Bunlar dışında fizik birebirdir:
     (~110 Hz), geniş `hornInterval` (~1.5), uzun `hornSeconds` (~1.1) ve yavaş
     `hornAttack` (~0.06) = hava kornasının basınç kurması.
 
+16. **Araçlar sprite'a geçti — iki katmanlı, çalışma anında boyanan çizimler**
+    (2026-08-15, proje sahibi kararı). Prototipte ve 15 Ağustos'a kadar
+    buradaki her araç **Canvas'ta vektör olarak** çiziliyordu: gövde
+    geometrisi `CarCatalog.kt` içinde veriydi, `CarArtwork.kt` onu kutulara
+    ve poligonlara çeviriyordu. Proje sahibi ChatGPT ile tepeden bakış
+    araç görselleri üretti (`incoming/car_refs/`, 15 gövde + maske) ve
+    bunların oyuna alınmasını istedi.
+
+    **Neden iki katman.** 7 gövde × 10 boya = 70 hazır PNG demekti. Bunun
+    yerine her gövde ikiye ayrılıyor: `_body` gri tonlamalı boyanabilir alan,
+    `_detail` cam/lastik/far/şerit. Çizerken gövde seçili boyayla **çarpılıyor**
+    (`BlendMode.Modulate`), üstüne detay geliyor. Tek dosya 10 boyayı da
+    veriyor. Ayrımı proje sahibinin ürettiği maskeler söylüyor (gövde
+    magenta); maskeler kayıplı sıkıştırmadan geçtiği için sert eşik değil
+    yumuşak bir kroma ağırlığı kullanılıyor — sert eşik kenarlara merdiven
+    yapıyordu.
+
+    **Referans tonu eşitleniyor.** Referans çizimlerin gövde parlaklığı
+    birbirinden çok farklı (beyaz station wagon ortanca 238, siyah kas
+    arabası 41). Çarpım boyamada bu fark doğrudan "boyayı göremiyorum"a
+    dönüşüyordu: siyah referans hangi boya seçilirse seçilsin siyah
+    kalıyordu. Her gövdenin ortancası gamma ile 205'e çekiliyor; gamma
+    0.40'ta tabanlanıyor çünkü daha fazla germek sıkıştırma gürültüsünü de
+    büyütüyor.
+
+    **Çarpışma kutusu DEĞİŞMEDİ.** Sprite'lar çizim kutusuyla aynı orana
+    (40:76) üretiliyor ve tam o kutuya oturtuluyor; kutu kuralı (bkz. #11)
+    aynen geçerli.
+
+    **Vektör yolu silinmedi.** Sprite'ı olmayan bir gövde için çizici
+    `drawCarParts`'a düşer; mağaza görselleri de her iki yolu kullanabiliyor.
+
+    **Ölçüldü** (Samsung S8, aynı bölüm, aynı süre): kare süresi medyanı
+    sprite 24–27 ms, vektör 25 ms — regresyon yok, p90 sprite'ta biraz daha
+    iyi (32–38 ms / 36 ms). Oyunun ~%95 janky frame'i sprite'tan gelmiyor,
+    vektörde de var; ayrı bir iş. Sprite'lar süreç boyunca **tek kopya**
+    tutuluyor: ilk kurulumda her `CarPreview` çağrı noktası 16 sprite'i
+    baştan çözüyordu ve toplam PSS 165 MB'den 302 MB'ye çıkmıştı.
+
+    APK'ya eklenen: 8 gövde × 2 katman = 552 KB (WebP, 240×456).
+
+17. **Her aracın bir fabrika boyası var** (2026-08-15, proje sahibi kararı:
+    *"kuş slx in default rengi bu olacak dağ keçisinin ise beyaz
+    (değiştirilebilir olsun ama default u bu olsun)"*).
+
+    Referans çizimler geldiğinde ortaya çıkan sorun: Kuş SLX petrol yeşili,
+    Dağ Keçisi beyaz tasarlanmıştı ama bu boyalar katalogda **ücretliydi**
+    (Petrol 1400 coin / Sv 3, Buzul Beyazı 500). Aracı alan oyuncu onu
+    tasarlandığı renkte görmeden önce bir 1400 daha ödemek zorunda kalıyordu.
+
+    Kural: **gövdeye sahip olmak fabrika boyasını da açar**
+    (`CarCatalog.effectiveOwnedColors`). Boya gövdeye kilitli değil, hediye —
+    açıldıktan sonra başka gövdelere de sürülebilir.
+
+    Boya artık **araç başına** hatırlanıyor (`car_color_by_shape`); gövde
+    değiştirmek o aracın en son rengini, hiç boyanmadıysa fabrika boyasını
+    getiriyor. Eski tek anahtarlı kayıt (`car_color`) hâlâ okunuyor ki sürüm
+    yükselten oyuncunun rengi kaybolmasın — ama **yalnızca fabrika boyası
+    varsayılan olan gövdelerde**; bu iki araç sürüm yükseltmede de kendi
+    renginde görünsün diye istisna tutuldu.
+
+    Garajdaki gövde çipleri artık **kendi fabrika boyalarıyla** çiziliyor
+    (seçili olan hariç): çipler bir vitrin, oyuncu Kuş SLX'i almadan önce
+    onun petrol yeşili olduğunu görmeli. Hepsini seçili boyayla çizmek bütün
+    vitrini tek renge boyuyor ve araçların kimliğini siliyordu.
+
 ## Web3 durumu
 
 **KAPALI.** Blockchain, cüzdan, token, NFT veya play-to-earn işlevi yok ve

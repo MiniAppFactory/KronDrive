@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.miniappfactory.krondrive.game.CarCatalog
+import com.miniappfactory.krondrive.game.CarShapeDef
 import com.miniappfactory.krondrive.game.CarItem
 import com.miniappfactory.krondrive.game.GameConfig
 import com.miniappfactory.krondrive.game.UpgradeCatalog
@@ -45,7 +46,20 @@ class GameStateRepository(private val context: Context) {
         // Arac ozellestirme. Bu anahtarlar v1.0.2'de eklendi; eski kurulumda
         // yoklar ve okuma varsayilan arac + bos envanter dondurur.
         val CAR_SHAPE = stringPreferencesKey("car_shape")
+
+        /**
+         * ESKI tek boya secimi. v1.0.9'dan itibaren yerini
+         * [CAR_COLOR_BY_SHAPE] aldi; hala YAZILIYOR ve surum yukselten
+         * oyuncunun rengini kaybetmemek icin okunuyor.
+         */
         val CAR_COLOR = stringPreferencesKey("car_color")
+
+        /**
+         * Gövde -> boya. Oyuncu her araci ayri boyayabilsin ve gövde
+         * degistirince o aracin rengi geri gelsin diye (2026-08-15).
+         * Bicim: `shapeId:colorId,shapeId:colorId`.
+         */
+        val CAR_COLOR_BY_SHAPE = stringPreferencesKey("car_color_by_shape")
         val OWNED_CAR_SHAPES = stringPreferencesKey("owned_car_shapes")
         val OWNED_CAR_COLORS = stringPreferencesKey("owned_car_colors")
 
@@ -90,7 +104,13 @@ class GameStateRepository(private val context: Context) {
 
     val playerProgress: Flow<PlayerProgress> = context.gameDataStore.data.map { prefs ->
         val ownedShapes = decodeStringSet(prefs[Keys.OWNED_CAR_SHAPES])
-        val ownedColors = decodeStringSet(prefs[Keys.OWNED_CAR_COLORS])
+        // Sahip olunan her gövdenin fabrika boyasi da acik sayilir
+        // (bkz. CarShapeDef.defaultColorId) — kural tek yerde, katalogda.
+        val ownedColors = CarCatalog.effectiveOwnedColors(
+            ownedShapes = ownedShapes,
+            ownedColors = decodeStringSet(prefs[Keys.OWNED_CAR_COLORS])
+        )
+        val shape = CarCatalog.selectedShape(prefs[Keys.CAR_SHAPE], ownedShapes)
         PlayerProgress(
             coins = prefs[Keys.COINS] ?: PlayerProgress.STARTING_COINS,
             xp = prefs[Keys.XP] ?: 0,
@@ -125,8 +145,12 @@ class GameStateRepository(private val context: Context) {
             },
             // Secim OKURKEN dogrulanir: bilinmeyen bir id ya da sahip
             // olunmayan bir icerik sessizce varsayilana duser.
-            carShapeId = CarCatalog.selectedShape(prefs[Keys.CAR_SHAPE], ownedShapes).id,
-            carColorId = CarCatalog.selectedColor(prefs[Keys.CAR_COLOR], ownedColors).id,
+            carShapeId = shape.id,
+            // Boya SECILI GOVDEYE gore cozulur: oyuncu o gövde icin bir boya
+            // sectiyse o, yoksa gövdenin fabrika boyasi. Eski tek anahtarli
+            // kayit ([Keys.CAR_COLOR]) hala okunuyor — surum yukselten
+            // oyuncunun rengi kaybolmasin diye (bkz. colorIdFor).
+            carColorId = colorIdFor(prefs, shape, ownedColors),
             ownedCarShapes = ownedShapes,
             ownedCarColors = ownedColors
         )
@@ -342,20 +366,24 @@ class GameStateRepository(private val context: Context) {
         buyCarItem(
             item = CarCatalog.shapes.firstOrNull { it.id == id },
             ownedKey = Keys.OWNED_CAR_SHAPES,
-            selectionKey = Keys.CAR_SHAPE
+            // Boya yazilmiyor: yeni arac kendi fabrika boyasiyla gelir
+            // (okuma sirasinda cozuluyor, bkz. colorIdFor).
+            select = { prefs, itemId -> prefs[Keys.CAR_SHAPE] = itemId }
         )
 
     suspend fun buyCarColor(id: String): Boolean =
         buyCarItem(
             item = CarCatalog.colors.firstOrNull { it.id == id },
             ownedKey = Keys.OWNED_CAR_COLORS,
-            selectionKey = Keys.CAR_COLOR
+            // Boya secimi gövdeye ozel haritaya da yazilmali; yoksa satin
+            // alinan renk bir sonraki okumada geri duserdi.
+            select = { prefs, itemId -> applyColorSelection(prefs, itemId) }
         )
 
     private suspend fun buyCarItem(
         item: CarItem?,
         ownedKey: androidx.datastore.preferences.core.Preferences.Key<String>,
-        selectionKey: androidx.datastore.preferences.core.Preferences.Key<String>
+        select: (androidx.datastore.preferences.core.MutablePreferences, String) -> Unit
     ): Boolean {
         if (item == null) return false
         var success = false
@@ -366,13 +394,19 @@ class GameStateRepository(private val context: Context) {
             if (!CarCatalog.canBuy(item, owned, coins, carLevel)) return@edit
             prefs[Keys.COINS] = coins - item.priceCoins
             prefs[ownedKey] = (owned + item.id).joinToString(",")
-            prefs[selectionKey] = item.id
+            select(prefs, item.id)
             success = true
         }
         return success
     }
 
-    /** Secim yalnizca sahip olunan (veya bedava) bir icerik icin degisir. */
+    /**
+     * Secim yalnizca sahip olunan (veya bedava) bir icerik icin degisir.
+     *
+     * Boya YAZILMAZ: hangi boyanin gecerli oldugu okuma sirasinda gövdeye
+     * gore cozuluyor ([colorIdFor]). Yani gövde degistirmek o aracin en son
+     * boyasini — hic boyanmadiysa fabrika boyasini — kendiliginden getirir.
+     */
     suspend fun selectCarShape(id: String): Boolean {
         var success = false
         context.gameDataStore.edit { prefs ->
@@ -388,13 +422,31 @@ class GameStateRepository(private val context: Context) {
     suspend fun selectCarColor(id: String): Boolean {
         var success = false
         context.gameDataStore.edit { prefs ->
-            val owned = decodeStringSet(prefs[Keys.OWNED_CAR_COLORS])
+            val owned = CarCatalog.effectiveOwnedColors(
+                ownedShapes = decodeStringSet(prefs[Keys.OWNED_CAR_SHAPES]),
+                ownedColors = decodeStringSet(prefs[Keys.OWNED_CAR_COLORS])
+            )
             val color = CarCatalog.colors.firstOrNull { it.id == id } ?: return@edit
             if (!CarCatalog.isOwned(color, owned)) return@edit
-            prefs[Keys.CAR_COLOR] = color.id
+            applyColorSelection(prefs, color.id)
             success = true
         }
         return success
+    }
+
+    /** Boyayi hem gövdeye ozel haritaya hem de eski anahtara yazar. */
+    private fun applyColorSelection(
+        prefs: androidx.datastore.preferences.core.MutablePreferences,
+        colorId: String
+    ) {
+        val shapeId = CarCatalog.selectedShape(
+            prefs[Keys.CAR_SHAPE],
+            decodeStringSet(prefs[Keys.OWNED_CAR_SHAPES])
+        ).id
+        val map = decodeStringMap(prefs[Keys.CAR_COLOR_BY_SHAPE]).toMutableMap()
+        map[shapeId] = colorId
+        prefs[Keys.CAR_COLOR_BY_SHAPE] = encodeStringMap(map)
+        prefs[Keys.CAR_COLOR] = colorId
     }
 
     // ---------------------------------------------------------------
@@ -621,6 +673,49 @@ class GameStateRepository(private val context: Context) {
         private fun decodeStringSet(raw: String?): Set<String> {
             if (raw.isNullOrBlank()) return emptySet()
             return raw.split(",").filter { it.isNotBlank() }.toSet()
+        }
+
+        private fun encodeStringMap(map: Map<String, String>): String =
+            map.entries.joinToString(",") { "${it.key}:${it.value}" }
+
+        private fun decodeStringMap(raw: String?): Map<String, String> {
+            if (raw.isNullOrBlank()) return emptyMap()
+            return raw.split(",").mapNotNull { entry ->
+                val parts = entry.split(":")
+                if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) {
+                    parts[0] to parts[1]
+                } else {
+                    null
+                }
+            }.toMap()
+        }
+
+        /**
+         * Secili gövdenin boyasi. Oncelik sirasi:
+         *
+         *  1. O gövde icin kayitli secim ([Keys.CAR_COLOR_BY_SHAPE]);
+         *  2. ESKI tek boya kaydi — ama YALNIZCA fabrika boyasi varsayilan
+         *     olan gövdelerde. Kuş SLX (petrol) ve Dağ Keçisi (beyaz) bunun
+         *     disinda tutuldu: surum yukselten oyuncuda da bu iki arac
+         *     tasarlandigi renkte gorunsun (proje sahibi karari, 2026-08-15);
+         *  3. gövdenin fabrika boyasi.
+         *
+         * Sahip olunmayan bir boya secilmis gorunuyorsa yine fabrika boyasina
+         * duser — kayit bozulmasi oyunu kirmasin.
+         */
+        private fun colorIdFor(
+            prefs: androidx.datastore.preferences.core.Preferences,
+            shape: CarShapeDef,
+            ownedColors: Set<String>
+        ): String {
+            val perShape = decodeStringMap(prefs[Keys.CAR_COLOR_BY_SHAPE])[shape.id]
+            val legacy = prefs[Keys.CAR_COLOR]
+                ?.takeIf { shape.defaultColorId == CarCatalog.DEFAULT_COLOR_ID }
+            val candidate = perShape ?: legacy ?: shape.defaultColorId
+            val resolved = CarCatalog.colors.firstOrNull {
+                it.id == candidate && CarCatalog.isOwned(it, ownedColors)
+            }
+            return (resolved ?: CarCatalog.color(shape.defaultColorId)).id
         }
     }
 }

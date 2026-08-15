@@ -644,6 +644,66 @@ class CarCatalogTest {
         assertEquals(CarCatalog.defaultColor, CarCatalog.selectedColor(null, emptySet()))
     }
 
+    @Test
+    fun `her govdenin fabrika boyasi katalogda var`() {
+        CarCatalog.shapes.forEach { shape ->
+            val color = CarCatalog.colors.firstOrNull { it.id == shape.defaultColorId }
+            assertTrue(
+                "${shape.id} tanimsiz bir fabrika boyasi gosteriyor: ${shape.defaultColorId}",
+                color != null
+            )
+        }
+    }
+
+    @Test
+    fun `iki nostalji aracinin fabrika boyasi kendi rengi`() {
+        // Proje sahibi karari (2026-08-15): referans cizimlerdeki renkler.
+        val kus = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_KUS_SLX }
+        val goat = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_MOUNTAIN_GOAT }
+        assertEquals(CarCatalog.COLOR_TEAL, kus.defaultColorId)
+        assertEquals(CarCatalog.COLOR_GLACIER, goat.defaultColorId)
+    }
+
+    @Test
+    fun `govdeye sahip olmak fabrika boyasini acar`() {
+        val kus = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_KUS_SLX }
+        val teal = CarCatalog.colors.first { it.id == CarCatalog.COLOR_TEAL }
+
+        // Gövde yokken boya da kapali (Petrol ucretli).
+        assertTrue(teal.priceCoins > 0)
+        assertTrue(
+            "gövdesiz oyuncuda fabrika boyasi acilmamali",
+            !CarCatalog.isOwned(teal, CarCatalog.effectiveOwnedColors(emptySet(), emptySet()))
+        )
+
+        // Gövdeyi alinca boya da acilir — arac tasarlandigi renkte gorunsun.
+        val owned = CarCatalog.effectiveOwnedColors(setOf(kus.id), emptySet())
+        assertTrue(CarCatalog.isOwned(teal, owned))
+
+        // Satin alinan boyalar kaybolmaz.
+        val withBought = CarCatalog.effectiveOwnedColors(
+            ownedShapes = setOf(kus.id),
+            ownedColors = setOf(CarCatalog.COLOR_KHAKI)
+        )
+        assertTrue(CarCatalog.COLOR_KHAKI in withBought)
+        assertTrue(CarCatalog.COLOR_TEAL in withBought)
+    }
+
+    @Test
+    fun `bedava govdelerin fabrika boyasi bastan acik`() {
+        // Bedava gövdeler ([isOwned] onlari satin alinmis sayar) fabrika
+        // boyalarini da bedava acar; aksi halde yeni oyuncu kendi aracini
+        // yanlis renkte gorurdu.
+        val free = CarCatalog.shapes.filter { it.priceCoins == 0 }
+        val owned = CarCatalog.effectiveOwnedColors(emptySet(), emptySet())
+        free.forEach { shape ->
+            assertTrue(
+                "${shape.id} fabrika boyasi bedava gövdeye ragmen kapali",
+                shape.defaultColorId in owned
+            )
+        }
+    }
+
     private companion object {
         /** Sekil, kutunun en az bu kadarini doldurmali. */
         const val MIN_BOX_FILL = 0.9f

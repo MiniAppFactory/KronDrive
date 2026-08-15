@@ -73,6 +73,7 @@ import com.miniappfactory.krondrive.game.RunMode
 import com.miniappfactory.krondrive.game.RunPhase
 import com.miniappfactory.krondrive.game.RunResult
 import com.miniappfactory.krondrive.ui.KronViewModel
+import com.miniappfactory.krondrive.ui.common.rememberCarSprites
 import com.miniappfactory.krondrive.ui.common.KronCard
 import com.miniappfactory.krondrive.ui.common.KronProgressBar
 import com.miniappfactory.krondrive.ui.common.PrimaryButton
@@ -249,6 +250,10 @@ fun GameScreen(
         }
     }
 
+    // Arac sprite'lari: yukleme Composable bir is, cizim ise her karede yurur.
+    // Bu yuzden burada bir kez yuklenip ciziciye parametre olarak veriliyor.
+    val carSprites = rememberCarSprites()
+
     Box(modifier = Modifier.fillMaxSize().background(KronColors.Background)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             // Motor "dp uzayinda" calisir; viewport'u da dp olarak veriyoruz.
@@ -264,7 +269,8 @@ fun GameScreen(
                 // uzerine tasmayacak kadar kucuk, yine de tek bakista okunur.
                 gaugeValueSize = 24.sp,
                 gaugeLabelSize = 8.sp,
-                gaugeSmallSize = 9.sp
+                gaugeSmallSize = 9.sp,
+                sprites = carSprites
             )
         }
 
@@ -891,21 +897,37 @@ private fun RaisedControl(
                 ),
                 shape = CONTROL_SHAPE
             )
-            .border(1.dp, CONTROL_BORDER, CONTROL_SHAPE),
+            .border(1.dp, CONTROL_BORDER, CONTROL_SHAPE)
+            // Cocuklar da daireye kirpilsin. Bunsuz, ic katmanlarin kendi
+            // kirpmasi butonun disina tasabiliyor (asagidaki nota bak).
+            .clip(CONTROL_SHAPE),
         contentAlignment = Alignment.Center
     ) {
-        // Ust yaridaki parlaklik: dairede duz bir cizgi yamuk duruyordu,
-        // onun yerine yukaridan asagi sonumlenen bir cam parlamasi.
+        // Ust yaridaki cam parlamasi.
+        //
+        // DIKKAT — burasi 2026-08-15'te bir hata kaynagiydi: parlama kutusu
+        // butonun ust %45'ini kapliyor ve KENDINI [CONTROL_SHAPE] ile
+        // kirpiyordu. Ama [CircleShape] = %50 kose yaricapi, yani 64x28.8 dp
+        // bir kutuda DAIRE degil HAP sekli uretiyor. Hapin ust koseleri
+        // dairenin omuzlarindan tasiyor ve gece temasinda butonun arkasinda
+        // "yuvarlak kare bir golge cerceve" gibi gorunuyordu (sahibi
+        // bildirdi; gölge sanildi, elevation 0 yapilinca leke DURDU — sucun
+        // burada oldugu boyle bulundu).
+        //
+        // Cozum: kutu butonun TAMAMINI kaplar (kare -> kirpma gercek daire),
+        // sonumlenmeyi gradyan duraklari yapar.
         if (!pressed) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.45f)
+                    .matchParentSize()
                     .clip(CONTROL_SHAPE)
                     .background(
                         Brush.verticalGradient(
-                            listOf(CONTROL_HIGHLIGHT, Color.Transparent)
+                            colorStops = arrayOf(
+                                0f to CONTROL_HIGHLIGHT,
+                                0.45f to Color.Transparent,
+                                1f to Color.Transparent
+                            )
                         )
                     )
             )
