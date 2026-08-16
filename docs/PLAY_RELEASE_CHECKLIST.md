@@ -18,7 +18,7 @@ cihaza dokunulmadı, hiçbir şey yayınlanmadı.**
 |---|---|---|
 | **Tamam** | 18 | A-1…A-8, B-2, C-2…C-5, D-1…D-4, D-6 |
 | **Eksik** | 8 (**2'si yayını durduran bloker**) | **B-1**, **D-5**, A-9, A-10, C-1, C-6, E-1, E-2 |
-| **Sahibinden bilgi/karar gerekli** | 6 | S-1…S-6 |
+| **Sahibinden bilgi/karar gerekli** | 5 | S-1…S-5 (S-6 kapandı) |
 | Öneri (zorunlu değil) | 5 | Ö-1…Ö-5 |
 
 Bu denetimde `docs/` altında kapatılan eksikler: **kısa açıklama** (D-2, zorunlu
@@ -132,8 +132,8 @@ erişmez (`sharedUserId` tanımlı değil).
 > anahtarıdır ve Play App Signing'de asıl imzalama anahtarını Google tutar:
 > upload anahtarı kaybolur veya sızarsa **Google'dan sıfırlatılabilir**.
 > Yine de yedek şart — sıfırlama bir destek süreci, günler alabilir ve o süre
-> boyunca güncelleme yayınlanamaz. Repo dışına yedeklendiği hâlâ **teyit
-> edilmedi** — bkz. S-6.
+> boyunca güncelleme yayınlanamaz. Sahibi 2026-08-16'da **yedeklediğini
+> bildirdi** (S-6 kapandı; beyan, doğrulama değil).
 >
 > ⚠ Bu düzeltme dosya adına ve alias'a dayanıyor; Play konsolunda "Play App
 > Signing" kaydının **açık olduğu doğrulanmadı**. Kayıt yoksa eski uyarı
@@ -406,7 +406,7 @@ release build'de doğrulanması gerekenler:
 | **S-3** | **AdMob → Privacy & messaging → GDPR mesajı yayımlandı mı?** | Kod hazır (A-3) ama mesaj yayımlanmadıysa AEA/UK'de form hiç çıkmaz. Konsol erişimi yok, doğrulanamadı (C-6) |
 | **S-4** | **Dağıtım ülkeleri ve fiyat** | Console zorunlu alanı. Varsayılan öneri: **tüm ülkeler, ücretsiz**. Ücretsiz seçildikten sonra **ücretliye çevrilemez** |
 | **S-5** | **AdMob'da app-ads.txt doğrulaması tetiklendi mi?** | Kökteki dosya canlı (B-2) ama AdMob'un "doğrulandı" durumuna geçtiği kontrol edilemedi. AdMob → Apps → Kron Drive → App settings → app-ads.txt → *Check for updates* |
-| **S-6** | **Keystore repo dışında yedeklendi mi?** | `source/my-upload-key.jks` kaybolursa bu uygulamanın **güncellemesi bir daha yayınlanamaz**. Yedeğin varlığı teyit edilemedi (A-8) |
+| ~~**S-6**~~ | ~~Keystore repo dışında yedeklendi mi?~~ **KAPANDI** | Proje sahibi 2026-08-16'da yedeklediğini bildirdi. **Sahibi beyanıdır, teknik olarak doğrulanmadı** — yedeğin yeri, kapsamı (`.jks` yanında `signing.properties` de dâhil mi) ve geri yüklenebilirliği kontrol edilmedi |
 
 ---
 
@@ -448,7 +448,7 @@ release build'de doğrulanması gerekenler:
 **Build**
 - [ ] `KronDrive_release_2026-08-15_2351_v1.0.9.aab` internal testing'e yüklendi — **E-1**
 - [ ] Cihazda release doğrulaması yapıldı — **E-2**
-- [ ] Keystore repo dışına yedeklendi — **S-6**
+- [x] Keystore repo dışına yedeklendi — **S-6** (sahibi beyanı, 2026-08-16)
 
 **Yayın**
 - [ ] Track kararı S-2'ye göre verildi
