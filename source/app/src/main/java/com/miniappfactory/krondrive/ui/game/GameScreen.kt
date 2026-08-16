@@ -480,7 +480,7 @@ fun GameScreen(
                     engine.lastResult?.let { publishResult(it) }
                     // Duraklatmadan cikmak da bir kosu sonudur: reklamsiz
                     // cikis yolu birakilmiyor (sahibi karari, 2026-08-14).
-                    withOptionalInterstitial(viewModel, mode, activity) { onExit() }
+                    withOptionalInterstitial(viewModel, mode, levelId, activity) { onExit() }
                 }
             )
         }
@@ -567,12 +567,16 @@ fun GameScreen(
                     }
                 },
                 onNext = {
-                    withOptionalInterstitial(viewModel, mode, activity) {
+                    // Esik BITEN bolume gore: 4. bolumu bitirip 5'e gecerken
+                    // reklam cikmaz, cikaran kosu hala reklamsiz bolgedeydi.
+                    withOptionalInterstitial(viewModel, mode, runResult.levelId, activity) {
                         nextLevelId?.let(onPlayLevel)
                     }
                 },
                 onHome = {
-                    withOptionalInterstitial(viewModel, mode, activity) { onExit() }
+                    withOptionalInterstitial(viewModel, mode, runResult.levelId, activity) {
+                        onExit()
+                    }
                 }
             )
         }
@@ -587,11 +591,12 @@ fun GameScreen(
 private fun withOptionalInterstitial(
     viewModel: KronViewModel,
     mode: RunMode,
+    levelId: Int?,
     activity: Activity?,
     proceed: () -> Unit
 ) {
     val shouldShow = GameConfig.INTERSTITIAL_AFTER_EVERY_RUN ||
-        viewModel.shouldShowInterstitial(mode)
+        viewModel.shouldShowInterstitial(mode, levelId)
     if (activity != null && shouldShow) {
         viewModel.onInterstitialShown(mode)
         InterstitialAdManager.loadAndShow(activity, activity) { proceed() }

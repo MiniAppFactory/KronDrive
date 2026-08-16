@@ -1,5 +1,52 @@
 # Değişiklik günlüğü
 
+## 2026-08-16 (2) — Geçiş reklamı sayacı kaçağı kapatıldı
+
+**Kusur:** geçiş reklamı sayacı yalnızca bölüm **tamamlandığında** artıyordu
+(`KronViewModel.onRunFinished`, artış `stats.completed` bloğunun içindeydi).
+Sonuç: "çarp → ana menü → bölümü tekrar seç" döngüsü **sınırsız ve
+reklamsız**dı. Bu döngü oyunun en çok yürünen yolu — bölümü tutturana kadar
+tekrar denemek — yani reklam gelirinin büyük kısmı sessizce kaybediliyordu.
+`INTERSTITIAL_EVERY_N_RETRIES` sabiti tam da bunun için duruyordu ama
+14 Ağustos'ta "TEKRAR" butonu kaldırılınca **hiçbir yerden çağrılmıyordu**.
+
+**Düzeltme üç parçalı** (proje sahibi onayı ile; tek başına 1. madde
+uygulansaydı en çok zorlanan oyuncu en çok reklam gören kesime dönüşürdü):
+
+1. Sayaç **10 saniyeyi geçen her kariyer koşusunda** artar — başarı şartı yok.
+   Yeni sabit `INTERSTITIAL_MIN_RUN_SECONDS = 10`; eşiğin sebebi yanlış bölüme
+   girip hemen çıkmanın reklam cezasına dönüşmemesi.
+2. Sıklık `INTERSTITIAL_EVERY_N_LEVELS` **2 → 3**. Kaçak kapanınca aynı eşik
+   gerçekte çok daha sık reklam demek olurdu.
+3. **İlk 4 bölüm tamamen reklamsız** — yeni sabit `INTERSTITIAL_FREE_LEVELS = 4`.
+
+Karar mantığı `game/AdFrequency.kt` içinde **saf Kotlin**e alındı
+(`countsTowardInterstitial` / `shouldShow`); `KronViewModel` yalnızca çağırıyor.
+Sebep: eski hâlinde karar Android'e bağlı ViewModel'in içindeydi ve JVM
+testiyle doğrulanamıyordu — kaçağın 2 gün fark edilmemesinin sebebi de bu.
+`shouldShowInterstitial` artık `levelId` alıyor; `GameScreen`'deki üç çağrı
+güncellendi (sonuç ekranında **biten** bölümün numarası geçiliyor, bir
+sonrakinin değil).
+
+Günlük görev koşusu sayacı artırmaz (günde bir kez oynanır) ama sayaç
+dolduysa çıkışta reklam gösterebilir — eski davranış korundu.
+
+**Kanıt.** 177 birim test / 0 hata (164 + 13 yeni `AdFrequencyTest`).
+`assembleDebug` + `assembleRelease` başarılı, release APK 4.27 MB.
+Cihazda (SM-G950F, DataStore dosyası `run-as` ile doğrudan okunarak):
+
+| Koşu | Süre | Sonuç | `levels_since_interstitial` |
+|---|---|---|---|
+| Bölüm 1 | 00:05 | çarptı | 0 → **0** (eşiğin altı, doğru) |
+| Bölüm 1 | ~00:20 | çarptı, 2/3 görev | 0 → **1** (eskiden 0 kalırdı) |
+
+Bölüm 1 muafiyet bölgesinde olduğu için reklam çıkmadı (logcat'te tek satır
+`interstitial` yok) — beklenen davranış.
+
+**Ölçülmedi:** gerçek gelir etkisi. 2 → 3 sıklığı ve 4 bölümlük muafiyet,
+kaçağın kapanmasıyla gelen artışı ne kadar dengeliyor bilinmiyor; bu ancak
+yayından sonraki AdMob verisiyle görülür.
+
 ## 2026-08-16 — Yol deseni cihazda düzeltildi + kontrol tuşu ikonları
 
 Günün tamamı **cihazda görülen** kusurların düzeltilmesiydi (SM-G950F,

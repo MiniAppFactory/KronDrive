@@ -596,6 +596,43 @@ Bunlar dışında fizik birebirdir:
     (sapma #16) şerit çift beyaz olarak çizildi. Tablo bu ayrıntıda artık
     güncel değil, ayırt edici işaretlerin geri kalanı geçerli.)
 
+24. **Geçiş reklamı sayacı başarıya bağlı olmaktan çıktı** (2026-08-16, proje
+    sahibi onayı). HTML prototipinde reklam **yok**; bu bütünüyle Android
+    tarafının kararıdır, prototipten sapma sayılmaz ama buraya yazılıyor çünkü
+    oyuncunun gördüğü reklam sıklığını değiştiriyor.
+
+    **Bulunan kusur:** sayaç (`levelsSinceInterstitial`) yalnızca
+    `stats.completed` iken artıyordu. Yani "çarp → ana menü → bölümü tekrar
+    seç" döngüsü **sınırsız ve reklamsızdı**; oyunun en çok oynanan yolu
+    (bölümü tutturana kadar tekrar denemek) hiç reklam görmüyordu.
+    `INTERSTITIAL_EVERY_N_RETRIES` sabiti bu boşluğu kapatmak için duruyordu
+    ama 14 Ağustos'ta "TEKRAR" butonu kalkınca **çağrılmaz** hale gelmişti.
+
+    Düzeltme tek başına yapılmadı, çünkü tek başına yapılsaydı en çok tekrar
+    deneyen — yani **en çok zorlanan** — oyuncu en çok reklam gören kesime
+    dönüşürdü. Üçü birlikte uygulandı:
+
+    1. Sayaç, **10 saniyeyi geçen her kariyer koşusunda** artar; başarı şartı
+       yok (`INTERSTITIAL_MIN_RUN_SECONDS = 10`). Eşik, yanlış bölüme girip
+       hemen çıkmanın reklam cezasına dönüşmemesi için var — mantığı
+       `MIN_PAID_RUN_SECONDS` ile aynı.
+    2. Sıklık **2 → 3** (`INTERSTITIAL_EVERY_N_LEVELS`). Kaçak kapanınca aynı
+       "2" eşiği gerçekte çok daha sık reklam demek olurdu; mevcut oyuncunun
+       hissi korunuyor.
+    3. **İlk 4 bölüm tamamen reklamsız** (`INTERSTITIAL_FREE_LEVELS = 4`).
+       İlk bölümler oyunun vitrini; erken hunide terk riski alınmıyor.
+
+    Günlük görev koşusu sayacı **artırmaz** (günde bir kez oynanır, oradan
+    frekans kurulamaz) ama sayaç dolduysa çıkışta reklam **gösterebilir** —
+    eski davranış korundu.
+
+    Karar `game/AdFrequency.kt` içinde saf Kotlin olarak duruyor ve 13 JVM
+    testiyle kilitlendi; ViewModel yalnızca çağırıyor.
+
+    **Cihazda doğrulandı** (SM-G950F, DataStore doğrudan okunarak):
+    5 saniyelik çarpan koşu sayacı artırmadı (0 → 0); ~20 saniyelik çarpan
+    koşu artırdı (0 → 1). Bölüm 1'de reklam çıkmadı.
+
 ## Web3 durumu
 
 **KAPALI.** Blockchain, cüzdan, token, NFT veya play-to-earn işlevi yok ve

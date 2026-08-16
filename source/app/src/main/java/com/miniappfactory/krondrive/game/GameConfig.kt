@@ -442,11 +442,42 @@ object GameConfig {
      */
     const val INTERSTITIAL_AFTER_EVERY_RUN = false
 
-    /** Kac seviye tamamlaninca bir gecis reklami gosterilecek. */
-    const val INTERSTITIAL_EVERY_N_LEVELS = 2
+    /**
+     * Kac kariyer kosusundan sonra bir gecis reklami gosterilecek.
+     *
+     * 2 -> 3 (2026-08-16). Ayni gun sayac kacagi kapatildi: eskiden sayac
+     * yalnizca bolum TAMAMLANDIYSA artiyordu, yani carpip cikan oyuncu
+     * sinirsiz reklamsiz oynuyordu. Kacak kapatilinca ayni "2" esigi gercekte
+     * cok daha sik reklam demek olacakti; mevcut oyuncunun hissi bozulmasin
+     * diye esik 3'e alindi (bkz. [INTERSTITIAL_MIN_RUN_SECONDS]).
+     */
+    const val INTERSTITIAL_EVERY_N_LEVELS = 3
 
     /** Kac sonsuz-mod kosusundan sonra gecis reklami gosterilecek. */
     const val INTERSTITIAL_EVERY_N_ENDLESS_RUNS = 3
+
+    /**
+     * Bir kariyer kosusunun reklam sayacini artirmasi icin gereken en kisa
+     * sure. Basari sarti DEGIL — carpip biten kosu da sayilir, yoksa
+     * "carpip ana ekrana don, bolumu tekrar sec" dongusu reklamsiz kalir
+     * (2026-08-16'da bulunan kacak).
+     *
+     * Esik neden var: oyuncu yanlis bolume girip 2 saniyede cikarsa bu bir
+     * "oturum" degildir; sayilirsa reklam menude gezinmenin cezasi olur.
+     * Deger [MIN_PAID_RUN_SECONDS] ile ayni mantiktan geliyor.
+     */
+    const val INTERSTITIAL_MIN_RUN_SECONDS = 10
+
+    /**
+     * Bu bolum numarasina kadar (dahil) kariyer gecis reklami HIC
+     * gosterilmez.
+     *
+     * Sayac kacagi tek basina kapatilsaydi en cok zorlanan oyuncu — ayni
+     * bolumu tekrar tekrar deneyen yeni oyuncu — en cok reklam goren kesime
+     * donusurdu ve erken hunide terk artardi. Ilk bolumler oyunun vitrini;
+     * orada reklam gosterilmiyor.
+     */
+    const val INTERSTITIAL_FREE_LEVELS = 4
 
     /**
      * KULLANILMIYOR (2026-08-14). Sonuc ekranindaki "TEKRAR" butonu kaldirildi:

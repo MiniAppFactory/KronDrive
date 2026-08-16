@@ -13,6 +13,7 @@ import com.miniappfactory.krondrive.data.MissionType
 import com.miniappfactory.krondrive.data.PlayerProgress
 import com.miniappfactory.krondrive.data.WeeklyMissionGenerator
 import com.miniappfactory.krondrive.data.WeeklyMissionProgress
+import com.miniappfactory.krondrive.game.AdFrequency
 import com.miniappfactory.krondrive.game.GameConfig
 import com.miniappfactory.krondrive.game.GameEngine
 import com.miniappfactory.krondrive.game.LevelCatalog
@@ -171,6 +172,12 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
                         // TUM gorevler tamamlandiysa acilir (result.passed).
                         repository.recordLevelResult(levelId, result.stars, result.passed)
                         repository.incrementMissionProgress(MissionType.COMPLETE_LEVELS, 1)
+                    }
+                    // Reklam sayaci BASARIYA BAGLI DEGIL: bu blok eskiden
+                    // yukaridaki `completed` sartinin icindeydi ve carpip
+                    // cikan oyuncu sinirsiz reklamsiz oynayabiliyordu
+                    // (2026-08-16). Karar icin bkz. [AdFrequency].
+                    if (AdFrequency.countsTowardInterstitial(RunMode.CAREER, stats)) {
                         repository.incrementLevelsSinceInterstitial()
                     }
                 }
@@ -204,18 +211,20 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
     // -----------------------------------------------------------------
 
     /**
-     * Bolum/kosu sonrasi gecis reklami gosterilmeli mi. Esik [GameConfig]
-     * icinde tanimli — her bolumden sonra reklam GOSTERILMEZ.
+     * Bolum/kosu sonrasi gecis reklami gosterilmeli mi. Karar ve esikler
+     * [AdFrequency] icinde (saf Kotlin, JVM testli) — her bolumden sonra
+     * reklam GOSTERILMEZ ve ilk bolumler tamamen reklamsizdir.
+     *
+     * @param levelId kariyer bolum numarasi; kariyer disinda null.
      */
-    fun shouldShowInterstitial(mode: RunMode): Boolean {
+    fun shouldShowInterstitial(mode: RunMode, levelId: Int?): Boolean {
         val progress = playerProgress.value
-        return when (mode) {
-            RunMode.CAREER, RunMode.DAILY ->
-                progress.levelsSinceInterstitial >= GameConfig.INTERSTITIAL_EVERY_N_LEVELS
-
-            RunMode.ENDLESS ->
-                progress.endlessRunsSinceInterstitial >= GameConfig.INTERSTITIAL_EVERY_N_ENDLESS_RUNS
-        }
+        return AdFrequency.shouldShow(
+            mode = mode,
+            levelId = levelId,
+            levelsSince = progress.levelsSinceInterstitial,
+            endlessRunsSince = progress.endlessRunsSinceInterstitial
+        )
     }
 
     /**
