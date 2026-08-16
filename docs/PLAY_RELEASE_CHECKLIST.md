@@ -116,8 +116,28 @@ Uygulamalar → Depolama → Verileri temizle / reklam kimliğini sıfırla). Bu
   (8.3 MB) ve eşleniği `.apk`.
 - `builds/` `.gitignore`'da — repo şişmiyor.
 
-> **Hatırlatma:** keystore kaybolursa bu uygulamanın güncellemesi bir daha
-> yayınlanamaz. Repo dışında bir yere yedeklendiği **teyit edilmedi** — bkz. S-6.
+**Keystore ORTAK kullanılıyor — proje sahibi kararı, 2026-08-16.** Sertifika
+DN'i `CN=Blast the Blocks, OU=AppDeveloper, O=AppDeveloper, L=Istanbul, C=TR`;
+SHA-256 `1497473b7f18d1890b43254623605a65c35bfee9e627b0105e4b23bc22bde2d0`.
+Anahtar başka bir MiniAppFactory uygulamasından geliyor ve **bilerek**
+paylaşılıyor. Play tek anahtarın birden çok uygulamada kullanılmasını
+engellemez. Kron Drive'a ayrı keystore üretilmeyecek.
+
+Paylaşımın bilinen sınırı: uygulamalardan biri başka bir geliştiriciye
+devredilirse anahtarın ayrılması gerekir. Uygulamalar birbirinin verisine
+erişmez (`sharedUserId` tanımlı değil).
+
+> **Hatırlatma — düzeltildi.** Bu kutu önceden "keystore kaybolursa güncelleme
+> bir daha yayınlanamaz" diyordu. Alias `UPLOAD` olduğu için bu bir **upload**
+> anahtarıdır ve Play App Signing'de asıl imzalama anahtarını Google tutar:
+> upload anahtarı kaybolur veya sızarsa **Google'dan sıfırlatılabilir**.
+> Yine de yedek şart — sıfırlama bir destek süreci, günler alabilir ve o süre
+> boyunca güncelleme yayınlanamaz. Repo dışına yedeklendiği hâlâ **teyit
+> edilmedi** — bkz. S-6.
+>
+> ⚠ Bu düzeltme dosya adına ve alias'a dayanıyor; Play konsolunda "Play App
+> Signing" kaydının **açık olduğu doğrulanmadı**. Kayıt yoksa eski uyarı
+> geçerlidir (anahtar kaybı = kalıcı). Konsoldan teyit edilmeli.
 
 ### A-9 · Uygulama içi sürüm metni yanlış — **EKSİK (küçük)**
 `ui/settings/SettingsScreen.kt:233` hâlâ `"Sürüm 1.0.0" / "Version 1.0.0"` yazıyor;
