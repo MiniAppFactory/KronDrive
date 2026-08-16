@@ -5,7 +5,7 @@
 `mem` skill'ini çağır ve şunları oku:
 
 - `C:\Users\bhdre\.claude\memory\projects\kron-drive.md` (kalıcı proje hafızası)
-- `docs/HANDOVER_20260813.md` (en son handover)
+- `docs/HANDOVER_20260816.md` (en son handover)
 
 Bu iki dosya "nerede kalmıştık"ı anlatır. Hafıza yazıldığı andaki durumdur;
 bir dosya/fonksiyon adı geçiyorsa iddia etmeden önce koda bakıp doğrula.
