@@ -1,0 +1,294 @@
+diff --git a/source/app/src/main/java/com/miniappfactory/krondrive/MainActivity.kt b/source/app/src/main/java/com/miniappfactory/krondrive/MainActivity.kt
+index ed0af04..e30a07a 100644
+--- a/source/app/src/main/java/com/miniappfactory/krondrive/MainActivity.kt
++++ b/source/app/src/main/java/com/miniappfactory/krondrive/MainActivity.kt
+@@ -32,6 +32,11 @@ class MainActivity : ComponentActivity() {
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
++        // GECICI OLCUM KANCASI — 2026-08-16. Olcum bitince SILINIR.
++        com.miniappfactory.krondrive.game.PerfProbe.forcedTheme =
++            intent?.getIntExtra("perftheme", -1) ?: -1
++        com.miniappfactory.krondrive.game.PerfProbe.mask =
++            intent?.getIntExtra("perfmask", -1) ?: -1
+         enableEdgeToEdge()
+ 
+         // Donanim ses tuslari HER ZAMAN oyunun kullandigi akisi kontrol etsin
+diff --git a/source/app/src/main/java/com/miniappfactory/krondrive/game/GameEngine.kt b/source/app/src/main/java/com/miniappfactory/krondrive/game/GameEngine.kt
+index 07cdd20..2fba84e 100644
+--- a/source/app/src/main/java/com/miniappfactory/krondrive/game/GameEngine.kt
++++ b/source/app/src/main/java/com/miniappfactory/krondrive/game/GameEngine.kt
+@@ -97,7 +97,11 @@ class GameEngine(
+     var countdownRemaining: Float = GameConfig.COUNTDOWN_SECONDS.toFloat()
+         private set
+ 
+-    val theme: RoadTheme = RoadTheme.entries[random.nextInt(RoadTheme.entries.size)]
++    val theme: RoadTheme = if (PerfProbe.forcedTheme in RoadTheme.entries.indices) {
++        RoadTheme.entries[PerfProbe.forcedTheme]
++    } else {
++        RoadTheme.entries[random.nextInt(RoadTheme.entries.size)]
++    }
+ 
+     /** Bu kosunun taban hizi — bolum kendi baslangic hizini verebilir. */
+     private val baseSpeed: Float =
+diff --git a/source/app/src/main/java/com/miniappfactory/krondrive/ui/game/GameRenderer.kt b/source/app/src/main/java/com/miniappfactory/krondrive/ui/game/GameRenderer.kt
+index 5205eaa..bd4154a 100644
+--- a/source/app/src/main/java/com/miniappfactory/krondrive/ui/game/GameRenderer.kt
++++ b/source/app/src/main/java/com/miniappfactory/krondrive/ui/game/GameRenderer.kt
+@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.TextUnit
+ import com.miniappfactory.krondrive.game.CarCatalog
+ import com.miniappfactory.krondrive.game.GameConfig
+ import com.miniappfactory.krondrive.game.GameEngine
++import com.miniappfactory.krondrive.game.PerfProbe
+ import com.miniappfactory.krondrive.game.RoadTheme
+ import com.miniappfactory.krondrive.ui.common.CarSpriteSet
+ import com.miniappfactory.krondrive.ui.common.drawCarBody
+@@ -57,7 +58,11 @@ fun DrawScope.drawGameScene(
+         drawSideBackgrounds(engine)
+         drawTrack(engine)
+     }
+-    drawSpeedometer(engine, density, textMeasurer, gaugeValueSize, gaugeLabelSize, gaugeSmallSize)
++    // GECICI OLCUM KANCASI — 2026-08-16, olcum bitince SILINIR.
++    if (PerfProbe.on(PerfProbe.BIT_GAUGE)) {
++        drawSpeedometer(engine, density, textMeasurer, gaugeValueSize, gaugeLabelSize, gaugeSmallSize)
++    }
++    if (!PerfProbe.on(PerfProbe.BIT_ACTORS)) return
+     scale(density, density, pivot = Offset.Zero) {
+         engine.coins.forEach { drawCoin(it) }
+         engine.obstacles.forEach {
+@@ -208,11 +213,18 @@ private fun DrawScope.drawSideBackgrounds(engine: GameEngine) {
+     val rightX = engine.roadX + engine.roadWidth
+     val rightW = w - rightX
+     if (leftW <= 0f || h <= 0f) return
++    // GECICI OLCUM KANCASI — 2026-08-16, olcum bitince SILINIR.
++    val base = PerfProbe.on(PerfProbe.BIT_SIDE_BASE)
++    val decor = PerfProbe.on(PerfProbe.BIT_SIDE_DECOR)
++    if (!base && !decor) return
+ 
+     when (engine.theme) {
+         RoadTheme.GRASS -> {
+-            drawRect(Color(0xFF92D050), Offset(0f, 0f), Size(leftW, h))
+-            drawRect(Color(0xFF92D050), Offset(rightX, 0f), Size(rightW, h))
++            if (base) {
++                drawRect(Color(0xFF92D050), Offset(0f, 0f), Size(leftW, h))
++                drawRect(Color(0xFF92D050), Offset(rightX, 0f), Size(rightW, h))
++            }
++            if (!decor) return
+             // Cim cizgileri tek renk ve tek kalinlikta; hepsi tek stroke
+             // yolunda toplaniyor. Sol ve sag parcalar ayri x araliklarinda
+             // (leftW < rightX), ardisik siralar 120 birim arayla ve yalnizca
+@@ -230,11 +242,14 @@ private fun DrawScope.drawSideBackgrounds(engine: GameEngine) {
+         }
+ 
+         RoadTheme.BEACH -> {
+-            drawRect(Color(0xFFEED9A0), Offset(0f, 0f), Size(leftW, h))
+-            drawRect(Color(0xFFEED9A0), Offset(rightX, 0f), Size(rightW, h))
+             val waterW = max(22f, (leftW * 0.2f))
+-            drawRect(Color(0xFF5AC8FA), Offset(0f, 0f), Size(waterW, h))
+-            drawRect(Color(0xFF5AC8FA), Offset(w - waterW, 0f), Size(waterW, h))
++            if (base) {
++                drawRect(Color(0xFFEED9A0), Offset(0f, 0f), Size(leftW, h))
++                drawRect(Color(0xFFEED9A0), Offset(rightX, 0f), Size(rightW, h))
++                drawRect(Color(0xFF5AC8FA), Offset(0f, 0f), Size(waterW, h))
++                drawRect(Color(0xFF5AC8FA), Offset(w - waterW, 0f), Size(waterW, h))
++            }
++            if (!decor) return
+             // Kopuk parcalari: sol ve sag su seridinin uzerinde, 80 birim
+             // arayla, en fazla 28 birim uzunlukta — ust uste binmiyorlar.
+             val path = ScenePaths.sideStripe
+@@ -249,11 +264,14 @@ private fun DrawScope.drawSideBackgrounds(engine: GameEngine) {
+         }
+ 
+         RoadTheme.CROWD -> {
+-            drawRect(Color(0xFF6EA04C), Offset(0f, 0f), Size(leftW, h))
+-            drawRect(Color(0xFF6EA04C), Offset(rightX, 0f), Size(rightW, h))
+-            // Pist bariyerleri
+-            drawRect(Color(0xFFCFD8DC), Offset(leftW - 10f, 0f), Size(10f, h))
+-            drawRect(Color(0xFFCFD8DC), Offset(rightX, 0f), Size(10f, h))
++            if (base) {
++                drawRect(Color(0xFF6EA04C), Offset(0f, 0f), Size(leftW, h))
++                drawRect(Color(0xFF6EA04C), Offset(rightX, 0f), Size(rightW, h))
++                // Pist bariyerleri
++                drawRect(Color(0xFFCFD8DC), Offset(leftW - 10f, 0f), Size(10f, h))
++                drawRect(Color(0xFFCFD8DC), Offset(rightX, 0f), Size(10f, h))
++            }
++            if (!decor) return
+             // Piksel seyirci bloklari.
+             //
+             // Renk EKRAN y'sine degil DUNYA y'sine bagli. Eskiden kayan `y`
+@@ -314,8 +332,11 @@ private fun DrawScope.drawSideBackgrounds(engine: GameEngine) {
+ 
+         RoadTheme.NIGHT -> {
+             val gradient = nightSkyBrush(h)
+-            drawRect(gradient, Offset(0f, 0f), Size(leftW, h))
+-            drawRect(gradient, Offset(rightX, 0f), Size(rightW, h))
++            if (base) {
++                drawRect(gradient, Offset(0f, 0f), Size(leftW, h))
++                drawRect(gradient, Offset(rightX, 0f), Size(rightW, h))
++            }
++            if (!decor) return
+             // Gece cizgileri: sol ve sag ayri x araliklarinda, siralar 105
+             // birim arayla ve 12 birim yukseliyor — degme yok.
+             val stripes = ScenePaths.sideStripe
+@@ -395,7 +416,11 @@ private fun addMiniFlag(pole: Path, cloth: Path, x: Float, y: Float) {
+ private fun DrawScope.drawTrack(engine: GameEngine) {
+     val h = engine.viewHeight
+     if (h <= 0f) return
+-    drawRect(Color(0xFF3A4048), Offset(engine.roadX, 0f), Size(engine.roadWidth, h))
++    // GECICI OLCUM KANCASI — 2026-08-16, olcum bitince SILINIR.
++    if (PerfProbe.on(PerfProbe.BIT_ROAD_BASE)) {
++        drawRect(Color(0xFF3A4048), Offset(engine.roadX, 0f), Size(engine.roadWidth, h))
++    }
++    if (!PerfProbe.on(PerfProbe.BIT_ROAD_DECOR)) return
+ 
+     // Kirmizi/beyaz kerb bloklari. Blok boyu ve renk kontrasti bilerek
+     // dusuruldu — bkz. GameConfig.KERB_BLOCK_HEIGHT_PX (goz yorgunlugu).
+diff --git a/source/app/src/main/java/com/miniappfactory/krondrive/game/PerfProbe.kt b/source/app/src/main/java/com/miniappfactory/krondrive/game/PerfProbe.kt
+new file mode 100644
+index 0000000..833b4e3
+--- /dev/null
++++ b/source/app/src/main/java/com/miniappfactory/krondrive/game/PerfProbe.kt
+@@ -0,0 +1,29 @@
++package com.miniappfactory.krondrive.game
++
++/**
++ * GECICI OLCUM ARACI — 2026-08-16 performans olcumu. Olcum bitince SILINIR.
++ *
++ * Tek bir APK ile hem temayi sabitlemeyi hem de sahne katmanlarini tek tek
++ * kapatmayi (ablasyon) saglar; boylece her varyant icin yeniden derleme
++ * gerekmez. Degerler MainActivity'de Intent ekstralarindan okunur:
++ *
++ *   am start -n <pkg>/.MainActivity --ei perftheme 2 --ei perfmask 63
++ */
++object PerfProbe {
++    /** -1 = rastgele (uretim davranisi). 0..3 = RoadTheme sirasi. */
++    @JvmStatic
++    var forcedTheme: Int = -1
++
++    /** Bit maskesi; -1 = hepsi acik. */
++    @JvmStatic
++    var mask: Int = -1
++
++    const val BIT_SIDE_BASE = 0      // yol kenari zemin dikdortgenleri
++    const val BIT_SIDE_DECOR = 1     // seyirci / sehir isiklari / cizgiler / bayraklar
++    const val BIT_ROAD_BASE = 2      // asfalt dikdortgeni
++    const val BIT_ROAD_DECOR = 3     // kerb + serit cizgileri + noktalar
++    const val BIT_ACTORS = 4         // oyuncu + trafik + coin + parcacik + far
++    const val BIT_GAUGE = 5          // hiz gostergesi
++
++    fun on(bit: Int): Boolean = (mask shr bit) and 1 == 1
++}
+diff --git a/source/app/src/test/java/com/miniappfactory/krondrive/game/TempEngineStepBenchTest.kt b/source/app/src/test/java/com/miniappfactory/krondrive/game/TempEngineStepBenchTest.kt
+new file mode 100644
+index 0000000..af0e0b2
+--- /dev/null
++++ b/source/app/src/test/java/com/miniappfactory/krondrive/game/TempEngineStepBenchTest.kt
+@@ -0,0 +1,108 @@
++package com.miniappfactory.krondrive.game
++
++import com.miniappfactory.krondrive.data.BoosterType
++import org.junit.Test
++import kotlin.random.Random
++
++/**
++ * GECICI OLCUM DOSYASI — 2026-08-16 performans olcumu icin.
++ * Olcum bitince SILINIR. Assert yok, yalnizca stdout raporu.
++ *
++ * Yalnizca RUNNING fazindaki kareler sayilir; kosu carpinca yeni motor kurulur
++ * (kurulum suresi olcume GIRMEZ).
++ */
++class TempEngineStepBenchTest {
++
++    private var seedCounter = 0
++
++    private fun newRunningEngine(): GameEngine {
++        val e = GameEngine(
++            mode = RunMode.ENDLESS,
++            level = null,
++            upgrades = UpgradeLevels(),
++            boosters = emptySet<BoosterType>(),
++            endlessRecordSeconds = 0,
++            carStyle = CarStyle(CarCatalog.defaultShape, CarCatalog.defaultColor),
++            random = Random(4000 + seedCounter++)
++        )
++        e.setViewport(360f, 740f)
++        var guard = 0
++        while (e.phase == RunPhase.COUNTDOWN && guard++ < 1000) e.step(1f / 60f)
++        return e
++    }
++
++    /**
++     * [targetFrames] kadar RUNNING karesi olcer. Carpma olunca saat DURDURULUP
++     * yeni motor kurulur. Donen: (toplam ns, sayilan kare, en son sahne durumu).
++     */
++    private fun measure(targetFrames: Int, boost: Boolean, steerEveryN: Int): Triple<Long, Int, String> {
++        val dt = 1f / 60f
++        var engine = newRunningEngine()
++        engine.setBoost(boost)
++        var counted = 0
++        var totalNs = 0L
++        var lastState = ""
++        var i = 0
++        while (counted < targetFrames) {
++            if (engine.phase != RunPhase.RUNNING) {
++                lastState = "obstacles=${engine.obstacles.size} coins=${engine.coins.size} " +
++                    "particles=${engine.particles.size}"
++                engine = newRunningEngine()
++                engine.setBoost(boost)
++                i = 0
++                continue
++            }
++            // Gercekci girdi: belirli araliklarla serit degistir.
++            if (steerEveryN > 0 && i % steerEveryN == 0) {
++                if ((i / steerEveryN) % 2 == 0) engine.steerLeft() else engine.steerRight()
++            }
++            val t0 = System.nanoTime()
++            engine.step(dt)
++            val t1 = System.nanoTime()
++            totalNs += (t1 - t0)
++            counted++
++            i++
++        }
++        if (lastState.isEmpty()) {
++            lastState = "obstacles=${engine.obstacles.size} coins=${engine.coins.size} " +
++                "particles=${engine.particles.size}"
++        }
++        return Triple(totalNs, counted, lastState)
++    }
++
++    @Test
++    fun benchStep() {
++        println("[BENCH] JVM=" + System.getProperty("java.version") + " os=" + System.getProperty("os.name"))
++        // Isinma (JIT)
++        measure(50_000, boost = false, steerEveryN = 30)
++        measure(50_000, boost = true, steerEveryN = 30)
++
++        for ((label, boost) in listOf("no-boost" to false, "boost-held" to true)) {
++            val runs = DoubleArray(7)
++            var lastState = ""
++            for (r in runs.indices) {
++                val (ns, frames, state) = measure(30_000, boost = boost, steerEveryN = 30)
++                runs[r] = ns.toDouble() / frames
++                lastState = state
++            }
++            runs.sort()
++            println(
++                "[BENCH] %-12s median=%.0f ns/step  min=%.0f  max=%.0f  (7 kosu x 30000 RUNNING kare)  son sahne: %s"
++                    .format(label, runs[runs.size / 2], runs.first(), runs.last(), lastState)
++            )
++        }
++
++        // Tahsisat: uzun bir kosuda toplam heap artisi / kare.
++        val rt = Runtime.getRuntime()
++        for ((label, boost) in listOf("no-boost" to false, "boost-held" to true)) {
++            System.gc(); Thread.sleep(80); System.gc(); Thread.sleep(80)
++            val before = rt.totalMemory() - rt.freeMemory()
++            val (_, frames, _) = measure(200_000, boost = boost, steerEveryN = 30)
++            val after = rt.totalMemory() - rt.freeMemory()
++            println(
++                "[BENCH] alloc %-12s net heap delta=%d B over %d frames (GC'siz olculmedi; kaba ust sinir)"
++                    .format(label, after - before, frames)
++            )
++        }
++    }
++}

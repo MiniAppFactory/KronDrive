@@ -91,3 +91,10 @@ cd source
 
 Üçü de geçmeden "bitti" deme. Oyun mantığını değiştirdiysen `app/src/test/`
 altındaki testleri de güncelle.
+
+## En son handover
+
+`docs/HANDOVER_20260816_2.md` (2026-08-16 akşam) — bir öncekini
+(`HANDOVER_20260816.md`) **iptal etmez, üzerine ekler**. Yarım kalan
+performans ölçümü, onaylanmış ama uygulanmamış ekonomi değişiklikleri ve
+sahibinin verdiği yeni "Beety" aracı orada.
