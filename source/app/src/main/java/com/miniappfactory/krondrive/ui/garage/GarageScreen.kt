@@ -377,13 +377,21 @@ private fun CarCustomizeCard(
                 buyLabel = language.pick(tr = "GÖVDEYİ AL", en = "BUY BODY"),
                 onBuy = { onBuyShape(shape.id) }
             )
-            UnlockAction(
-                item = color,
-                state = colorState,
-                language = language,
-                buyLabel = language.pick(tr = "RENGİ AL", en = "BUY COLOUR"),
-                onBuy = { onBuyColor(color.id) }
-            )
+            // Onizlenen govdenin FABRIKA boyasi icin satin alma satiri
+            // GOSTERILMEZ: o boya gövdeyi almakla birlikte zaten aciliyor
+            // (bkz. CarCatalog.effectiveOwnedColors). Aksi halde ekran
+            // "Kuş SLX · seviye 2 gerekiyor" ile "Petrol · seviye 3 gerekiyor"
+            // satirlarini yan yana gosteriyor ve oyuncu boyayi AYRICA almasi
+            // gerektigini saniyor — yanlis bilgi.
+            if (color.id != shape.defaultColorId) {
+                UnlockAction(
+                    item = color,
+                    state = colorState,
+                    language = language,
+                    buyLabel = language.pick(tr = "RENGİ AL", en = "BUY COLOUR"),
+                    onBuy = { onBuyColor(color.id) }
+                )
+            }
 
             SubSectionTitle(language.pick(tr = "GÖVDE", en = "BODY"))
             Row(
@@ -395,7 +403,11 @@ private fun CarCustomizeCard(
                 CarCatalog.shapes.forEach { def ->
                     ShapeChip(
                         shape = def,
-                        color = color,
+                        // Secili cip oyuncunun GERCEK boyasini gosterir, gecici
+                        // onizleme boyasini degil: kilitli bir araca bakarken
+                        // onizleme onun fabrika boyasina geciyor ve bu, sahibin
+                        // kendi aracinin cipini de o renge boyuyordu.
+                        color = CarCatalog.color(progress.carColorId),
                         selected = def.id == progress.carShapeId,
                         previewed = def.id == previewShapeId,
                         state = CarCatalog.stateOf(
@@ -407,7 +419,22 @@ private fun CarCustomizeCard(
                         language = language,
                         onClick = {
                             previewShapeId = def.id
-                            if (CarCatalog.isOwned(def, progress.ownedCarShapes)) onSelectShape(def.id)
+                            if (CarCatalog.isOwned(def, progress.ownedCarShapes)) {
+                                onSelectShape(def.id)
+                            } else {
+                                // SAHIP OLUNMAYAN araca bakarken onizleme onun
+                                // FABRIKA boyasina gecer (2026-08-16, proje
+                                // sahibi: *"burada on izlemede default verdigimiz
+                                // renkler gozukurse harika olur"*).
+                                //
+                                // Eskiden buyuk onizleme oyuncunun KENDI boyasini
+                                // kullaniyordu: cipte Kuş SLX petrol yesili
+                                // gorunuyor, hemen ustundeki karta bakinca kirmizi
+                                // cikiyordu. Ayni arac iki yerde iki renk =
+                                // celiski. Sahip olunan aracta oyuncunun secimi
+                                // korunur, cunku orada gercekten surdugu renk odur.
+                                previewColorId = def.defaultColorId
+                            }
                         }
                     )
                 }
@@ -536,9 +563,11 @@ private fun UnlockAction(
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = when (state) {
+                // Seviye VE fiyat birlikte yazilir: ikisi ayri sart ve
+                // seviyeyi gorup "demek bedava" diye dusunmek cok kolaydi.
                 CarUnlockState.LEVEL_LOCKED -> language.pick(
-                    tr = "${item.name(language)} · araç seviyesi ${item.requiredCarLevel} gerekiyor",
-                    en = "${item.name(language)} · needs car level ${item.requiredCarLevel}"
+                    tr = "${item.name(language)} · araç seviyesi ${item.requiredCarLevel} ve ${item.priceCoins} coin gerekiyor",
+                    en = "${item.name(language)} · needs car level ${item.requiredCarLevel} and ${item.priceCoins} coins"
                 )
 
                 CarUnlockState.TOO_EXPENSIVE -> language.pick(
@@ -563,7 +592,10 @@ private fun UnlockAction(
                 "${item.priceCoins}"
             },
             subtitle = if (state == CarUnlockState.LEVEL_LOCKED) {
-                null
+                // Buton "SV 2" diyor (engelleyen sart bu), alt satir fiyati
+                // gosteriyor — oyuncu seviyeye ulasmadan once ne kadar coin
+                // biriktirmesi gerektigini bilsin.
+                language.pick(tr = "${item.priceCoins} coin", en = "${item.priceCoins} coins")
             } else {
                 buyLabel
             },
@@ -697,9 +729,14 @@ private fun statusText(
 ): String = when {
     selected -> language.pick(tr = "SEÇİLİ", en = "IN USE")
     state == CarUnlockState.OWNED -> language.pick(tr = "sahipsin", en = "owned")
+    // Seviye kilidi FIYATI GIZLEMEZ. Eskiden yalnizca "Sv 2" yaziyordu ve
+    // oyuncu seviyeyi gorunce aracin BEDAVA acilacagini saniyordu (proje
+    // sahibi 2026-08-16'da tam bunu sordu: *"garajdan araclari acmak icin
+    // level gerekiyor peki bedava mi aliyorlar?"*). Iki sart da ayri ayri
+    // gecerli: once seviye, sonra coin.
     state == CarUnlockState.LEVEL_LOCKED -> language.pick(
-        tr = "Sv ${item.requiredCarLevel}",
-        en = "Lv ${item.requiredCarLevel}"
+        tr = "Sv ${item.requiredCarLevel} · ${item.priceCoins}",
+        en = "Lv ${item.requiredCarLevel} · ${item.priceCoins}"
     )
 
     else -> "${item.priceCoins}"

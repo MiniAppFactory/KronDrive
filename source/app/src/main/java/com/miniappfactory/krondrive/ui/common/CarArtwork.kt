@@ -106,6 +106,22 @@ fun DrawScope.drawCarShadow() {
     )
 }
 
+/**
+ * Yere dusen golgeyi YALNIZCA vektor cizimde cizer.
+ *
+ * Sprite'larda cizilmiyor (2026-08-16, proje sahibi: *"arabanin altinda golge
+ * var sisman gozukuyor, o golge olmasin bence"*). Sebep: referans cizimler
+ * kendi temas golgelerini ve kenar karartmalarini zaten tasiyor. Ustune
+ * [drawCarShadow]'un 42x68'lik ovali binince arac gercek silueti disina
+ * tasan bulanik bir hale kazaniyor ve genis/sisman okunuyor.
+ *
+ * Vektor yolunda golge KALIYOR: orada gövde duz renkli poligonlardan olusuyor
+ * ve yere basma hissini yalnizca bu oval veriyor.
+ */
+fun DrawScope.drawCarShadowIfVector(style: CarStyle, sprites: CarSpriteSet?) {
+    if (sprites?.of(style.shape.id) == null) drawCarShadow()
+}
+
 /** Katalogdaki parcalari sirayla cizer (liste sirasi = katman sirasi). */
 fun DrawScope.drawCarParts(style: CarStyle) {
     style.shape.parts.forEach { part ->
@@ -298,7 +314,7 @@ fun DrawScope.drawStyledCar(
 ) {
     translate(x, y) {
         scale(GameConfig.CAR_ART_SCALE, GameConfig.CAR_ART_SCALE, pivot = Offset.Zero) {
-            drawCarShadow()
+            drawCarShadowIfVector(style, sprites)
             drawCarBody(style, sprites)
             if (boosting) drawCarBoostFlame(style, flamePhase)
         }
@@ -333,7 +349,7 @@ fun CarPreview(
         translate(size.width / 2f, size.height / 2f) {
             scale(fit, fit, pivot = Offset.Zero) {
                 translate(-(left + right) / 2f, -(top + bottom) / 2f) {
-                    drawCarShadow()
+                    drawCarShadowIfVector(style, sprites)
                     drawCarBody(style, sprites)
                     if (boosting) drawCarBoostFlame(style)
                 }

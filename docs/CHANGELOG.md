@@ -1,5 +1,87 @@
 # Değişiklik günlüğü
 
+## 2026-08-16 — Yol deseni cihazda düzeltildi + kontrol tuşu ikonları
+
+Günün tamamı **cihazda görülen** kusurların düzeltilmesiydi (SM-G950F,
+Android 7.0 / API 24). Beşi de baseline'dan beri vardı; hiçbiri dün gelen
+sprite/fabrika boyası işinin yan etkisi değil.
+
+**Şerit çizgileri artık gerçekten kesikli.** Kesikler tek bir `drawLine` +
+`PathEffect.dashPathEffect` ile çiziliyordu ve bu mekanizma bu cihazda
+**sessizce yok sayılıyor** — hata yok, çizgi var, ama düz. Mekanizma
+kaldırıldı; kesikler kerb blokları gibi ayrık `drawRect` çağrılarıyla
+çiziliyor. Aynısı `LanguageGateScreen`'e de uygulandı. `LANE_DASH_ON_PX` /
+`LANE_DASH_OFF_PX` sabitleri değişmedi.
+Ölçüm (cihaz): **126 px dolu / 162 px boş = ayarlı 42 / 54 dp.**
+
+> **Açık kalan soru — dürüstlük notu.** Sahibi "önceden kesikliydi, yeni
+> bozuldu" dedi ve 16:04'teki bir APK'dan kesikli ekran görüntüsü gönderdi.
+> Ama commit geçmişinde mekanizma baseline'dan beri **değişmemiş** ve
+> `builds/` altındaki eski arşiv APK'sı **aynı cihazda düz çiziyor**. O 16:04
+> APK'sı commit edilmemiş bir ağaçtan derlendiği için diff'i yok. "Hangi
+> değişiklik bozdu" sorusu **cevapsız** kaldı; bir commit suçlanmıyor.
+
+**Yol kenarı desenleri yanlış yöne akıyordu.** Çimen çizgileri, plaj köpüğü,
+seyirci bayrakları, gece çizgileri ve gece şehir ışıkları **yukarı**, şerit
+çizgileri ve asfalt dokusu **aşağı** gidiyordu. Beşinin de işareti çevrildi.
+Ölçüm (cihaz, kare farkı çapraz-korelasyonu): çimen **+16 px/kare aşağı**,
+şerit **+57 px/kare aşağı** — hız farkı kasıtlı, derinlik ondan geliyor.
+
+**Kerb iki ayrı sebepten yanlıştı.** (a) Bloklar **sabit ızgaraya**
+çiziliyordu; `roadOffset` konumu değil yalnızca **rengi** çeviriyordu — kerb
+kaymıyor, yerinde faz atlıyordu. Ölçüm: kırmızı/beyaz sınırları kare kare
+aynı y'de (**+0 px**), düzeltmeden sonra **+38 px aşağı**. (b) Hız çarpanı
+1/12 idi, **1.00** yapıldı. Sahibi: *"kerbler aslında sabit, araba yanından
+geçiyor; o hissi vermek için hareket ettiriyorsun. Kerb hızı araba ile aynı
+olmalı ki araba hızlandıkça hızlansın, yavaşladıkça yavaşlasın — kerb sabit
+kalırsa bu his kaybolur."* İlke: paralaks **derinlikten** doğar, yanal
+mesafeden değil — kerb yola boyalıdır, kameradan şerit çizgisiyle aynı
+uzaklıktadır.
+
+Hız 12 katına çıkınca titreşim de 12 katına çıktığı için blok boyu
+**46 → 50 px** (`GameConfig.KERB_BLOCK_HEIGHT_PX`): en yüksek hızda
+(~1650 px/s) geçiş oranı 16.5 Hz, üst sınır olarak şerit çizgilerinin aynı
+koşuldaki 17.2 Hz'i alındı — o desen 1.00 çarpanda zaten çalışıyor ve sahibi
+görünümünü onayladı. Periyot (100) şerit periyodundan (96) **bilerek** farklı;
+eşitlenirse yol düzleminin tamamı aynı anda "tık" yapar.
+
+> Sıra önemliydi: (a) düzeltilmeden (b) yapılsaydı iş **kötüleşirdi** — kayan
+> bordür değil, saniyede birkaç kez topluca yanıp sönen bordür olurdu.
+
+**Seyirci renk titremesi.** Renk kayan **ekran** y'sine bağlıydı, **dünya**
+y'sine bağlandı; negatifte bütün kalabalığı siyaha düşüren `%` yerine `mod`
+kullanıldı. Kalıntı titreme için ikinci düzeltme: indeks anahtarı
+`x + rowKey / 6f` **daima tam sayıya oturuyor** (rowKey 42'nin, x 3'ün katı),
+`floor()` bıçak sırtında kalıyor ve epsilon indeksi kaydırıyordu →
+`roundToInt()`. Cihazda **ölçüldü**: tema geçici olarak CROWD'a sabitlenip
+üç ardışık kare karşılaştırıldı — üst bantta %0.3, alt bantta %0.0 renk
+değişimi (düzeltmeden önce alt bantta ~%20). Tema sabiti ölçümden sonra
+geri alındı.
+
+**Kontrol tuşları: emoji gitti, çizim geldi.** `◀ ▶ ⚡ 📣` glifleri kaldırıldı;
+yerine Compose Canvas ikonları — dolu yuvarlatılmış üçgen oklar, **sarı**
+şimşek (`KronColors.AccentBright`), ampullü korna. Gerekçe: emoji her Android
+sürümünde farklı yazı tipinden çiziliyor (cihaz API 24), kendi renkleriyle
+geliyor ve butonların düz beyaz diliyle uyuşmuyor. Sahibi referans görsel
+gönderdi; görseller stok/clipart olduğu için **gömülmedi** — bakılıp aynı biçim
+kendimiz çizildi. **Korna sağ sütuna, yön okunun üstüne alındı** (sahibi:
+*"zaten bir fonksiyonu yok"*); dünkü "alt ortada 48 dp" yerleşimi geçersiz.
+
+**Boğa 67'nin fabrika boyası siyah** (`COLOR_MIDNIGHT`, sahibi kararı). Fabrika
+boyası kuralı aynı: gövdeye sahip olmak boyayı da açıyor, boya gövdeye kilitli
+değil. En koyu gece zemininde araç kayboluyor mu diye bakıldı — kaybolmuyor,
+beyaz çift şerit ve camlar siluet taşıyor (**gözle denetim**, ölçülmüş kontrast
+değeri değil).
+
+**Dünkü performans iddiası geri çekildi.** Ayrıntı aşağıda ve `PROVENANCE.md`
+#16'nın düzeltme kutusunda.
+
+Kanıt (bu belgeye yazılan, cihazda ölçülmüş değerler): şerit 126/162 px;
+çimen +16 px/kare, şerit +57 px/kare; kerb +0 → +38 px/kare. Ölçümlerin hepsi
+SM-G950F üzerinde. Derleme/test çıktısı bu belgeyi yazan tarafça görülmedi —
+build kanıtı uygulayan ajanların görev raporundadır ve orada aranmalıdır.
+Ayrıntı: `PROVENANCE.md` sapma #18–#23.
+
 ## 2026-08-15 (akşam) — Araç sprite'ları, fabrika boyası, kontrol tuşu düzeltmesi
 
 **Araçlar artık sprite.** `incoming/car_refs/` altındaki referans çizimler
@@ -32,6 +114,16 @@ olduğu için denetim her zaman patlıyordu.
 
 **Performans.** Sprite geçişi ölçüldü (S8): kare süresi medyanı 24–27 ms,
 vektörde 25 ms — regresyon yok. Sprite'lar süreç boyunca tek kopya tutuluyor.
+
+> **Düzeltme (2026-08-16): yukarıdaki "regresyon yok" iddiası geri çekildi.**
+> Tema her koşuda **rastgele** seçiliyor (`GameEngine.kt:100`) ve temalar
+> arasında kare başına çizim çağrısı ~185 ile ~780 arasında (**4 kat**)
+> değişiyor. O A/B ölçümü temayı sabitlemedi, dolayısıyla 24–27 ms ile 25 ms
+> farklı temaların karşılaştırması da olabilir — sayılar bir şey kanıtlamıyor.
+> Sprite kararı **mimari gerekçeyle** duruyor (hazır bitmap kompozitlemek,
+> karede onlarca poligon + gradyan kurmaktan az iş), ama **elde temiz bir
+> ölçüm yok**. "Tek kopya" gözlemi tema seçiminden bağımsız, o geçerli.
+> **Bundan sonraki her performans ölçümünde tema sabitlenmelidir.**
 
 ## 2026-08-15 — Araca özel motor sesi + korna
 

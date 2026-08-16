@@ -31,7 +31,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -39,10 +41,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -80,8 +93,12 @@ import com.miniappfactory.krondrive.ui.common.PrimaryButton
 import com.miniappfactory.krondrive.ui.common.SecondaryButton
 import com.miniappfactory.krondrive.ui.common.ObjectiveDots
 import com.miniappfactory.krondrive.ui.theme.KronColors
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** HUD'daki tek bir hedef satiri: "GEÇİŞ 4/10" + durumu. */
+@Immutable
 private data class HudObjective(
     val label: String,
     /** "4/10" bicimi; sayilamayan hedeflerde bos. */
@@ -89,7 +106,18 @@ private data class HudObjective(
     val met: Boolean
 )
 
-/** HUD'un okudugu, kare kare degil de seyrek guncellenen ozet. */
+/**
+ * HUD'un okudugu, kare kare degil de seyrek guncellenen ozet.
+ *
+ * [Immutable] SART: icindeki [objectives] bir `List` ve Compose duz `List`'i
+ * kararsiz (unstable) sayar — tek bir kararsiz alan tum tipi kararsiz yapar,
+ * o da [GameHud]'i "skippable degil" hale getirirdi (parametre ayni kalsa bile
+ * her ust bestelemede govdesi bastan calisirdi). Buradaki soz sudur: bu nesne
+ * ve icindeki liste OLUSTUKTAN SONRA DEGISMEZ — [buildHud] her seferinde yeni
+ * bir HudState uretir, var olani duzenlemez. Sozu bozan bir alan eklenirse
+ * (ornegin `MutableList`) annotation da kaldirilmali.
+ */
+@Immutable
 private data class HudState(
     val score: Int = 0,
     val timeLabel: String = "",
@@ -102,9 +130,12 @@ private data class HudState(
     val objectives: List<HudObjective> = emptyList(),
     /** Hiz kilidi butonu gosterilsin mi (yalnizca sonsuz mod). */
     val speedLockAvailable: Boolean = false,
-    val speedLocked: Boolean = false,
-    /** Boost su an tutusabilir mi (bos/kilitliyse buton soluklasir). */
-    val boostReady: Boolean = true
+    val speedLocked: Boolean = false
+    // BURAYA `boostReady` EKLEME. Boost hazirligi ayri bir durumda tutuluyor
+    // (bkz. GameScreen'deki `boostReadyState`), cunku onu yalnizca kontrol
+    // katmani okuyor. Burada da durursa: HUD hicbir yerde gostermedigi halde,
+    // deger her degistiginde HudState'in yapisal esitligi bozulur ve GameHud
+    // gorunumu hic degismeyecekken yeniden bestelenir — hayalet bir tetik.
 )
 
 /**
@@ -141,7 +172,29 @@ fun GameScreen(
     // Motorun `phase` alani Compose durumu DEGIL — overlay'lerin dogru anda
     // gorunmesi icin her karede snapshot durumuna yansitiliyor.
     var phase by remember(engine) { mutableStateOf(engine.phase) }
-    var hud by remember(engine) { mutableStateOf(HudState()) }
+    // DIKKAT — `by` YOK, bilerek. `hud` bu govdede OKUNMAZ; yalnizca durum
+    // nesnesi asagi verilir ve [GameHud] onu kendi icinde okur.
+    //
+    // Eskiden `var hud by remember { ... }` idi ve govdede okunuyordu. Compose'da
+    // govdedeki bir snapshot okumasi O COMPOSABLE'IN restart scope'una abone
+    // olur; hud ~3 karede bir yazildigi icin GameScreen'in TAMAMI ~20 Hz'de
+    // yeniden besteleniyordu (bes kontrol butonu, kaydirma katmani, overlay
+    // kosullari... hepsi). "HUD'u seyrek guncelle" optimizasyonu boylece kendi
+    // amacini yok ediyordu. Okumayi asagi tasimak abone kumesini HUD'a daraltir.
+    val hudState = remember(engine) { mutableStateOf(HudState()) }
+    // Boost hazir mi: HUD'dan AYRI bir durum, cunku bu deger kosu boyunca
+    // birkac kez degisir, skor gibi surekli degil. Ayni sebeple asagida
+    // YALNIZCA gercekten degistiginde yazilir — ayni degeri her karede yazmak
+    // da (esitlik politikasi tutsa bile) gereksiz snapshot trafigidir.
+    val boostReadyState = remember(engine) { mutableStateOf(engine.isBoostReady()) }
+    // Geri sayim rakami. Motorun `countdownRemaining` alani Compose durumu
+    // DEGIL; eskiden ekranda azalmasinin tek sebebi `hud` yuzunden GameScreen'in
+    // 20 Hz'de yeniden bestelenmesiydi. O bagimlilik kalkinca rakam donardi,
+    // bu yuzden GORUNEN saniye acikca durum olarak tutuluyor ve saniye
+    // degistiginde yaziliyor (kare basina degil).
+    var countdownSeconds by remember(engine) {
+        mutableIntStateOf(kotlin.math.ceil(engine.countdownRemaining).toInt())
+    }
     var dodgeBanner by remember(engine) { mutableStateOf<String?>(null) }
     var dodgeBannerUntil by remember(engine) { mutableStateOf(0L) }
     var result by remember(engine) { mutableStateOf<RunResult?>(null) }
@@ -240,10 +293,21 @@ fun GameScreen(
                 if (dodgeBanner != null && now > dodgeBannerUntil) dodgeBanner = null
                 if (engine.phase != phase) phase = engine.phase
 
+                if (engine.phase == RunPhase.COUNTDOWN) {
+                    // Ekranda GORUNEN rakam degistiyse yaz. Ham float'i yazmak
+                    // 60 Hz'de bestelemeye donerdi; goruntu ayni, maliyet 60 kat.
+                    val seconds = kotlin.math.ceil(engine.countdownRemaining).toInt()
+                    if (seconds != countdownSeconds) countdownSeconds = seconds
+                }
+
+                // Boost hazirligi ancak DEGISTIGINDE yazilir.
+                val boostReady = engine.isBoostReady()
+                if (boostReady != boostReadyState.value) boostReadyState.value = boostReady
+
                 // HUD her karede degil, ~her 3 karede bir guncellenir — metin
                 // yeniden bestelemesi 60 Hz'de gereksiz maliyet.
                 if (frame % 3 == 0) {
-                    hud = buildHud(engine, language)
+                    hudState.value = buildHud(engine, language, hudState.value)
                 }
                 frame++
             }
@@ -253,6 +317,56 @@ fun GameScreen(
     // Arac sprite'lari: yukleme Composable bir is, cizim ise her karede yurur.
     // Bu yuzden burada bir kez yuklenip ciziciye parametre olarak veriliyor.
     val carSprites = rememberCarSprites()
+
+    // Kontrol geri cagrilari BIR KEZ kurulur (motor/haptik degismedikce ayni
+    // nesne). Sebep: [DrivingControls] eskiden `engine`i parametre olarak
+    // aliyordu ve `GameEngine` Compose icin kararsiz bir tip — tek basina
+    // composable'i "skippable degil" yapiyordu. Ustelik cagri yerinde kurulan
+    // `{ engine.steerLeft(); onSteer() }` gibi lambdalar `engine`/`haptics`
+    // yakaladigi icin derleyici tarafindan hatirlanamiyor, her bestelemede YENI
+    // nesne olarak iniyordu; bu da butonlarin parametrelerini "degismis"
+    // gosterip bes butonu bastan kurduruyordu. Davranis birebir ayni, yalnizca
+    // nesne kimligi sabit.
+    val onSteerLeft = remember(engine, haptics) {
+        {
+            engine.steerLeft()
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+    val onSteerRight = remember(engine, haptics) {
+        {
+            engine.steerRight()
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+    val onBrake = remember(engine) { { held: Boolean -> engine.setBrake(held) } }
+    val onBoost = remember(engine) { { held: Boolean -> engine.setBoost(held) } }
+    val onHorn = remember(haptics) {
+        {
+            // Bekleme suresi dolmadiysa ses calmaz; titresim de ancak ses
+            // gercekten caldiysa verilir.
+            if (EngineSoundManager.playHorn()) {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
+            Unit
+        }
+    }
+    val onPauseTap = remember(engine) {
+        {
+            if (engine.phase == RunPhase.RUNNING) {
+                engine.pause()
+                paused = true
+            }
+        }
+    }
+    val onToggleSpeedLock = remember(engine) {
+        {
+            engine.toggleSpeedLock()
+            // HUD ~3 karede bir guncelleniyor; kilit durumu ANINDA gorunsun
+            // diye burada da yansitiliyor.
+            hudState.value = hudState.value.copy(speedLocked = engine.speedLocked)
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(KronColors.Background)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -316,20 +430,19 @@ fun GameScreen(
                     }
             )
             DrivingControls(
-                engine = engine,
                 language = language,
-                boostReady = hud.boostReady,
+                // Durum NESNESI iniyor, degeri degil: okuma asagida yapilir,
+                // boylece boost hazirligi degistiginde GameScreen degil yalnizca
+                // kontrol katmani yeniden bestelenir.
+                boostReady = boostReadyState,
                 // Korna oynanisi HIC etkilemez; ses kapaliyken buton hic
                 // gosterilmez (olu butona basmak "bozuk" hissi verir).
                 hornAvailable = progress.soundEnabled,
-                onHorn = {
-                    // Bekleme suresi dolmadiysa ses calmaz; titresim de
-                    // ancak ses gercekten caldiysa verilir.
-                    if (EngineSoundManager.playHorn()) {
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    }
-                },
-                onSteer = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+                onSteerLeft = onSteerLeft,
+                onSteerRight = onSteerRight,
+                onBrake = onBrake,
+                onBoost = onBoost,
+                onHorn = onHorn,
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -342,19 +455,9 @@ fun GameScreen(
         // (cihazda dogrulandi, 2026-08-15). Kontrol butonlari calisiyordu
         // cunku onlar zaten kaydirma katmanindan SONRA ciziliyordu.
         GameHud(
-            hud = hud,
-            onPause = {
-                if (engine.phase == RunPhase.RUNNING) {
-                    engine.pause()
-                    paused = true
-                }
-            },
-            onToggleSpeedLock = {
-                engine.toggleSpeedLock()
-                // HUD ~3 karede bir guncelleniyor; kilit durumu ANINDA
-                // gorunsun diye burada da yansitiliyor.
-                hud = hud.copy(speedLocked = engine.speedLocked)
-            },
+            hudState = hudState,
+            onPause = onPauseTap,
+            onToggleSpeedLock = onToggleSpeedLock,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -362,7 +465,7 @@ fun GameScreen(
 
 
         if (phase == RunPhase.COUNTDOWN) {
-            CountdownOverlay(engine.countdownRemaining, language)
+            CountdownOverlay(countdownSeconds, language)
         }
 
         if (paused && result == null) {
@@ -497,9 +600,19 @@ private fun withOptionalInterstitial(
     }
 }
 
+/**
+ * Motorun anlik durumundan HUD ozeti uretir.
+ *
+ * [previous] bir onceki ozettir ve tek isi LISTE KIMLIGINI korumaktir: hedef
+ * satirlari kosunun buyuk bolumunde hic degismez, ama `map` her cagrida yeni
+ * bir liste nesnesi dondurur. Icerik ayniyken eskisini geri vermek hem 3 karede
+ * bir yapilan gereksiz tahsisi keser hem de [HudObjective] listesini alan alt
+ * composable'larin ("ayni nesne mi?") kisa yolundan gecmesini saglar.
+ */
 private fun buildHud(
     engine: com.miniappfactory.krondrive.game.GameEngine,
-    language: AppLanguage
+    language: AppLanguage,
+    previous: HudState
 ): HudState {
     val level = engine.level
     val timeLabel = when (val goal = level?.goal) {
@@ -522,10 +635,9 @@ private fun buildHud(
         timeLabel = timeLabel,
         boost = engine.boost,
         combo = engine.combo,
-        objectives = objectives,
+        objectives = if (objectives == previous.objectives) previous.objectives else objectives,
         speedLockAvailable = engine.canLockSpeed(),
-        speedLocked = engine.speedLocked,
-        boostReady = engine.isBoostReady()
+        speedLocked = engine.speedLocked
     )
 }
 
@@ -586,22 +698,38 @@ private fun formatTime(totalSeconds: Int): String {
 // HUD
 // ---------------------------------------------------------------------------
 
+/**
+ * HUD. Ozeti DEGER olarak degil DURUM olarak alir ([State]): okuma burada,
+ * yani GameScreen'in restart scope'unda degil bu composable'inkinde yapilir.
+ * Boylece ~3 karede bir gelen HUD guncellemesi yalnizca bu agaci yeniler;
+ * kontrol butonlari, kaydirma katmani ve overlay kosullari disarida kalir.
+ *
+ * Parametrelerin hepsi kararli ([State] `@Stable`, [HudState] `@Immutable`,
+ * geri cagrilar cagri yerinde `remember`lanmis) — yani bu composable
+ * skippable: HUD disinda bir sey degistiginde govdesi hic calismaz.
+ */
 @Composable
 private fun GameHud(
-    hud: HudState,
+    hudState: State<HudState>,
     onPause: () -> Unit,
     onToggleSpeedLock: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val hud = hudState.value
+
     // Panel YOK: gostergeler dogrudan yolun uzerinde, sadece golgeyle okunakli.
     // Oyuncu geri bildirimi (2026-08-13): ustteki koyu kutu hizlandikca yolu
     // goremeyecek kadar cok yer kapliyordu. Simdi skor sol ust, sure/hedef sag
     // ust kosede; boost ise ekranin en ustunde ince bir serit.
-    val hudText = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Black,
-        shadow = Shadow(Color(0xCC000000), Offset(0f, 2f), 4f)
-    )
+    // Stil sabitlerden kuruluyor, o yuzden bir kez: HUD saniyede ~20 kez
+    // yenileniyor ve her seferinde ayni TextStyle'i tahsis etmenin anlami yok.
+    val hudText = remember {
+        TextStyle(
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.Black,
+            shadow = Shadow(Color(0xCC000000), Offset(0f, 2f), 4f)
+        )
+    }
 
     Box(modifier = modifier.fillMaxWidth()) {
         Box(
@@ -780,92 +908,215 @@ private val BOOST_EMPTY_BOTTOM = Color(0xFF141D2B)
  * bozmaz ve sonuc/carpisma ekranlarinda kontrollerle birlikte kaybolur.
  */
 private val HORN_SIZE = 48.dp
+
+/** Cizilen korna ikonunun kenari. Buton 48 dp; ikon kenarlara yapismasin. */
+private val HORN_ICON_SIZE = 26.dp
 private val HORN_TOP = Color(0xFF6E5B2C)
 private val HORN_BOTTOM = Color(0xFF251F10)
 
 /** Korna, fren/boost ile dikeyde ayni hizada dursun diye. */
-private val HORN_BOTTOM_PADDING =
-    CONTROL_BOTTOM_PADDING + (CONTROL_SIZE - HORN_SIZE) / 2f
 
-/** Ust kenardaki isik cizgisi ve dis cerceve. */
-private val CONTROL_HIGHLIGHT = Color(0x59FFFFFF)
+/**
+ * Ust kenardaki cam parlamasi ve dis cerceve.
+ *
+ * Parlama 0x59 -> 0x73 arttirildi (2026-08-16, referans butonlar): oradaki
+ * butonlar daha "cam" duruyordu. [CONTROL_HIGHLIGHT_MID] parlamanin tepede
+ * birden kesilmesini engelleyen ara duraktir — tek durakla gecis sert bir
+ * yarim ay gibi goruluyor.
+ */
+private val CONTROL_HIGHLIGHT = Color(0x73FFFFFF)
+private val CONTROL_HIGHLIGHT_MID = Color(0x26FFFFFF)
 private val CONTROL_BORDER = Color(0x40FFFFFF)
+
+/**
+ * Cam parlamasinin fircasi. Duraklari SABIT — hicbir parametreye bagli degil,
+ * o yuzden butonun icinde `remember` ile degil DOSYA DUZEYINDE tutuluyor:
+ * bes butonun hepsi tek nesneyi paylasir. Icerde `remember` iken bu tahsis
+ * hem buton basina ayri yapiliyordu hem de cagri `if (!pressed)` blogunun
+ * icinde oldugu icin her basip birakmada grup atilip yeniden kuruluyordu.
+ *
+ * Boyuttan bagimsiz olmasi tesadufi degil: duraksiz/bitis-Y'si verilmemis bir
+ * `verticalGradient` gercek yuksekligi CIZIM aninda kutudan alir, bu yuzden
+ * ayni nesne farkli boyuttaki butonlarda (64 dp kontroller, 48 dp korna)
+ * dogru sonuc verir.
+ */
+private val CONTROL_GLASS_BRUSH = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0f to CONTROL_HIGHLIGHT,
+        0.22f to CONTROL_HIGHLIGHT_MID,
+        0.45f to Color.Transparent,
+        1f to Color.Transparent
+    )
+)
+
+/**
+ * Kontrol ikonlari GLIF degil CIZIM (2026-08-16, sahibi: *"sag sol
+ * butonlarinin yerine dandik icon koymussunuz, boost tusundaki simsek
+ * neredeyse gozukmuyor"*).
+ *
+ * Eskiden yonler "◀ ▶", boost "⚡" karakteriyle basiliyordu. Uc ayri sorun:
+ *  - Glif her Android surumunde baska fontla ciziliyor; hedef cihaz API 24
+ *    ve orada "◀ ▶" ince, keskin ve kucuk bir ucgen olarak geliyor.
+ *  - "⚡" bir EMOJI: sistem onu kendi renginde (mavimsi/sari) ciziyor, biz
+ *    rengini belirleyemiyoruz — mavi boost zemininde eriyip kayboluyordu.
+ *  - Boyut/agirlik fontun elinde; butonun kabartmali diline uymuyordu.
+ *
+ * Cizilen ikon her cihazda ayni, rengini biz veriyoruz ve butonun kendi dikey
+ * gradyanini yankilayabiliyor. [HornIcon] bu isi zaten boyle yapiyordu; yon,
+ * boost ve fren de artik ayni dilde.
+ */
+private val STEER_ICON_SIZE = 30.dp
+private val BOOST_ICON_SIZE = 28.dp
+
+/** Ikon govdesi: ust beyaz, alt gri-mavi — butonun gradyaniyla ayni yon. */
+private val ICON_FILL_TOP = Color(0xFFFFFFFF)
+private val ICON_FILL_BOTTOM = Color(0xFFC3D2E4)
+
+/** Yon oklari ve fren gibi notr ikonlarin varsayilan govde gradyani. */
+private val ICON_FILL = listOf(ICON_FILL_TOP, ICON_FILL_BOTTOM)
+
+/**
+ * Boost simseginin SARI govdesi (2026-08-16, sahibinin gonderdigi referans
+ * butonlar): simsek beyaz degil, ustte acik sari altta turuncumsu.
+ *
+ * Tonlar oyunun kendi sarisindan geliyor ki simsek yabanci bir renk gibi
+ * durmasin: orta durak dogrudan [KronColors.AccentBright] (#FFD43D — arac
+ * alevinin ve surucu kaskinin rengi), ust durak ayni tonun acilmis hali, alt
+ * durak da [KronColors.Accent] (#F5C100) tonunun turuncuya cekilmisi. Ucu bir
+ * arada simsege "kendi isigi var" hissi veriyor; tek duz sari yassi duruyordu.
+ */
+private val BOLT_FILL = listOf(
+    Color(0xFFFFEE9B),
+    KronColors.AccentBright,
+    Color(0xFFE07C0C)
+)
+
+/**
+ * Ikonun altina dusen yumusak golge — referans butonlarda ikonlar zeminin
+ * uzerinde DURUYOR gibi, icine gomulu degil. Konturun disina tastigi icin
+ * [iconBounds] bu payi da hesaba katar, yoksa golge butonun kenarinda kirpilir.
+ */
+private val ICON_SHADOW = Color(0x59020814)
+private const val ICON_SHADOW_OFFSET = 0.9f
+
+/**
+ * Ikonun koyu konturu. Asil isi BOOST: #2189D6 mavi zeminde duz beyaz bir
+ * simsek zemine karisiyordu. Kontur simsegin cevresini zeminden koparip
+ * silueti her zeminde okunur yapiyor; ayni kontur yon oklarinda da var ki
+ * ikonlar tek aileden gorunsun.
+ */
+private val ICON_CONTOUR = Color(0xD90A1524)
+
+/** Kontur kalinligi (ikon koordinat kutusu birimi). */
+private const val ICON_CONTOUR_WIDTH = 1.5f
+
+/** Dolu ikonlarda keskin koseleri sisirip yumusatan yuvarlatma payi. */
+private const val ICON_ROUNDING = 1.6f
 
 /** Yon butonu, alttaki fren/boost butonunun tam ustunde durur. */
 private val STEER_BOTTOM_PADDING =
     CONTROL_BOTTOM_PADDING + CONTROL_SIZE + CONTROL_VERTICAL_GAP
 
+/**
+ * Korna SAG SUTUNDA, yon okunun hemen USTUNDE (2026-08-16, proje sahibi:
+ * *"kornayi sag yonlendirme okunun biraz ustune koyalim cunku zaten bir
+ * fonksiyonu yok"*). Onceden ekranin alt ORTASINDAYDI; orasi oynanis alaninin
+ * tam altinda en degerli yer ve dekoratif bir tusa ayrilmasi dogru degildi.
+ *
+ * Yukseklik: boost -> yon oku -> korna diye ustuste. Yatayda 48 dp'lik korna
+ * 64 dp'lik sutunun ORTASINA hizalanir, yoksa kenara yapisik durur.
+ */
+private val HORN_BOTTOM_PADDING =
+    STEER_BOTTOM_PADDING + CONTROL_SIZE + CONTROL_VERTICAL_GAP
+
+private val HORN_EDGE_PADDING =
+    CONTROL_EDGE_PADDING + (CONTROL_SIZE - HORN_SIZE) / 2f
+
+/**
+ * Kontrol katmani.
+ *
+ * Parametrelerin hepsi KARARLI olmak zorunda, yoksa composable skippable
+ * olmaz ve her ust bestelemede bes butonun tamami (golge, iki gradyan, ikon
+ * Canvas'i) bastan kurulur. Bu yuzden:
+ *  - `engine` artik BURAYA GIRMEZ (kararsiz sinif); yerine cagri yerinde
+ *    `remember`lanmis geri cagrilar iniyor.
+ *  - [boostReady] deger degil DURUM: okumasi bu govdede yapiliyor, boylece
+ *    boost hazirligi degistiginde GameScreen degil sadece burasi yenileniyor.
+ */
 @Composable
 private fun DrivingControls(
-    engine: com.miniappfactory.krondrive.game.GameEngine,
     language: AppLanguage,
-    boostReady: Boolean,
+    boostReady: State<Boolean>,
     hornAvailable: Boolean,
+    onSteerLeft: () -> Unit,
+    onSteerRight: () -> Unit,
+    onBrake: (Boolean) -> Unit,
+    onBoost: (Boolean) -> Unit,
     onHorn: () -> Unit,
-    onSteer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val boostIsReady = boostReady.value
     Box(modifier = modifier) {
         ControlButton(
-            label = "◀",
             topColor = STEER_TOP,
             bottomColor = STEER_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = CONTROL_EDGE_PADDING, bottom = STEER_BOTTOM_PADDING)
                 .size(CONTROL_SIZE),
-            onPress = {
-                engine.steerLeft()
-                onSteer()
-            }
-        )
+            onPress = onSteerLeft
+        ) {
+            ArrowIcon(pointsRight = false, modifier = Modifier.size(STEER_ICON_SIZE))
+        }
         ControlButton(
-            label = "▶",
             topColor = STEER_TOP,
             bottomColor = STEER_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = CONTROL_EDGE_PADDING, bottom = STEER_BOTTOM_PADDING)
                 .size(CONTROL_SIZE),
-            onPress = {
-                engine.steerRight()
-                onSteer()
-            }
-        )
+            onPress = onSteerRight
+        ) {
+            ArrowIcon(pointsRight = true, modifier = Modifier.size(STEER_ICON_SIZE))
+        }
         HoldButton(
-            label = language.pick(tr = "FREN", en = "BRAKE"),
             topColor = BRAKE_TOP,
             bottomColor = BRAKE_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = CONTROL_EDGE_PADDING, bottom = CONTROL_BOTTOM_PADDING)
                 .size(CONTROL_SIZE),
-            onHoldChanged = { engine.setBrake(it) }
-        )
+            onHoldChanged = onBrake
+        ) {
+            // Fren METIN kaliyor, ikon olmuyor. Denenen ikonlar (fren diski,
+            // sekizgen dur levhasi, pedal) 64 dp'de ya "durdur/duraklat" ya da
+            // "ayar" okunuyordu; yazi belirsizlik birakmiyor ve iki dilde de
+            // dar (FREN/BRAKE, 4-5 harf). Tek eksigi kirmizi zeminde beyazin
+            // biraz yumusak kalmasiydi: ikonlardaki koyu konturun metin
+            // karsiligi olarak yaziya da golge eklendi.
+            ControlLabel(language.pick(tr = "FREN", en = "BRAKE"))
+        }
         HoldButton(
-            label = "⚡",
             // Boost bosaldiginda ve parmak basiliyken KILITLENIR (bkz.
             // GameConfig.BOOST_REENGAGE_MIN). Buton eskiden bunu hic belli
             // etmiyordu: oyuncu basiyor, hicbir sey olmuyor ve "boost yaptim
             // ama saymadi" diyordu (2026-08-15). Artik hazir degilken soluk.
-            topColor = if (boostReady) BOOST_TOP else BOOST_EMPTY_TOP,
-            bottomColor = if (boostReady) BOOST_BOTTOM else BOOST_EMPTY_BOTTOM,
+            topColor = if (boostIsReady) BOOST_TOP else BOOST_EMPTY_TOP,
+            bottomColor = if (boostIsReady) BOOST_BOTTOM else BOOST_EMPTY_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = CONTROL_EDGE_PADDING, bottom = CONTROL_BOTTOM_PADDING)
                 .size(CONTROL_SIZE),
-            onHoldChanged = { engine.setBoost(it) }
-        )
+            onHoldChanged = onBoost
+        ) {
+            BoltIcon(ready = boostIsReady, modifier = Modifier.size(BOOST_ICON_SIZE))
+        }
         if (hornAvailable) {
-            ControlButton(
-                label = "📣",
-                topColor = HORN_TOP,
-                bottomColor = HORN_BOTTOM,
+            HornButton(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = HORN_BOTTOM_PADDING)
+                    .align(Alignment.BottomEnd)
+                    .padding(end = HORN_EDGE_PADDING, bottom = HORN_BOTTOM_PADDING)
                     .size(HORN_SIZE),
-                labelSize = 18.sp,
                 onPress = onHorn
             )
         }
@@ -888,15 +1139,23 @@ private fun RaisedControl(
         targetValue = if (pressed) CONTROL_ELEVATION_PRESSED else CONTROL_ELEVATION,
         label = "controlElevation"
     )
+    // Gradyanlar `remember`li: girdileri yalnizca renkler ve basili olup
+    // olmadigi. Bunsuz her bestelemede yeni bir liste + yeni bir Brush
+    // tahsis ediliyordu ve bes butonun hepsinde ikiser tane. Duraklar ve
+    // yon birebir ayni, yalnizca nesne yeniden kullaniliyor.
+    //
+    // NOT: duraksiz `verticalGradient` boyutunu CIZIM aninda kutudan alir
+    // (0..POSITIVE_INFINITY), bu yuzden hatirlamak boyut degisiminde bile
+    // yanlis sonuc uretmez.
+    val bodyBrush = remember(topColor, bottomColor, pressed) {
+        Brush.verticalGradient(
+            if (pressed) listOf(bottomColor, topColor) else listOf(topColor, bottomColor)
+        )
+    }
     Box(
         modifier = modifier
             .shadow(elevation, CONTROL_SHAPE)
-            .background(
-                brush = Brush.verticalGradient(
-                    if (pressed) listOf(bottomColor, topColor) else listOf(topColor, bottomColor)
-                ),
-                shape = CONTROL_SHAPE
-            )
+            .background(brush = bodyBrush, shape = CONTROL_SHAPE)
             .border(1.dp, CONTROL_BORDER, CONTROL_SHAPE)
             // Cocuklar da daireye kirpilsin. Bunsuz, ic katmanlarin kendi
             // kirpmasi butonun disina tasabiliyor (asagidaki nota bak).
@@ -917,33 +1176,31 @@ private fun RaisedControl(
         // Cozum: kutu butonun TAMAMINI kaplar (kare -> kirpma gercek daire),
         // sonumlenmeyi gradyan duraklari yapar.
         if (!pressed) {
+            // Firca [CONTROL_GLASS_BRUSH]'ta, dosya duzeyinde: parametresiz
+            // oldugu icin burada hatirlanmasinin bir faydasi yok, zarari var
+            // (bkz. oradaki not).
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .clip(CONTROL_SHAPE)
-                    .background(
-                        Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0f to CONTROL_HIGHLIGHT,
-                                0.45f to Color.Transparent,
-                                1f to Color.Transparent
-                            )
-                        )
-                    )
+                    .background(CONTROL_GLASS_BRUSH)
             )
         }
         content()
     }
 }
 
+/**
+ * Tek dokunuslu kontrol butonu. Icerigi CAGIRAN veriyor (eskiden bir [String]
+ * etiketi aliyordu): ikonlar artik cizim, metin degil.
+ */
 @Composable
 private fun ControlButton(
-    label: String,
     topColor: Color,
     bottomColor: Color,
     modifier: Modifier,
-    labelSize: androidx.compose.ui.unit.TextUnit = 22.sp,
-    onPress: () -> Unit
+    onPress: () -> Unit,
+    content: @Composable () -> Unit
 ) {
     // Yon butonu bir DOKUNUS butonu; basili kalma suresi oyunu etkilemez ama
     // parmak degdiginde gorsel olarak da cokmesi gerekiyor.
@@ -961,20 +1218,301 @@ private fun ControlButton(
                     pressed = false
                 }
             )
-        }
+        },
+        content = content
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Kontrol ikonlari (hepsi CIZIM — gerekcesi icin bkz. [STEER_ICON_SIZE])
+// ---------------------------------------------------------------------------
+
+/**
+ * Ikonu Canvas'in ortasina oturtur: [bounds] kutusu tuvale sigacak sekilde
+ * olceklenir ve ortalanir.
+ *
+ * Ortalamanin ELDE yapilmasi 2026-08-16'da korna ikonunu butonun sag altina
+ * kacirmisti; o yuzden her ikon sinirini kendi cizimden turetir ve buraya
+ * verir.
+ */
+private fun DrawScope.drawFitted(bounds: Rect, block: DrawScope.() -> Unit) {
+    val scale = size.minDimension / maxOf(bounds.width, bounds.height)
+    translate(
+        left = size.width / 2f - bounds.center.x * scale,
+        top = size.height / 2f - bounds.center.y * scale
     ) {
-        Text(label, color = Color.White, fontSize = labelSize, fontWeight = FontWeight.Black)
+        scale(scale, scale, pivot = Offset.Zero) { block() }
     }
 }
 
-/** Basili tutuldugu surece aktif olan buton (boost/fren). */
+/**
+ * Cizgi ikonlarinda govdenin gercek kalinligi; dolu ikonlarda ([bodyWidth] 0)
+ * yalnizca koseleri yumusatan [ICON_ROUNDING] kadar sisirme yapilir.
+ */
+private fun iconBodyStroke(bodyWidth: Float): Float =
+    if (bodyWidth > 0f) bodyWidth else ICON_ROUNDING
+
+/**
+ * Ikonun kaplayacagi kutu: cizimin kendi siniri + disari tasan firca payi
+ * (govdenin yarisi + kontur + golge kaymasi).
+ *
+ * Golge payi DORT YANDAN birden ekleniyor, yalniz alttan degil: tek yandan
+ * eklemek kutunun merkezini kaydirir ve [drawFitted] ikonu butonda merkezden
+ * kacirir. Dort yandan esit pay ikonu bir tik kucultur ama ortali birakir.
+ *
+ * TUZAK: `Path.getBounds()` bir YAY icin yayin degil TAM CEMBERIN kutusunu
+ * verir. Burada gecen yollarin hepsi DUZ CIZGI oldugu icin sonuc dogru;
+ * yay eklenirse sinir elle hesaplanmali (ornegi [HornIcon] icinde).
+ */
+private fun iconBounds(path: Path, bodyWidth: Float = 0f): Rect =
+    path.getBounds()
+        .inflate(iconBodyStroke(bodyWidth) / 2f + ICON_CONTOUR_WIDTH + ICON_SHADOW_OFFSET)
+
+/**
+ * Ikonlarin ortak boyamasi: GOLGE + KOYU KONTUR + gradyan govde.
+ *
+ * Tek yerde durmasinin sebebi yon oklari ile boost simseginin ayni dili
+ * konusmasi; ayrilan tek sey [fillColors], cunku simsek sari, oklar beyaz.
+ *
+ * Sira onemli: once golge, sonra yolun KALIN (kontur) hali, en uste govde.
+ * Govde konturun ustune binince kenarda [ICON_CONTOUR_WIDTH] kadar koyu bir
+ * cerceve kalir. Kapali yollarda ayrica ic dolgu gerekir; acik yolda dolgu
+ * ucgen bir leke uretecegi icin kosullu.
+ *
+ * [bodyWidth] 0 iken sekil DOLUDUR: govde firca izi yalnizca [ICON_ROUNDING]
+ * kadar sisirme yapar, yani keskin koseler yuvarlanir. Dolu yon ucgeninin
+ * yuvarlak koseleri buradan geliyor.
+ */
+private fun DrawScope.drawIconShape(
+    path: Path,
+    bounds: Rect,
+    bodyWidth: Float = 0f,
+    fillColors: List<Color> = ICON_FILL
+) {
+    val body = iconBodyStroke(bodyWidth)
+    val outline = Stroke(
+        width = body + ICON_CONTOUR_WIDTH * 2f,
+        cap = StrokeCap.Round,
+        join = StrokeJoin.Round
+    )
+    val bodyStroke = Stroke(width = body, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    val fill = Brush.verticalGradient(
+        colors = fillColors,
+        startY = bounds.top,
+        endY = bounds.bottom
+    )
+    // Golge: sekli oldugu gibi asagi kaydirip soluk koyu cizmek yeter — ayri
+    // bir blur katmani 60 Hz'de bedava degil, kontur zaten kenari kesiyor.
+    translate(top = ICON_SHADOW_OFFSET) {
+        drawPath(path, ICON_SHADOW, style = outline)
+        if (bodyWidth == 0f) drawPath(path, ICON_SHADOW)
+    }
+    drawPath(path, ICON_CONTOUR, style = outline)
+    if (bodyWidth == 0f) drawPath(path, fill)
+    drawPath(path, fill, style = bodyStroke)
+}
+
+/**
+ * Yon oku: DOLU, koseleri yuvarlatilmis ucgen — klasik "play" ucgeni.
+ *
+ * Once chevron'du (aralikli, kalin bir "›"). Sahibinin 2026-08-16'da
+ * gonderdigi referans butonlarda ok dolu bir ucgen: chevron'a gore daha cok
+ * murekkep tasidigi icin 64 dp'lik butonda uzaktan daha erken okunuyor ve
+ * mavi/koyu zeminde silueti daha net.
+ *
+ * "Dandik" bulunan eski "◀ ▶" glifi ile karistirilmasin: sorun ucgen OLMASI
+ * degil, glifin ince/keskin cizilmesi ve rengini font'un secmesiydi. Buradaki
+ * ucgen cizim: koseleri [ICON_ROUNDING] kadar sisirilerek yuvarlatiliyor,
+ * kendi koyu konturu ve golgesi var ([drawIconShape]).
+ *
+ * Sol ok, sag okun AYNASI: ayri bir yol kurulsa iki yonun orani zamanla
+ * birbirinden kayardi.
+ *
+ * Koordinatlar 24x24 kutuda; [drawFitted] gercek boyuta olcekler.
+ */
+@Composable
+private fun ArrowIcon(pointsRight: Boolean, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        // Genislikten uzun (10 x 16.8): esit kenarli bir ucgen "oynat" degil
+        // "yukari/asagi" da okunabiliyordu; uzun kenar yonu tekil kiliyor.
+        val path = Path().apply {
+            moveTo(8.4f, 3.6f)
+            lineTo(18.0f, 12.0f)
+            lineTo(8.4f, 20.4f)
+            close()
+        }
+        val bounds = iconBounds(path)
+        drawFitted(bounds) {
+            scale(if (pointsRight) 1f else -1f, 1f, pivot = bounds.center) {
+                drawIconShape(path, bounds)
+            }
+        }
+    }
+}
+
+/**
+ * Boost simsegi. Dolu SARI govde + koyu kontur ([drawIconShape]).
+ *
+ * Sahibin ilk sikayeti buydu: "⚡" emojisi #2189D6 mavi zeminde neredeyse
+ * gorunmuyordu. Emoji yerine cizim geldi ve govde beyaz yapildi. Ikinci turda
+ * (referans butonlar, 2026-08-16) beyaz da SARI oldu: sari maviyle tamamlayici
+ * oldugu icin ayni siluet mavi zeminden cok daha erken kopuyor, ustelik
+ * "enerji" isareti olarak beyazdan daha dogru okunuyor. Tonlar icin bkz.
+ * [BOLT_FILL] — hepsi oyunun kendi sarisindan.
+ *
+ * Koyu kontur KALIYOR: sari, butonun acik ust gradyanina (#2189D6'nin isikli
+ * yarisi) yaklastigi yerde kontursuz kenari kaybediyordu.
+ *
+ * Centikler bilerek asimetrik (solda 13.2, sagda 10.6): simetrik olsa simsek
+ * degil kum saati okunuyor.
+ */
+@Composable
+private fun BoltIcon(ready: Boolean, modifier: Modifier = Modifier) {
+    // Hazir degilken ikon da soluyor. Buton govdesi 2026-08-15'te bunu zaten
+    // renkle soyluyordu; ama yeni simsek eski emojiden cok daha baskin, tam
+    // parlaklikta kalsaydi "boost hazir" izlenimi verip o uyariyi bogardi.
+    Canvas(modifier = modifier.alpha(if (ready) 1f else 0.45f)) {
+        val path = Path().apply {
+            moveTo(14.4f, 2.0f)
+            lineTo(6.4f, 13.2f)
+            lineTo(11.0f, 13.2f)
+            lineTo(9.4f, 22.0f)
+            lineTo(17.6f, 10.6f)
+            lineTo(12.8f, 10.6f)
+            close()
+        }
+        val bounds = iconBounds(path)
+        drawFitted(bounds) {
+            drawIconShape(path, bounds, fillColors = BOLT_FILL)
+        }
+    }
+}
+
+/**
+ * Korna butonu. Kontrollerin hepsi cizilmis ikon kullaniyor; korna bu isi ilk
+ * yapan oldu — eskiden 📣 (megafon emojisi) vardi ve proje sahibi bunun korna
+ * gibi durmadigini soyledi (2026-08-16).
+ *
+ * Cozum emoji degistirmek degil, ikonu CIZMEK: emoji her Android surumunde
+ * baska turlu ciziliyor (renkli, farkli oran) ve diger tuslarin duz beyaz
+ * dilinden kopuyordu. Cizilen ikon her cihazda ayni.
+ */
+@Composable
+private fun HornButton(modifier: Modifier, onPress: () -> Unit) {
+    var pressed by remember { mutableStateOf(false) }
+    RaisedControl(
+        topColor = HORN_TOP,
+        bottomColor = HORN_BOTTOM,
+        pressed = pressed,
+        modifier = modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onPress = {
+                    pressed = true
+                    onPress()
+                    tryAwaitRelease()
+                    pressed = false
+                }
+            )
+        }
+    ) {
+        HornIcon(modifier = Modifier.size(HORN_ICON_SIZE))
+    }
+}
+
+/**
+ * Ampullu korna (klakson) ikonu — huni + lastik ampul + iki ses dalgasi.
+ *
+ * Neden ampul: huni tek basina MEGAFON okunuyor (degistirmek istedigimiz
+ * seyin ta kendisi). Ampul onu tartismasiz korna yapiyor ve oyunun retro
+ * dilini de tutuyor.
+ *
+ * Koordinatlar 24x24'luk bir kutuda; butonun boyutuna gore olcekleniyor.
+ */
+@Composable
+private fun HornIcon(modifier: Modifier = Modifier, tint: Color = Color.White) {
+    Canvas(modifier = modifier) {
+        // Gövde TEK yol olarak kuruluyor (huni + boyun + ampul birlesik):
+        // ayri ayri cizilince parcalarin kesistigi yerde kenar dikisleri
+        // goruluyordu.
+        val body = Path().apply {
+            // Huni: dar boyundan agza acilir; agiz disa dogru kavisli.
+            moveTo(10.4f, 11.8f)
+            lineTo(16.8f, 4.0f)
+            quadraticTo(21.8f, 7.2f, 20.2f, 13.8f)
+            lineTo(13.2f, 15.4f)
+            close()
+            // Boyun: ampulu huniye baglayan egik bant.
+            moveTo(7.6f, 13.6f)
+            lineTo(11.8f, 10.6f)
+            lineTo(13.6f, 13.4f)
+            lineTo(9.4f, 16.4f)
+            close()
+            // Ampul — ikonu MEGAFONDAN ayiran parca.
+            addOval(Rect(1.8f, 13.2f, 8.8f, 20.2f))
+        }
+
+        // Ses dalgalari: agzin ONUNDE, huni ekseni dogrultusunda iki yay.
+        val mouth = Offset(18.6f, 8.8f)
+        val waveStroke = 1.6f
+        val waveStart = -62f
+        val waveSweep = 66f
+        val waveRadii = listOf(5.2f, 7.0f)
+        val waves = Path().apply {
+            waveRadii.forEach { radius ->
+                arcTo(
+                    rect = Rect(mouth, radius),
+                    startAngleDegrees = waveStart,
+                    sweepAngleDegrees = waveSweep,
+                    forceMoveTo = true
+                )
+            }
+        }
+
+        // Kutuya OTURTMA: sinirlar cizimden turetiliyor, elle ortalama yok.
+        // Ilk surumde sabitlerle ortalanmisti ve ikon butonun sag altina
+        // kaymisti (2026-08-16, cihazda goruldu).
+        //
+        // Yaylarin siniri ELDE hesaplaniyor: `Path.getBounds()` bir yay icin
+        // yayin degil TAM CEMBERIN kutusunu veriyor, o yuzden ikon gereksiz
+        // yere kuculup sola kayiyordu (yine cihazda goruldu). Yay
+        // [waveStart]..[waveStart]+[waveSweep] arasinda; bu aralikta x en
+        // buyuk 0 derecede, uc noktalar da uclarda.
+        val angles = listOf(waveStart, waveStart + waveSweep, 0f)
+            .filter { it in waveStart..(waveStart + waveSweep) }
+        val rMax = waveRadii.max()
+        val waveXs = angles.map { mouth.x + rMax * cos(it * PI.toFloat() / 180f) }
+        val waveYs = angles.map { mouth.y + rMax * sin(it * PI.toFloat() / 180f) }
+
+        val b = body.getBounds()
+        val m = waveStroke / 2f
+        val left = minOf(b.left, waveXs.min() - m)
+        val top = minOf(b.top, waveYs.min() - m)
+        val right = maxOf(b.right, waveXs.max() + m)
+        val bottom = maxOf(b.bottom, waveYs.max() + m)
+
+        // Olcekleme/ortalama diger ikonlarla ayni yerden: [drawFitted].
+        drawFitted(Rect(left, top, right, bottom)) {
+            drawPath(body, tint)
+            drawPath(
+                waves,
+                tint.copy(alpha = 0.85f),
+                style = Stroke(width = waveStroke, cap = StrokeCap.Round)
+            )
+        }
+    }
+}
+
+/**
+ * Basili tutuldugu surece aktif olan buton (boost/fren). Icerigi CAGIRAN
+ * veriyor: boost cizilmis bir ikon, fren iki dilli bir metin gosteriyor.
+ */
 @Composable
 private fun HoldButton(
-    label: String,
     topColor: Color,
     bottomColor: Color,
     modifier: Modifier,
-    onHoldChanged: (Boolean) -> Unit
+    onHoldChanged: (Boolean) -> Unit,
+    content: @Composable () -> Unit
 ) {
     var pressed by remember { mutableStateOf(false) }
     RaisedControl(
@@ -992,10 +1530,24 @@ private fun HoldButton(
                     onHoldChanged(false)
                 }
             )
-        }
-    ) {
-        Text(label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
-    }
+        },
+        content = content
+    )
+}
+
+/**
+ * Kontrol butonundaki metin (su an yalniz fren). Ikonlarin koyu konturunun
+ * metin karsiligi: golge, beyaz harfleri kirmizi zeminden ayiriyor.
+ */
+@Composable
+private fun ControlLabel(text: String) {
+    Text(
+        text,
+        color = Color.White,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Black,
+        style = TextStyle(shadow = Shadow(Color(0xB3000000), Offset(0f, 1.5f), 2.5f))
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,8 +1566,14 @@ private fun OverlayScrim(content: @Composable () -> Unit) {
     ) { content() }
 }
 
+/**
+ * Geri sayim. Ham `Float` yerine GORUNEN saniyeyi alir: motorun sayaci Compose
+ * durumu degil, o yuzden "kacinci saniyedeyiz" bilgisi cagri yerinde durum
+ * olarak tutuluyor ve yalnizca rakam degistiginde yaziliyor. Gosterilen metin
+ * ayni ([kotlin.math.ceil] ile yuvarlama artik cagri yerinde yapiliyor).
+ */
 @Composable
-private fun CountdownOverlay(remaining: Float, language: AppLanguage) {
+private fun CountdownOverlay(seconds: Int, language: AppLanguage) {
     OverlayScrim {
         KronCard {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1025,7 +1583,6 @@ private fun CountdownOverlay(remaining: Float, language: AppLanguage) {
                     fontSize = 30.sp
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                val seconds = kotlin.math.ceil(remaining).toInt()
                 Text(
                     text = if (seconds <= 0) "GO!" else "$seconds",
                     color = KronColors.BlueBright,

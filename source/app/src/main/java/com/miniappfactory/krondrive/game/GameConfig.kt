@@ -83,8 +83,26 @@ object GameConfig {
     // uzatildi). Hiz hissi degismedi — o [WORLD_SPEED_SCALE] ile ayri
     // ayarlaniyor. Renk kontrasti da cizim tarafinda biraz yumusatildi.
 
-    /** Kirmizi/beyaz kerb blogunun boyu (prototip: 24). */
-    const val KERB_BLOCK_HEIGHT_PX = 46f
+    /**
+     * Kirmizi/beyaz kerb blogunun boyu (prototip: 24).
+     *
+     * 46 -> 50 (2026-08-16): kerb artik yol yuzeyiyle AYNI hizda akiyor
+     * (bkz. `GameRenderer.drawTrack`), eskiden 12 kat sonuktu. Hiz 12 katina
+     * cikinca titresim de 12 katina cikiyor; blok boyu buna gore secildi.
+     *
+     * 50 nereden geliyor: en yuksek hizda (~1650 px/s, tam SPEED yukseltmesi
+     * + en hizli arac + boost) kirmizi/beyaz gecis orani
+     * `1650 / (2 * 50) = 16.5 Hz` olur. Ust sinir olarak serit cizgilerinin
+     * ayni kosuldaki orani alindi (`1650 / 96 = 17.2 Hz`) — cunku o desen
+     * ZATEN 1.00 carpanda calisiyor ve proje sahibi gorunumunu onaylamis
+     * durumda. Yani kerb, oyuncunun her kosuda baktigi seritten daha hizli
+     * titremiyor.
+     *
+     * Periyot (100) serit periyodundan (96) bilerek FARKLI: esitlenirse yol
+     * duzleminin tamami ayni anda "tik" yapar ve senkron titresim tek tek
+     * titresimden daha yorucu okunur.
+     */
+    const val KERB_BLOCK_HEIGHT_PX = 50f
 
     /** Serit cizgisi: dolu ve bos parca boylari (prototip: 20 / 20). */
     const val LANE_DASH_ON_PX = 42f

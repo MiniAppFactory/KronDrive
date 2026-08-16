@@ -13,7 +13,7 @@ GARAJ VE YÜKSELTMELER
 Kazandığın coinlerle dört dalı geliştir: HIZ, İVME, FREN ve BOOST. Her dalın 8 seviyesi var ve her seviye ölçülebilir bir fark yaratır. Dikkat: hız yükseltmesi skoru artırır ama trafiği de hızlandırır. Bu bir tercihtir, bedava bir kazanç değil.
 
 ARACINI SEN SEÇ
-Dört gövde (Şehir, Yarış Sedan, Kas Arabası, Süper Araba) ve dokuz boya. Görünüm değişir, çarpışma kutusu değişmez — özelleştirme kimseye avantaj vermez, sadece garajın senin olur.
+Yedi gövde (Şehir, Yarış Sedan, Kuş SLX, Dağ Keçisi, Kas Arabası, Boğa 67, Süper Araba) ve on boya. Görünüm değişir, çarpışma kutusu değişmez — özelleştirme kimseye avantaj vermez, sadece garajın senin olur.
 
 GÜNLÜK VE HAFTALIK GÖREVLER
 Her gün üç kademeli tek bir görev: ilk kademe erken gelir, üstü "biraz daha dayan" der. Çarpsan bile o koşuda ulaştığın kademelerin ödülünü alırsın. Haftalık beş görev daha ve hafta sonunda bir sandık bekler.

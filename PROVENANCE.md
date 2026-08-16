@@ -361,6 +361,12 @@ Bunlar dışında fizik birebirdir:
     düğme hiç görünmez; 0.4 sn bekleme süresi üst üste basınca sesin
     yığılmasını engeller.
 
+    > **Güncelleme (2026-08-16, sapma #22):** korna düğmesinin **yeri
+    > değişti** — artık alt ortada değil, sağ sütunda yön okunun üstünde.
+    > Yukarıdaki "alt ortada, 48 dp" tarifi geçmişi anlatıyor. Sesle ilgili
+    > her şey (profil tablosu, bekleme süresi, ses kapalıyken görünmemesi)
+    > aynen geçerli.
+
     **Tır hazırlığı**: planlanan tır gövdesi için yapı değişikliği gerekmiyor,
     yalnızca tabloya bir satır — çok düşük `freqMul` (~0.62), yüksek
     `harmonic3`/`harmonic5`, yüksek `noiseAmount`, **çok düşük** `hornBaseHz`
@@ -408,6 +414,24 @@ Bunlar dışında fizik birebirdir:
 
     APK'ya eklenen: 8 gövde × 2 katman = 552 KB (WebP, 240×456).
 
+    > **Düzeltme (2026-08-16) — yukarıdaki "Ölçüldü" paragrafı DAYANAKSIZ.**
+    > O A/B karşılaştırması geçersizdir: tema her koşuda **rastgele** seçiliyor
+    > (`GameEngine.kt:100`) ve temalar arasında kare başına çizim çağrısı
+    > **~185 ile ~780 arasında (4 kat)** değişiyor. Ölçüm temayı sabitlemediği
+    > için "sprite 24–27 ms / vektör 25 ms" iki farklı temanın karşılaştırması
+    > da olabilir — sayılar bir şey kanıtlamıyor.
+    >
+    > Sprite kararı **mimari gerekçeyle** duruyor: hazır bir bitmap'i
+    > kompozitlemek, her karede onlarca poligon + gradyan fırçası kurmaktan az
+    > iş. Ama **elde temiz bir performans ölçümü YOK** ve "regresyon yok"
+    > iddiası geri çekilmiştir. p90 sayıları (32–38 ms / 36 ms) da aynı sebeple
+    > geçersiz. Bellek gözlemi (`CarPreview` başına 16 sprite'in yeniden
+    > çözülmesi, PSS 165 → 302 MB) tema seçiminden bağımsız olduğu için
+    > geçerliliğini korur.
+    >
+    > **Bundan sonraki her performans ölçümünde tema sabitlenmelidir** —
+    > sabitlenmemiş bir ölçüm bu projede kanıt sayılmaz.
+
 17. **Her aracın bir fabrika boyası var** (2026-08-15, proje sahibi kararı:
     *"kuş slx in default rengi bu olacak dağ keçisinin ise beyaz
     (değiştirilebilir olsun ama default u bu olsun)"*).
@@ -432,6 +456,145 @@ Bunlar dışında fizik birebirdir:
     (seçili olan hariç): çipler bir vitrin, oyuncu Kuş SLX'i almadan önce
     onun petrol yeşili olduğunu görmeli. Hepsini seçili boyayla çizmek bütün
     vitrini tek renge boyuyor ve araçların kimliğini siliyordu.
+
+18. **Şerit çizgileri artık blok blok çiziliyor — `dashPathEffect` kaldırıldı**
+    (2026-08-16). Şerit kesikleri baştan beri tek bir `drawLine` + `PathEffect
+    .dashPathEffect(42 dp / 54 dp)` ile çiziliyordu. Bu mekanizma **SM-G950F
+    (Android 7.0, API 24) üzerinde sessizce yok sayılıyor**: hata vermiyor,
+    çizgi çiziliyor — ama **düz**, kesiksiz. Yani prototipin ve sapma #11'in
+    (yol deseni frekansı; belgede "11" numarası iki kez kullanılmış, kastedilen
+    ikincisi) tarif ettiği kesikli şerit, en azından bu cihazda hiç
+    görünmüyordu.
+
+    Mekanizma tamamen kaldırıldı. Kesikler artık kerb bloklarıyla **aynı
+    yöntemle** — dünya konumundan türeyen ayrık `drawRect` çağrılarıyla —
+    çiziliyor. Aynı düzeltme `LanguageGateScreen`'e de uygulandı (orada da
+    aynı efekt kullanılıyordu).
+
+    **Cihazda ölçüldü** (SM-G950F): dolu 126 px / boş 162 px, yani ayarlı
+    42 dp / 54 dp değerleri birebir. Sabitler değişmedi
+    (`GameConfig.LANE_DASH_ON_PX`, `LANE_DASH_OFF_PX`) — değişen yalnızca
+    çizim yöntemi.
+
+    **DÜRÜSTLÜK NOTU — hangi değişikliğin bozduğu CEVAPSIZ.** Proje sahibi
+    "önceden kesikliydi, yeni bozuldu" dedi ve 16:04'te derlenmiş bir APK'dan
+    kesikli şeritlerin göründüğü bir ekran görüntüsü gönderdi. Buna karşılık:
+    (a) commit geçmişinde `dashPathEffect` mekanizması **baseline'dan beri
+    değişmemiş**; (b) `builds/` altındaki eski arşiv APK'sı **aynı cihazda
+    düz çiziyor**. O 16:04 APK'sı commit edilmemiş bir çalışma ağacından
+    derlendiği için karşılaştırılabilir bir diff'i yok. İki gözlem
+    uzlaştırılamadı; bu belgeye **hiçbir commit suçlaması yazılmamıştır**.
+    Bilinen tek doğrulanmış gerçek şu: kaldırılan mekanizma bu cihazda
+    çalışmıyordu, yerine konan mekanizma çalışıyor.
+
+19. **Yol kenarı desenlerinin akış yönü düzeltildi** (2026-08-16). Beş desen
+    araç ilerlerken **yukarı** akıyordu: çimen çizgileri, plaj köpüğü, seyirci
+    bayrakları, gece çizgileri ve gece şehir ışıkları. Aynı karede şerit
+    çizgileri ve asfalt dokusu **aşağı** akıyordu — yani ekranın ortası ileri,
+    kenarları geri gidiyordu. Baseline'dan beri var olan bir kusur; prototipten
+    bilinçli bir sapma değil, taşıma hatası.
+
+    Beş desenin de kaydırma işareti çevrildi. **Cihazda ölçüldü** (ardışık
+    kare farklarının çapraz-korelasyonu, SM-G950F): çimen deseni +16 px/kare
+    aşağı, şerit çizgileri +57 px/kare aşağı. İki hızın farklı olması
+    **kasıtlı** — kenar katmanı yola göre daha yavaş akar, derinlik hissi
+    bundan doğar (bkz. sapma #20'nin tasarım ilkesi).
+
+20. **Kerb GERÇEKTEN kayıyor artık — ve hızı yola eşitlendi** (2026-08-16,
+    proje sahibi tespiti). İki ayrı kusur üst üste binmişti:
+
+    **(a) Kerb hiç kaymıyordu, yerinde faz atlıyordu.** Bloklar ekranda
+    **sabit bir ızgaraya** çiziliyordu; `roadOffset` blokların konumunu değil
+    yalnızca **rengini** (kırmızı/beyaz sırasını) çeviriyordu. Sonuç: kenar
+    şeridi kaymıyor, olduğu yerde renk değiştiriyordu.
+    **Cihazda ölçüldü:** kırmızı/beyaz sınırları kare kare **aynı y'lerde**
+    duruyordu (+0 px/kare). Düzeltmeden sonra +38 px/kare aşağı.
+
+    **(b) Hız çarpanı 1/12 idi → 1.00 yapıldı.** Proje sahibinin gerekçesi:
+
+    > *"kerbler aslında sabit, araba yanından geçiyor; o hissi vermek için
+    > hareket ettiriyorsun. Kerb hızı araba ile aynı olmalı ki araba
+    > hızlandıkça hızlansın, yavaşladıkça yavaşlasın — kerb sabit kalırsa bu
+    > his kaybolur."*
+
+    **Tasarım ilkesi (bundan sonrası için kural):** paralaks **derinlikten**
+    doğar, yanal mesafeden değil. Kerb yola **boyalıdır** — kameradan şerit
+    çizgisiyle tam olarak aynı uzaklıkta. Aynı uzaklıktaki iki desen farklı
+    hızda akarsa yol düzlemi eğrilmiş gibi okunur. Kenar **katmanlarının**
+    (çimen, seyirci, şehir — bkz. #19) yavaş akması ise doğru: onlar gerçekten
+    daha uzakta.
+
+    **Blok boyu 46 → 50 px** (`GameConfig.KERB_BLOCK_HEIGHT_PX`; 46 sapma
+    #11'den geliyordu). Gerekçe: hız 12 katına çıkınca desenin göz üzerindeki
+    titreşim frekansı da 12 katına çıkar. 50 px ile en yüksek hızda
+    (~1650 px/s) geçiş oranı **16.5 Hz**. Üst sınır olarak şerit çizgilerinin
+    aynı koşuldaki **17.2 Hz**'i alındı — çünkü o desen 1.00 çarpanda **zaten
+    çalışıyor** ve sahibi görünümünü onaylamış. Yani kabul ölçütü teorik bir
+    eşik değil, projede halihazırda onaylanmış bir referans.
+
+    **Periyot bilerek şeritten farklı.** Kerb periyodu 100 px (50 kırmızı +
+    50 beyaz), şerit periyodu 96 px (42 + 54). Eşitlenirse yol düzleminin
+    tamamı aynı anda "tık" yapar; 100/96 sürüklenmesi bunu dağıtıyor.
+
+    **Sıra önemliydi:** (a) düzeltilmeden (b) yapılsaydı iş **kötüleşirdi** —
+    ortaya kayan bir bordür değil, saniyede birkaç kez topluca yanıp sönen bir
+    bordür çıkardı.
+
+21. **Seyirci teması renk titremesi** (2026-08-16). Seyircilerin rengi kayan
+    **ekran** y'sinden hesaplanıyordu; kalabalık kaydıkça her seyirci her karede
+    renk değiştiriyordu. Renk artık **dünya** y'sine bağlı, yani bir seyirci
+    ömrü boyunca aynı renkte kalıyor. Ayrıca indeks hesabındaki `%` operatörü
+    negatif dünya koordinatlarında negatif dönüp bütün kalabalığı ilk renge
+    (siyah) düşürüyordu → `mod`.
+
+    **İkinci düzeltme (kalıntı titreme).** İndeks anahtarı `x + rowKey / 6f`
+    **daima tam sayıya oturuyor** (rowKey 42'nin katı → /6 tam; x 3'ün katı).
+    `floor()` bıçak sırtında kaldığı için kayan nokta epsilon'u indeksi bir
+    öteye kaydırıyor, seyirci renk değiştiriyordu. `roundToInt()` ile hesap
+    epsilon'a bağışık hale getirildi.
+
+    **Doğrulama sınırı:** düzeltme kod düzeyinde ve JVM davranışıyla
+    gerekçelendirildi ve cihazda **ölçüldü**: tema geçici olarak CROWD'a
+    sabitlenip üç ardışık kare karşılaştırıldı — üst bantta %0.3, alt bantta
+    %0.0 renk değişimi. Düzeltmeden önce alt bantta ~%20 idi. Tema sabiti
+    ölçümden sonra geri alındı (tema yine rastgele).
+
+22. **Kontrol tuşlarının emoji glifleri kaldırıldı** (2026-08-16, proje sahibi
+    isteği). Dört kontrol tuşu metin gliflerini kullanıyordu: `◀` `▶` `⚡` `📣`.
+    Üç sorun: (1) bu glifler her Android sürümünde farklı bir yazı tipinden
+    çiziliyor ve hedef cihaz API 24 — görünüm garanti edilemiyor; (2) emoji
+    yazı tipi **kendi renkleriyle** geliyor, `tint` uygulanmıyor; (3) sonuç
+    butonların düz beyaz görsel diliyle uyuşmuyordu.
+
+    İkonlar artık **Compose Canvas ile çiziliyor**: dolu, köşeleri yuvarlatılmış
+    üçgen yön okları; **sarı** şimşek (`KronColors.AccentBright`); ampullü
+    korna. Şimşeğin sarısı bilinçli — boost tek "enerji" göstergesiyle aynı
+    rengi taşımalı.
+
+    **Referans görseller GÖMÜLMEDİ.** Proje sahibi ne istediğini anlatmak için
+    referans görsel gönderdi; görseller stok/clipart olduğu için (bkz. sapma
+    #7'deki pngtree filigranı olayı) projeye alınmadı — bakılıp aynı biçim
+    kendimiz çizildi.
+
+    **Korna yeri değişti**: alt ortadan (sapma #15) sağ sütuna, yön okunun
+    **üstüne** alındı. Sahibi: *"zaten bir fonksiyonu yok."* Yani korna artık
+    ayrı bir kontrol bölgesi işgal etmiyor, mevcut sağ kümeye eklendi. Kornanın
+    oynanışa etkisizliği değişmedi.
+
+23. **Boğa 67'nin fabrika boyası siyah** (2026-08-16, proje sahibi kararı) —
+    `COLOR_MIDNIGHT`. Sapma #17'nin ("her aracın bir fabrika boyası var")
+    üçüncü uygulaması; kural aynı: gövdeye sahip olmak fabrika boyasını da
+    açar, boya gövdeye kilitli değil.
+
+    **Okunabilirlik denetlendi:** en koyu gece zemininde bile araç kayboluyor
+    mu diye bakıldı — kaybolmuyor, siluet iki işaretten taşınıyor: gövdedeki
+    **beyaz çift şerit** ve camlar. Bu **gözle denetimdir**, ölçülmüş bir
+    kontrast değeri değildir.
+
+    (Not: sapma #13'ün siluet tablosu Boğa 67'yi "tek kalın orta şerit" diye
+    tarif ediyor. O tablo **vektör** geometrisini anlatıyordu; sprite'a geçişte
+    (sapma #16) şerit çift beyaz olarak çizildi. Tablo bu ayrıntıda artık
+    güncel değil, ayırt edici işaretlerin geri kalanı geçerli.)
 
 ## Web3 durumu
 

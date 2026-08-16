@@ -239,20 +239,25 @@ private fun DrawScope.drawNightTrackBackdrop(density: Float, sprites: CarSpriteS
         index++
     }
 
-    // Serit cizgileri
+    // Serit cizgileri — oyun sahnesindeki ile AYNI nedenle blok blok
+    // ciziliyor: `drawLine` + PathEffect API 28 altinda sessizce yok sayilir
+    // ve cizgi duz cikar (bkz. GameRenderer.drawTrack).
     val on = GameConfig.LANE_DASH_ON_PX * density
     val off = GameConfig.LANE_DASH_OFF_PX * density
-    val dash = PathEffect.dashPathEffect(floatArrayOf(on, off), 0f)
+    val period = on + off
+    val laneStroke = 5f * density
     val laneWidth = roadWidth / GameConfig.LANE_COUNT
-    for (i in 1 until GameConfig.LANE_COUNT) {
-        val x = roadX + laneWidth * i
-        drawLine(
-            color = Color(0xC2FFFFFF),
-            start = Offset(x, 0f),
-            end = Offset(x, h),
-            strokeWidth = 5f * density,
-            pathEffect = dash
-        )
+    var dashY = 0f
+    while (dashY < h) {
+        for (i in 1 until GameConfig.LANE_COUNT) {
+            val x = roadX + laneWidth * i
+            drawRect(
+                color = Color(0xC2FFFFFF),
+                topLeft = Offset(x - laneStroke / 2f, dashY),
+                size = Size(laneStroke, on)
+            )
+        }
+        dashY += period
     }
 
     // Araclar: serit MERKEZLERINE oturur (oyundaki laneCenter ile ayni hesap).

@@ -897,6 +897,10 @@ object CarCatalog {
         boostMul = 1.04f,
         traitTr = "Ağır kas: gaza yaslanır, yavaşlamayı hiç sevmez",
         traitEn = "Heavy muscle: leans on the throttle, hates slowing down",
+        // Referans cizim siyah + beyaz cift serit; arac bu renkte tasarlandi
+        // (proje sahibi karari, 2026-08-16). En koyu zeminde bile beyaz
+        // seritler ve camlar silueti tasidigi icin okunurluk sorunu yok.
+        defaultColorId = COLOR_MIDNIGHT,
         parts = listOf(
             // Kas duruşu: on lastik dar, arka lastik BELIRGIN daha uzun.
             CarPart.Box(CarPaint.TIRE, -20f, 10f, 7f, 21f, 2f, WHEEL_ROLL),
