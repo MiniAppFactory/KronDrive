@@ -327,10 +327,48 @@ fun GameScreen(
     // Ana oyun dongusu: her ekran karesinde bir simulasyon adimi.
     LaunchedEffect(engine) {
         var lastFrameNanos = 0L
+        // Yumusatilmis kare suresi. Baslangicta 0 = "henuz olcum yok".
+        var smoothDt = 0f
         while (true) {
             androidx.compose.runtime.withFrameNanos { now ->
-                val dt = if (lastFrameNanos == 0L) 0f else (now - lastFrameNanos) / 1_000_000_000f
+                val rawDt = if (lastFrameNanos == 0L) 0f else (now - lastFrameNanos) / 1_000_000_000f
                 lastFrameNanos = now
+
+                // KARE SURESI YUMUSATILIYOR (2026-08-17).
+                //
+                // Sorun: sahibi cihazda *"yukaridan gelen arabalar takila
+                // takila geliyor"* dedi. Hareket zaten dt tabanliydi, yani
+                // kare hizindan bagimsizdi — ama dt'nin KENDISI dalgalaniyor
+                // (bu cihazda ~40 FPS ve jitterli). Dalgalanan dt, dogrudan
+                // dalgalanan konum demek: nesne bir karede 8 dp, sonrakinde
+                // 14 dp, sonrakinde 6 dp ilerliyor.
+                //
+                // Yolun duzgun gorunmesi bunu curutmuyor: yol tekrarli ve
+                // birbirinin ayni seritlerden olusuyor, ayni titreme orada
+                // neredeyse gorunmez. Tek bir arac ise referans nokta —
+                // titreme yalnizca orada GORULUYOR, orada OLMUYOR.
+                //
+                // Cozum: dt'yi alcak geciren filtreden gecirmek. Dunya biraz
+                // "gecmisin ortalamasi" hizinda ilerler; anlik hata birikmez,
+                // cunku filtre gercek dt'ye yakinsiyor. Oyun hissi acisindan
+                // bedeli yok — bu bir arcade oyunu, fizik dogrulugu degil
+                // hareketin duzgun OKUNMASI onemli.
+                //
+                // Neden sabit adimli birikirici degil: o daha "dogru" ama kare
+                // basina birden fazla simulasyon adimi demek ve bu cihaz zaten
+                // ~40 FPS'te zorlaniyor. Yumusatma sifir ek maliyetli.
+                //
+                // 0.20 katsayisi: ~5 karelik pencere (40 FPS'te ~125 ms).
+                // Daha kucuk deger daha duzgun ama hiz degisimine gec tepki
+                // verir (fren/boost gec hissedilir); daha buyugu titremeyi
+                // yeterince kesmez.
+                val dt = if (smoothDt == 0f) {
+                    smoothDt = rawDt
+                    rawDt
+                } else {
+                    smoothDt += (rawDt - smoothDt) * 0.20f
+                    smoothDt
+                }
 
                 // Carpisma vurusu motordan ONCE ilerletilir. Sirasi onemli:
                 // asagida bir Crash olayi gelirse `trigger` sayaci sifirlar ve

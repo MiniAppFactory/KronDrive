@@ -186,15 +186,25 @@ fun DrawScope.drawCarParts(style: CarStyle) {
  * 0..1 arasi bir carpan olarak tutuyor: `boya x golge` dogru gölgeli boyayi
  * verir. Duz [BlendMode.SrcIn] tinti butun hacmi duz renge cevirirdi.
  *
- * Kutu tam sayi koordinatlara oturur (x -20..20, y -2..74) — [drawImage] zaten
- * tam sayi istiyor ve bu degerler [GameConfig] sabitlerinden turedigi icin
- * yuvarlama kaybi yok.
+ * Kutu GOVDENIN KENDI SINIFINDAN gelir ([CarShapeDef.boxLeft] vb.), tek bir
+ * sabitten degil.
+ *
+ * 2026-08-17'de burasi [CarCatalog.ART_LEFT] ailesini kullaniyordu ve o
+ * degerler [VehicleClass.BINEK]'in kutusu (40x76). Ayni gun eklenen
+ * motosiklet (22x59) ve tir (48x202) sprite'lari bu yuzden BINEK kutusuna
+ * SIKISTIRILARAK ciziliyordu: motosiklet enine gerilmis, tir boyuna
+ * ezilmis olurdu. Sprite hatti dosyalari dogru oranda uretiyordu, hata
+ * yalnizca cizim tarafindaydi.
+ *
+ * Kutu sinirlari tam sayi ([drawImage] tam sayi istiyor) ve sinif tanimlari
+ * bilerek yuvarlak secildi, o yuzden yuvarlama kaybi yok.
  */
 private fun DrawScope.drawCarSprite(style: CarStyle, sprite: CarSprite) {
-    val left = CarCatalog.ART_LEFT.roundToInt()
-    val top = CarCatalog.ART_TOP.roundToInt()
+    val shape = style.shape
+    val left = shape.boxLeft.roundToInt()
+    val top = shape.boxTop.roundToInt()
     val offset = IntOffset(left, top)
-    val size = IntSize(CarCatalog.ART_RIGHT.roundToInt() - left, CarCatalog.ART_BOTTOM.roundToInt() - top)
+    val size = IntSize(shape.boxRight.roundToInt() - left, shape.boxBottom.roundToInt() - top)
     drawImage(
         image = sprite.body,
         dstOffset = offset,

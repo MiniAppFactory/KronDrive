@@ -100,7 +100,9 @@ class GameEngine(
     var countdownRemaining: Float = GameConfig.COUNTDOWN_SECONDS.toFloat()
         private set
 
-    val theme: RoadTheme = RoadTheme.entries[random.nextInt(RoadTheme.entries.size)]
+    // GECICI: olcum icin tema sabitlendi (PERF_MEASUREMENT_20260817). Geri alinacak.
+    val theme: RoadTheme = RoadTheme.CROWD
+        .also { random.nextInt(RoadTheme.entries.size) } // RNG akisi bozulmasin
 
     /** Bu kosunun taban hizi — bolum kendi baslangic hizini verebilir. */
     private val baseSpeed: Float =
@@ -368,6 +370,52 @@ class GameEngine(
     }
 
     // -----------------------------------------------------------------
+    // GECICI OLCUM KANCASI — PERF_MEASUREMENT_20260817, commit EDILMEZ
+    // -----------------------------------------------------------------
+    private var pFrames = 0
+    private var pWall = 0.0          // gercek gecen sure (kirpilmamis dt toplami)
+    private var pSim = 0.0           // simulasyona verilen sure (kirpilmis dt toplami)
+    private var pClip32 = 0          // dt > 0.032 olan kare sayisi
+    private var pLost32 = 0.0        // 0.032 sinirinda kaybolacak toplam sure
+    private var pClipCap = 0         // dt > MAX_FRAME_DT olan kare sayisi
+    private var pLostCap = 0.0       // mevcut sinirda GERCEKTEN kaybolan sure
+    private val pBuckets = IntArray(7)
+
+    private fun perfProbe(raw: Float) {
+        if (raw <= 0f) return
+        pFrames++
+        pWall += raw
+        pSim += raw.coerceIn(0f, GameConfig.MAX_FRAME_DT)
+        if (raw > 0.032f) { pClip32++; pLost32 += (raw - 0.032f) }
+        if (raw > GameConfig.MAX_FRAME_DT) { pClipCap++; pLostCap += (raw - GameConfig.MAX_FRAME_DT) }
+        val ms = raw * 1000f
+        val b = when {
+            ms < 20f -> 0      // 1 vsync (60 Hz)
+            ms < 28f -> 1
+            ms < 36f -> 2      // 2 vsync
+            ms < 45f -> 3
+            ms < 56f -> 4      // 3 vsync
+            ms < 75f -> 5      // 4 vsync
+            else -> 6
+        }
+        pBuckets[b]++
+        if (pFrames % 120 == 0) {
+            println(
+                "KDPERF cap=${GameConfig.MAX_FRAME_DT} theme=$theme frames=$pFrames " +
+                    "wall=${"%.2f".format(pWall)}s sim=${"%.2f".format(pSim)}s " +
+                    "drift=${"%.0f".format((pWall - pSim) * 1000)}ms " +
+                    "avgdt=${"%.1f".format(pWall / pFrames * 1000)}ms " +
+                    "fps=${"%.1f".format(pFrames / pWall)} " +
+                    "clip32=$pClip32(${"%.1f".format(100.0 * pClip32 / pFrames)}%) " +
+                    "lost32=${"%.0f".format(pLost32 * 1000)}ms(${"%.1f".format(pLost32 / pWall * 1000)}ms/s) " +
+                    "clipCap=$pClipCap(${"%.1f".format(100.0 * pClipCap / pFrames)}%) " +
+                    "lostCap=${"%.0f".format(pLostCap * 1000)}ms(${"%.1f".format(pLostCap / pWall * 1000)}ms/s) " +
+                    "buckets=${pBuckets.joinToString(",")}"
+            )
+        }
+    }
+
+    // -----------------------------------------------------------------
     // Ana dongu
     // -----------------------------------------------------------------
 
@@ -379,6 +427,7 @@ class GameEngine(
      * ulassin diye (bastan temizleseydik sessizce kaybolurlardi).
      */
     fun step(deltaSeconds: Float): List<GameEvent> {
+        perfProbe(deltaSeconds)
         val dt = deltaSeconds.coerceIn(0f, GameConfig.MAX_FRAME_DT)
         when (phase) {
             RunPhase.COUNTDOWN -> {
