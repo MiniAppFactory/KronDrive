@@ -448,7 +448,12 @@ object CarCatalog {
     const val COLOR_MIDNIGHT = "midnight"
     const val COLOR_KHAKI = "khaki"
 
-    const val DEFAULT_SHAPE_ID = SHAPE_HATCHBACK
+    /**
+     * Oyuncunun oyuna basladigi govde ve TUM dengenin olculdugu referans.
+     * 2026-08-16: SHAPE_HATCHBACK -> SHAPE_BEETY (sahibi karari; gerekce
+     * [BEETY] tanimindaki notta).
+     */
+    const val DEFAULT_SHAPE_ID = SHAPE_BEETY
     const val DEFAULT_COLOR_ID = COLOR_KRON_RED
 
     // -----------------------------------------------------------------
@@ -513,16 +518,30 @@ object CarCatalog {
         nameEn = "City",
         descriptionTr = "Kron Drive'ın klasik gövdesi",
         descriptionEn = "The classic Kron Drive body",
-        priceCoins = 0,
+        // 2026-08-16: 0 -> 350. Beety baslangic araci olunca Sehir en UCUZ
+        // govde oldu. Carpanlari 1.00 kaldigi icin satin alinan sey yalnizca
+        // GORUNUM — boya gibi, saf kozmetik.
+        //
+        // Fiyat bilerek dusuk: bundan onceki en ucuz arac 900 (Yaris Sedan)
+        // idi ve urun incelemesi "ilk anlamli satin alma cok uzakta" demisti.
+        // Olculen ~118 coin/bolum ile 350, ucuncu bolum civarinda ulasilabilir
+        // bir ilk hedef veriyor.
+        priceCoins = 350,
         requiredCarLevel = 1,
-        // REFERANS ARAC: dort eksen de 1.0. Katalogdaki her sey buna gore
-        // okunur ve bu degerler degistirilirse butun denge kayar.
+        // KUSURSUZ ARAC: hicbir eksende 1.00'in altina inmiyor. Katalogda
+        // buna izni olan TEK arac en ucuz ucretli aractir ve bu rol
+        // 2026-08-16'da Yaris Sedan'dan (900) Sehir'e (350) gecti — gerekce
+        // ayni: ilk satin alma teredduetsuz "iyi" hissettirmeli.
+        //
+        // Guclu yon FREN secildi cunku oyunun ilk ogrettigi sey kacinmak;
+        // biraz daha iyi fren, yeni oyuncunun ilk parasini harcadigina
+        // dogrudan deger. Hicbir aracı domine etmiyor, edilmiyor de.
         topSpeedMul = 1.00f,
         accelMul = 1.00f,
-        brakeMul = 1.00f,
+        brakeMul = 1.04f,
         boostMul = 1.00f,
-        traitTr = "Her yolda idare eder, hiçbir eksende parlamaz",
-        traitEn = "Gets by on any road, shines on no axis",
+        traitTr = "Klasik gövde, biraz daha güvenli fren",
+        traitEn = "Classic body, slightly safer brakes",
         parts = listOf(
             // Tekerlekler gövdenin ALTINDA kalir, camurluktan ~2 birim tasar.
             CarPart.Box(CarPaint.TIRE, -20f, 11f, 7f, 20f, 2.4f, WHEEL_ROLL),
@@ -650,14 +669,16 @@ object CarCatalog {
         descriptionEn = "Long body, rear wing, twin stripes",
         priceCoins = 900,
         requiredCarLevel = 2,
-        // GIRIS SEVIYESI: tablonun tek zayifsiz araci (fren ve boost notr).
-        // Bilincli — ilk satin alinan arac tereddutsuz "iyi" hissettirmeli.
-        // Ustunlugu kucuk kaliyor, 1500+ araclarin hepsi onu bir eksende
-        // belirgin geciyor. CarCatalogTest bu istisnayi TEK arac icin
-        // dondurur: ikinci bir zayifsiz arac eklenirse test kirilir.
+        // 2026-08-16: "tek zayifsiz arac" rolu Sehir'e (350) gecti, cunku o
+        // rolun kurali "EN UCUZ ucretli arac" ve Sehir artik daha ucuz.
+        // Yaris Sedan bu yuzden bir bedel kazandi: fren 1.00 -> 0.98.
+        //
+        // Bedel FREN secildi cunku aracin kimligi zaten "hizlan ve one gec";
+        // hizlanan ama biraz gec duran bir arac tutarli. Ustunlugu (hiz+ivme)
+        // dokunulmadan duruyor ve hala bariz bir yukselti.
         topSpeedMul = 1.04f,
         accelMul = 1.08f,
-        brakeMul = 1.00f,
+        brakeMul = 0.98f,
         boostMul = 1.00f,
         traitTr = "Hafif ve çevik — trafiğin arasından süzülmek için",
         traitEn = "Light and nimble — built for weaving through traffic",
@@ -1052,18 +1073,32 @@ object CarCatalog {
      *
      * FABRIKA BOYASI YOK: `defaultColorId` yazilmadi, yani araç KIRMIZI
      * (bedava temel boya) baslar. Referans cizim sari ama sari
-     * ([COLOR_SUNBEAM], 700 coin) satin alinir — sahibi karari. Kuş SLX /
-     * Dağ Keçisi / Boğa 67 desenlerinden bilerek ayriliyor.
+     * ([COLOR_SUNBEAM], 700 coin) satin alinir — sahibi karari. Boylece
+     * baslangic aracinin bile bir "ilk hedefi" oluyor.
      *
-     * DENGE — dominasyon testi: en iyi ivme ve en iyi fren, ama katalogun
-     * ACIK ARA en dusuk son hizi (0.92; bir sonraki en dusuk Kuş SLX 0.97).
-     * Hicbir govdeyi domine etmiyor (Kuş SLX ve Dağ Keçisi son hizda ve
-     * boostta ondeler) ve kendisi de domine edilmiyor. Eksen toplami 4.18,
-     * Super Araba'nin 4.16'sinin hemen ustunde — en pahali olmasinin karsiligi
-     * bu kadar, daha fazlasi degil.
+     * === 2026-08-16: BASLANGIC ARACI VE REFERANS OLDU ===
      *
-     * Dusuk son hiz GERCEK bir bedel: skor mesafeden ve gecisten geliyor,
-     * yani Beety daha guvenli ama daha az kazandiriyor.
+     * Once 4000 coin ile katalogun en pahalisiydi ve carpanlari
+     * 0.92/1.14/1.12 idi. Bu bir CELISKIYDI: en pahali arac her olculebilir
+     * eksende Super Araba'dan (3200) yavasti ve dusuk son hiz skor/coin/XP
+     * kazancini ~%10 dusurdugu icin zirve satin alma oyuncuyu GERILETIYORDU
+     * (bkz. docs/REVIEW_GAMEPLAY.md, docs/REVIEW_PRODUCT.md).
+     *
+     * Sahibi celiskiyi tersinden cozdu: arac pahali olmasin, BEDAVA olsun.
+     * Sonuclari:
+     *  - "En pahali ama en yavas" celiskisi ortadan kalkti.
+     *  - Super Araba yeniden 3200 ile zirve; boylece "yeni govdeler fiyat
+     *    merdivenini UZATMAZ" kurali icin acilan istisna KAPANDI.
+     *  - Magaza basligi "Retro Araba Oyunu" ve urun incelemesi retro vaadinin
+     *    hicbir kanalda tasinmadigini yazmisti. Klasik bocek silueti oyunun
+     *    ILK SANIYESINDE gorunuyor artik — vaadi magaza gorselinden degil
+     *    oyunun kendisinden teslim ediyor.
+     *
+     * CARPANLAR 1.00 OLMAK ZORUNDA: bu artik REFERANS ARAC. Yukseltme
+     * egrileri, bolum hedefleri ve skor egrisi bu aracin davranisina gore
+     * hesaplandi; `CarCatalogTest` bunu kilitliyor. Beety'nin eski "cevik ama
+     * yavas" kimligi bu yuzden BIRAKILDI — baslangic aracinin ayirt edici
+     * carpani OLMAMALI, o olcunun kendisidir. Kimligi artik gorselden geliyor.
      */
     private val BEETY = CarShapeDef(
         id = SHAPE_BEETY,
@@ -1071,19 +1106,15 @@ object CarCatalog {
         nameEn = "Beety",
         descriptionTr = "Klasik böcek gövdesi, ayrık çamurluklar",
         descriptionEn = "Classic bug body, separate fenders",
-        priceCoins = 4000,
-        // Super Araba ile AYNI seviye. Yukseltilmedi cunku seviye kapisi bu
-        // fiyat bandinda zaten anlamli bir engel degil: oyundaki en yuksek
-        // sart 6 ve oyuncu ona 9. bolumde ulasiyor, 4000 coin cok daha uzun
-        // suruyor (bkz. docs/ECONOMY_BALANCE_PROPOSAL.md, ikinci bulgu).
-        // Gercek kapi fiyat; sahte bir seviye sarti eklemiyoruz.
-        requiredCarLevel = 6,
-        topSpeedMul = 0.92f,
-        accelMul = 1.14f,
-        brakeMul = 1.12f,
+        priceCoins = 0,
+        requiredCarLevel = 1,
+        // REFERANS ARAC: dort eksen de 1.0 (bkz. yukaridaki not).
+        topSpeedMul = 1.00f,
+        accelMul = 1.00f,
+        brakeMul = 1.00f,
         boostMul = 1.00f,
-        traitTr = "En çevik ama en yavaşı — trafiği deler, kaçamaz",
-        traitEn = "Nimblest but slowest — threads traffic, can't outrun it",
+        traitTr = "Her yolda idare eder, hiçbir eksende parlamaz",
+        traitEn = "Gets by on any road, shines on no axis",
         parts = listOf(
             // Tekerlekler govdeden ACIKCA disarida: ayrik camurluk hissi.
             // x = -20 / 13 SINIRIN TA KENDISI (ART_LEFT/RIGHT = -20..20);
@@ -1150,8 +1181,8 @@ object CarCatalog {
      * bos bir ucurum vardi, artik ara bir hedef var. Hepsi yalnizca kozmetik.
      */
     val shapes: List<CarShapeDef> = listOf(
-        HATCHBACK, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR,
-        BEETY
+        BEETY, HATCHBACK, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67,
+        SUPERCAR
     )
 
     // -----------------------------------------------------------------

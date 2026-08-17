@@ -271,10 +271,21 @@ class CarCatalogTest {
         assertEquals(12, CarCatalog.statDeltaPercent(supercar, UpgradeType.SPEED))
         assertEquals(-6, CarCatalog.statDeltaPercent(supercar, UpgradeType.BRAKE))
 
-        // Beety ters yonde: hizda kayip, frende kazanc.
+        // Beety 2026-08-16'da BASLANGIC ARACI ve referans oldu: dort eksen
+        // de 1.00, yani her eksende %0 fark. Once 4000 coinlik karakterli bir
+        // aracti (-8 hiz / +12 fren); gerekce CarCatalog'daki notta.
         val beety = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_BEETY }
-        assertEquals(-8, CarCatalog.statDeltaPercent(beety, UpgradeType.SPEED))
-        assertEquals(12, CarCatalog.statDeltaPercent(beety, UpgradeType.BRAKE))
+        UpgradeType.entries.forEach { type ->
+            assertEquals(
+                "Beety referans arac: ${type.name} ekseninde fark 0 olmali",
+                0,
+                CarCatalog.statDeltaPercent(beety, type)
+            )
+        }
+        // Sehir en ucuz ucretli arac ve tek guclu yonu fren.
+        val sehir = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_HATCHBACK }
+        assertEquals(4, CarCatalog.statDeltaPercent(sehir, UpgradeType.BRAKE))
+        assertEquals(0, CarCatalog.statDeltaPercent(sehir, UpgradeType.SPEED))
     }
 
     // -----------------------------------------------------------------
@@ -360,8 +371,11 @@ class CarCatalogTest {
         // Varsayilan gövde 2026-08-15'te yeniden cizildi (PROVENANCE #11), ama
         // kutuyu TAM doldurmasi degismez bir sart: hem sanat olcegi hem de
         // carpisma kutusu bu dort sayidan turetiliyor.
+        // 2026-08-16: varsayilan govde SHAPE_HATCHBACK'ten SHAPE_BEETY'ye
+        // gecti. Test artik KIMLIGE degil DEGISMEZ SARTA bakiyor — hangi
+        // govde varsayilansa kutuyu tam doldurmali.
         val classic = CarCatalog.defaultShape
-        assertEquals(CarCatalog.SHAPE_HATCHBACK, classic.id)
+        assertEquals(CarCatalog.SHAPE_BEETY, classic.id)
         assertEquals(-2f, classic.artTop, 0.001f)
         assertEquals(74f, classic.artBottom, 0.001f)
         assertEquals(-20f, classic.artLeft, 0.001f)
@@ -395,18 +409,21 @@ class CarCatalogTest {
         // Iki nostalji araci AYNI basamakta (1500, sahibi karari 2026-08-15):
         // biri otekinin ucuz alternatifi olmamali, secim zevke kalmali.
         // Boga 67 (2400) 1800 ile 3200 arasindaki EN GENIS bosluga girdi.
-        // Beety (4000, 2026-08-16) merdiveni UZATTI — onceki govdeler mevcut
-        // araliklara oturuyordu, bu ilk kez tavani yukseltiyor (sahibi karari).
+        // Beety once 4000 ile merdiveni UZATMISTI; ayni gun bedava baslangic
+        // araci olunca merdivenin TAVANI 3200'e geri dondu ve "yeni govdeler
+        // merdiveni uzatmaz" kurali icin acilan istisna kapandi.
+        // Sehir 350: Beety baslangic olunca en ucuz ucretli govde oldu ve
+        // katalogun ilk satin alma basamagi 900'den 350'ye indi.
         assertEquals(
             listOf(
-                CarCatalog.SHAPE_HATCHBACK to 0,
+                CarCatalog.SHAPE_BEETY to 0,
+                CarCatalog.SHAPE_HATCHBACK to 350,
                 CarCatalog.SHAPE_RACE_SEDAN to 900,
                 CarCatalog.SHAPE_KUS_SLX to 1500,
                 CarCatalog.SHAPE_MOUNTAIN_GOAT to 1500,
                 CarCatalog.SHAPE_MUSCLE to 1800,
                 CarCatalog.SHAPE_MUSCLE_67 to 2400,
-                CarCatalog.SHAPE_SUPERCAR to 3200,
-                CarCatalog.SHAPE_BEETY to 4000
+                CarCatalog.SHAPE_SUPERCAR to 3200
             ),
             CarCatalog.shapes.map { it.id to it.priceCoins }
         )

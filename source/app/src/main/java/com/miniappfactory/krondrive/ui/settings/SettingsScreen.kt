@@ -1,5 +1,6 @@
 package com.miniappfactory.krondrive.ui.settings
 
+import com.miniappfactory.krondrive.BuildConfig
 import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -230,7 +231,13 @@ private fun AboutCard(language: AppLanguage) {
                 fontWeight = FontWeight.Black
             )
             Text(
-                text = language.pick(tr = "Sürüm 1.0.0", en = "Version 1.0.0"),
+                // ELLE YAZILMIYOR (2026-08-16): dize "1.0.0"da kalmisti, oysa
+                // uygulama 1.0.9. Artik BuildConfig'ten okunuyor, yani bir
+                // daha eskiyemez.
+                text = language.pick(
+                    tr = "Sürüm ${BuildConfig.VERSION_NAME}",
+                    en = "Version ${BuildConfig.VERSION_NAME}"
+                ),
                 color = KronColors.TextSecondary,
                 fontSize = 13.sp
             )

@@ -109,11 +109,16 @@ class UpgradeCatalogTest {
 
     @Test
     fun `displayValue her dal ve her seviye icin bos olmayan metin dondurur`() {
-        UpgradeType.entries.forEach { type ->
-            for (level in 1..UpgradeCatalog.MAX_LEVEL) {
-                val value = UpgradeCatalog.displayValue(type, level)
-                assertTrue("$type/$level bos deger dondurdu", value.isNotBlank())
-                assertTrue("$type/$level rakam icermiyor: $value", value.any { it.isDigit() })
+        // 2026-08-16: displayValue artik GOVDEYE bagli, o yuzden her govde
+        // icin ayri ayri deneniyor. Once govde carpani atlaniyordu ve garaj
+        // her araç icin ayni sayiyi yaziyordu.
+        CarCatalog.shapes.forEach { car ->
+            UpgradeType.entries.forEach { type ->
+                for (level in 1..UpgradeCatalog.MAX_LEVEL) {
+                    val value = UpgradeCatalog.displayValue(type, level, car)
+                    assertTrue("${car.id}/$type/$level bos deger", value.isNotBlank())
+                    assertTrue("${car.id}/$type/$level rakam yok: $value", value.any { it.isDigit() })
+                }
             }
         }
     }
@@ -123,12 +128,15 @@ class UpgradeCatalogTest {
         // Garajdaki sayi iki seviyede ayni cikarsa oyuncu "para verdim, hicbir
         // sey degismedi" der. ACCELERATION'da tam bu oluyordu: "0.2 s" disinda
         // tum seviyeler "0.1 s" gosteriyordu (2026-08-14'te duzeltildi).
-        UpgradeType.entries.forEach { type ->
-            val values = (1..UpgradeCatalog.MAX_LEVEL).map { UpgradeCatalog.displayValue(type, it) }
-            assertTrue(
-                "$type ayni degeri birden fazla seviyede gosteriyor: $values",
-                values.toSet().size == values.size
-            )
+        CarCatalog.shapes.forEach { car ->
+            UpgradeType.entries.forEach { type ->
+                val values = (1..UpgradeCatalog.MAX_LEVEL)
+                    .map { UpgradeCatalog.displayValue(type, it, car) }
+                assertTrue(
+                    "${car.id}/$type ayni degeri birden fazla seviyede gosteriyor: $values",
+                    values.toSet().size == values.size
+                )
+            }
         }
     }
 

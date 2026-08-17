@@ -2,6 +2,7 @@ package com.miniappfactory.krondrive.ui.game
 
 import android.app.Activity
 import androidx.compose.foundation.Canvas
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -359,6 +360,28 @@ fun GameScreen(
             }
         }
     }
+
+    /**
+     * Sistem geri tusu KOSUYU SESSIZCE SILIYORDU (2026-08-16'da bulundu).
+     *
+     * Projede hicbir `BackHandler` yoktu: sürerken geri tusuna basmak ekrani
+     * kapatiyor, `onRunFinished` hic cagrilmiyor ve o kosunun coin'i, XP'si,
+     * gorev ilerlemesi UYARISIZ gidiyordu. Duraklat menusunden cikis yolu
+     * ise tam tersini yapiyor (sonucu yayimliyor) — yani ayni niyetin iki
+     * yolu iki farkli sonuc veriyordu.
+     *
+     * Cozum en az sasirtan davranis: geri tusu DURAKLATIR. Oyuncu cikmak
+     * isterse duraklatma menusundeki cikisi kullanir, o da sonucu kaydeder.
+     * Duraklatilmisken ikinci kez basmak devam ettirir.
+     */
+    BackHandler(enabled = engine.phase == RunPhase.RUNNING || paused) {
+        if (paused) {
+            engine.resume()
+            paused = false
+        } else {
+            onPauseTap()
+        }
+    }
     val onToggleSpeedLock = remember(engine) {
         {
             engine.toggleSpeedLock()
@@ -456,6 +479,7 @@ fun GameScreen(
         // cunku onlar zaten kaydirma katmanindan SONRA ciziliyordu.
         GameHud(
             hudState = hudState,
+            language = language,
             onPause = onPauseTap,
             onToggleSpeedLock = onToggleSpeedLock,
             modifier = Modifier
@@ -716,6 +740,8 @@ private fun formatTime(totalSeconds: Int): String {
 @Composable
 private fun GameHud(
     hudState: State<HudState>,
+    // AppLanguage bir enum, yani KARARLI — composable skippable kalir.
+    language: AppLanguage,
     onPause: () -> Unit,
     onToggleSpeedLock: () -> Unit,
     modifier: Modifier = Modifier
@@ -824,7 +850,7 @@ private fun GameHud(
             if (hud.speedLockAvailable) {
                 Box(
                     modifier = Modifier
-                        .heightIn(min = 36.dp)
+                        .heightIn(min = PAUSE_BUTTON_SIZE)
                         .background(
                             if (hud.speedLocked) KronColors.Accent.copy(alpha = 0.85f)
                             else Color(0x66040C16),
@@ -837,7 +863,14 @@ private fun GameHud(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (hud.speedLocked) "🔒 HIZ" else "HIZ",
+                        // Katalogdaki TEK tek-dilli sabit metindi (2026-08-16):
+                        // Ingilizce oyuncu "HIZ" goruyordu. Kilit emojisi de
+                        // kaldirildi — ayni gun kontrol tuslarindaki emojiler
+                        // cizime gecirilmisti, bu onlardan arta kalmisti.
+                        text = language.pick(
+                            tr = if (hud.speedLocked) "HIZ ✓" else "HIZ",
+                            en = if (hud.speedLocked) "SPEED ✓" else "SPEED"
+                        ),
                         color = if (hud.speedLocked) KronColors.Background else KronColors.TextSecondary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Black

@@ -138,23 +138,48 @@ object UpgradeCatalog {
 
     // --- Garaj ekraninda gosterilen somut degerler ---
 
-    /** Ornek: SPEED icin "181 km/h", BOOST icin "2.6 s". */
-    fun displayValue(type: UpgradeType, level: Int): String = when (type) {
+    /**
+     * Ornek: SPEED icin "181 km/h", BOOST icin "2.6 s".
+     *
+     * [car] SECILI GOVDE — 2026-08-16'da eklendi ve sebebi bir kusurdu:
+     * fonksiyon `scoreSpeedCap(level)` cagiriyordu, yani govde carpanini
+     * ATLIYORDU. Sonuc: garaj her araç icin AYNI hizi yaziyordu. Super
+     * Araba'nin gercek tavani 193 km/h iken ekran 180 diyordu.
+     *
+     * Bu, "hiz yukseltmesi aldim ama bir sey degismedi" hissinin dogrudan
+     * kaynagiydi — deger gercekten degisiyordu, ekran soylemiyordu
+     * (bkz. docs/REVIEW_GAMEPLAY.md).
+     */
+    fun displayValue(type: UpgradeType, level: Int, car: CarShapeDef): String = when (type) {
         UpgradeType.SPEED ->
-            "${GameConfig.speedToKmh(GameConfig.BASE_SPEED + scoreSpeedCap(level))} km/h"
+            "${GameConfig.speedToKmh(GameConfig.BASE_SPEED + scoreSpeedCap(level, car))} km/h"
 
         // Saniye yerine MILISANIYE: "0.2 s" gosterimi seviye 2'den sonra tum
         // seviyelerde "0.1 s"e yuvarlaniyordu, yani garaj oyuncuya "ivme
         // yukseltmesi hicbir sey yapmiyor" diyordu (2026-08-14'te bulundu).
         // Yeni gosterim: 167, 161, 151, 140, 129, 119, 109, 100 ms.
         UpgradeType.ACCELERATION ->
-            "${(1000f / accelRate(level)).roundToInt()} ms"
+            "${(1000f / accelRate(level, car)).roundToInt()} ms"
 
+        // Bir ondalik: tam sayiya yuvarlanınca Boga 67'nin (fren 0.90) 1. ve
+        // 2. seviyesi ikisi de "-26 km/h" cikiyordu (2026-08-16). BOOST ile
+        // ayni kusur, ayni cozum — garaj bir seviye farkini gostermek
+        // ZORUNDA, yoksa oyuncu parasini bosa verdigini sanir.
         UpgradeType.BRAKE ->
-            "-${(brakePenalty(level) / GameConfig.SPEEDOMETER_SPAN * GameConfig.SPEEDOMETER_RANGE_KMH).roundToInt()} km/h"
+            "-${oneDecimal(brakePenalty(level, car) / GameConfig.SPEEDOMETER_SPAN * GameConfig.SPEEDOMETER_RANGE_KMH)} km/h"
 
+        // IKI ONDALIK, bir ondalik DEGIL (2026-08-16). Bir ondalikta Dag
+        // Kecisi'nin (boost 1.06) 1. ve 2. seviyesi ikisi de "2.8 s"
+        // gosteriyordu — yani oyuncu boost yukseltmesini satin aliyor ve
+        // garajda hicbir sey degismiyordu. ACCELERATION dalinda 14 Agustos'ta
+        // ayni kusur bulunmus ve saniye yerine milisaniyeye gecilerek
+        // cozulmustu; bu ayni kusurun boost'taki hali.
+        //
+        // NOT: gosterim duzeldi ama ALTTAKI mesele duruyor — maliyet dogrusal,
+        // etki disbukey ([curve]), yani ilk seviyeler gercekten cok az sey
+        // yapiyor (bkz. docs/REVIEW_PRODUCT.md). O bir denge karari.
         UpgradeType.BOOST ->
-            "${oneDecimal(GameConfig.BOOST_MAX / boostDrain(level))} s"
+            "${twoDecimals(GameConfig.BOOST_MAX / boostDrain(level, car))} s"
     }
 
     fun title(type: UpgradeType, language: AppLanguage): String = when (type) {
@@ -189,5 +214,10 @@ object UpgradeCatalog {
     private fun oneDecimal(value: Float): String {
         val scaled = (value * 10f).roundToInt()
         return "${scaled / 10}.${scaled % 10}"
+    }
+
+    private fun twoDecimals(value: Float): String {
+        val scaled = (value * 100f).roundToInt()
+        return "${scaled / 100}.${(scaled % 100).toString().padStart(2, '0')}"
     }
 }

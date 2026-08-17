@@ -130,6 +130,9 @@ fun GarageScreen(
                     type = type,
                     level = progress.upgrades.levelOf(type),
                     coins = progress.coins,
+                    // Gosterilen deger SECILI GOVDEYE bagli: garaj eskiden
+                    // her araç icin ayni sayiyi yaziyordu (2026-08-16).
+                    car = progress.carStyle.shape,
                     language = language,
                     onUpgrade = { onUpgrade(type) }
                 )
@@ -754,6 +757,7 @@ private fun UpgradeRow(
     type: UpgradeType,
     level: Int,
     coins: Int,
+    car: CarShapeDef,
     language: AppLanguage,
     onUpgrade: () -> Unit
 ) {
@@ -788,7 +792,7 @@ private fun UpgradeRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = UpgradeCatalog.displayValue(type, level),
+                        text = UpgradeCatalog.displayValue(type, level, car),
                         color = KronColors.Blue,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Black
@@ -796,7 +800,7 @@ private fun UpgradeRow(
                     if (cost != null) {
                         Text(text = "→", color = KronColors.TextMuted, fontSize = 13.sp)
                         Text(
-                            text = UpgradeCatalog.displayValue(type, level + 1),
+                            text = UpgradeCatalog.displayValue(type, level + 1, car),
                             color = KronColors.AccentBright,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Black
