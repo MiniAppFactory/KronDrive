@@ -32,6 +32,14 @@ class GameStateRepository(private val context: Context) {
 
     private object Keys {
         val COINS = intPreferencesKey("coins")
+
+        /**
+         * ⚠ GECICI TEST ANAHTARI — [PlayerProgress.STARTING_COINS] ile birlikte
+         * kaldirilacak. Test coininin BIR KEZ verildigini isaretler.
+         */
+        val TEST_COINS_GRANTED = androidx.datastore.preferences.core.booleanPreferencesKey(
+            "test_coins_granted"
+        )
         val XP = intPreferencesKey("xp")
         val HIGHEST_LEVEL = intPreferencesKey("highest_unlocked_level")
         val LEVEL_STARS = stringPreferencesKey("level_stars")
@@ -108,6 +116,33 @@ class GameStateRepository(private val context: Context) {
         // Odullu "coin kazan" reklaminin gunluk sayaci.
         val REWARD_COIN_DAY = stringPreferencesKey("reward_coin_day")
         val REWARD_COIN_COUNT = intPreferencesKey("reward_coin_count")
+    }
+
+    /**
+     * ⚠⚠ GECICI — [PlayerProgress.STARTING_COINS] test degerindeyken calisir,
+     * yayin degerine donuldugu an KENDILIGINDEN olur ve hicbir sey yapmaz. ⚠⚠
+     *
+     * Sorun neydi: `STARTING_COINS` yalnizca TEMIZ KURULUMDA gecerli — DataStore
+     * bir kez "coins" yazdiktan sonra varsayilan hic okunmuyor. Sahibi test
+     * APK'sini mevcut profilin uzerine kurunca 100.000 coin HIC GELMEDI, eski
+     * 100 coin duruyordu (2026-08-17'de cihazda goruldu).
+     *
+     * Cozum tek seferlik yukleme. Neden bayrak var: her aciliste yukleseydi
+     * oyuncunun harcamasi geri gelirdi ve ekonomiyi test etmek imkansiz olurdu
+     * — arac denemek icin coin gerekiyor ama harcamanin da bir sonucu olmali.
+     *
+     * Bayrak DataStore'da; uygulama verisi silinmedikce ikinci kez calismaz.
+     */
+    suspend fun grantTestCoinsOnce() {
+        if (PlayerProgress.STARTING_COINS == PlayerProgress.STARTING_COINS_RELEASE) return
+        context.gameDataStore.edit { prefs ->
+            if (prefs[Keys.TEST_COINS_GRANTED] == true) return@edit
+            prefs[Keys.TEST_COINS_GRANTED] = true
+            val mevcut = prefs[Keys.COINS] ?: 0
+            if (mevcut < PlayerProgress.STARTING_COINS) {
+                prefs[Keys.COINS] = PlayerProgress.STARTING_COINS
+            }
+        }
     }
 
     val playerProgress: Flow<PlayerProgress> = context.gameDataStore.data.map { prefs ->

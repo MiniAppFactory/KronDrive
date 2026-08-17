@@ -38,6 +38,14 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = GameStateRepository(application)
 
+    init {
+        // ⚠ GECICI: test coininin tek seferlik yuklenmesi. Yayin degerine
+        // donuldugu an bu cagri hicbir sey yapmaz (fonksiyonun kendisi
+        // kontrol ediyor), o yuzden burada kalmasi zararsiz — ama
+        // [PlayerProgress.STARTING_COINS] ile birlikte kaldirilmali.
+        viewModelScope.launch { repository.grantTestCoinsOnce() }
+    }
+
     val playerProgress: StateFlow<PlayerProgress> = repository.playerProgress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlayerProgress())
 
