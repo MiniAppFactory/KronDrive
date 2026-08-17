@@ -57,14 +57,25 @@ import com.miniappfactory.krondrive.game.CarCatalog
  * aralarindaki oran [hornInterval]. Ince araclarda yuksek temel + kisa sure,
  * kalin araclarda dusuk temel + uzun sure ve yavas atak.
  *
- * ## Tir hazirligi
+ * ## Tir hazirligi — NE ONGORULDU, NE YAPILDI (2026-08-17)
  *
- * Planlanan tir gövdesi icin bu yapida hicbir degisiklik gerekmiyor; tek
- * yapilacak sey [CarSoundProfiles] icine su karakterde bir satir eklemek:
- * cok dusuk [freqMul] (~0.62), yuksek [harmonic3]/[harmonic5], yuksek
- * [noiseAmount], **cok dusuk** [hornBaseHz] (~110 Hz), genis [hornInterval]
- * (~1.5 = tam beslinin uzerinde), uzun [hornSeconds] (~1.1) ve yavas
- * [hornAttack] (~0.06) — hava kornasinin basinc kurmasi budur.
+ * Bu bolum tir gövdesi eklenmeden once bir TAHMINDI. Tir gercekten
+ * eklenince tahminin iki sayisi tutmadi; kayit dursun diye ikisi de burada:
+ *
+ *  - Ongoru: cok dusuk [freqMul] (~0.62). **Yapilmadi.** 0.62 hem yukaridaki
+ *    0.76 tabaninin altinda hem de Boga 67'nin "katalogun en pesi" tacini
+ *    elinden aliyor. Tir 0.78'de kaldi; kalinlik tek sayili harmoniklerden
+ *    ve 0.44 filtreden geliyor (bkz. [CarSoundProfiles.TIR]).
+ *  - Ongoru: cok dusuk [hornBaseHz] (~110 Hz). **Yapilmadi.** 110 Hz,
+ *    Boga 67'nin 250 Hz'lik "en kalin korna" tacini kiriyor ve bunu bir test
+ *    koruyor. Tir 262 Hz'de — katalogun ikinci en kalini.
+ *  - Ongoru: genis [hornInterval] (~1.5), uzun [hornSeconds] (~1.1), yavas
+ *    [hornAttack] (~0.06). **Aynen yapildi** — ucu de bostu, ve hava
+ *    kornasinin "basinc kurma" karakterini asil tasiyan bunlar.
+ *
+ * Cikarilan ders: bir karakter tek bir sayiya bagliysa o sayi baskasinin
+ * taciyla carpisir. Ayni karakteri BIRDEN COK bos eksene dagitmak hem
+ * carpismayi onluyor hem de sonucu daha ayirt edilebilir yapiyor.
  */
 data class CarSoundProfile(
     val id: String,
@@ -179,8 +190,13 @@ object CarSoundProfiles {
     )
 
     /**
-     * Dag Kecisi — tok, dizel havasi: katalogun EN KAPALI filtresi (0.68) ve
-     * en yuksek motor gurultusu. Tirin ses yonunun provasi.
+     * Dag Kecisi — tok, dizel havasi: **katalogun en yuksek motor
+     * gurultusu** (0.10, kimlik garantisi) ve cok kapali filtre (0.68).
+     *
+     * 2026-08-17'ye kadar burada "katalogun EN KAPALI filtresi" yaziyordu ve
+     * bu artik dogru degil: tir eklenince en kapali filtre 0.44 ile ona
+     * gecti. Zaten bu profilin gorevi "tirin ses yonunun provasi" olarak
+     * tanimlanmisti — prova bitti, asil arac geldi. Gurultu taci burada.
      */
     private val MOUNTAIN_GOAT = CarSoundProfile(
         id = CarCatalog.SHAPE_MOUNTAIN_GOAT,
@@ -271,9 +287,14 @@ object CarSoundProfiles {
     )
 
     /**
-     * Super Araba — yuksek devirli, ince ve keskin: katalogun en yuksek
-     * frekansi ve en acik filtresi, neredeyse hic duzensizlik yok (yaris
-     * motoru puruzsuz doner). Kornasi da en ince.
+     * Super Araba — yuksek devirli, ince ve keskin: **katalogun en yuksek
+     * frekansi (1.30) ve en acik filtresi (1.48)** — ikisi de kimlik
+     * garantisi, testle korunuyor. Yaris motoru puruzsuz doner: cok az
+     * duzensizlik.
+     *
+     * 2026-08-17 notu: korna artik en ince DEGIL (F1 780 Hz ile daha ince);
+     * bu profilinki 640 Hz ile ikinci. Motor tarafindaki iki tac ise yerinde
+     * — F1 olcume gore 1.75/2.01 isterken bilerek 1.28/1.46'da tutuldu.
      */
     private val SUPERCAR = CarSoundProfile(
         id = CarCatalog.SHAPE_SUPERCAR,
@@ -342,9 +363,278 @@ object CarSoundProfiles {
         hornAttack = 0.030f
     )
 
+    // -----------------------------------------------------------------
+    // 2026-08-17 — uc yeni gövde: F1, motosiklet, tir
+    // -----------------------------------------------------------------
+    //
+    // Bu ucunun sayilari TAHMIN DEGIL, OLCUM. Proje sahibinin
+    // `incoming/car_refs/sounds/` altina koydugu referans kayitlarin
+    // spektrumu olculdu. Kayitlar oyunda kullanilamiyor (asagida neden), ama
+    // HEDEF KARAKTER olarak gecerli.
+    //
+    // Olcumun durust olmasi icin: profili ZATEN kodda olan yedi aracin
+    // referanslari da ayni cetvelle olculdu, boylece "olcum -> parametre"
+    // esleme egrisi kalibre edildi. Iki egri cikti (Boga 67 disarida
+    // birakildi — onun degerleri sahibinin "abarti egzoz" istegiyle bilerek
+    // referanstan SAPTIRILMISTI, 2026-08-16):
+    //
+    //   cutoffMul ~= 0.544 * ln(spektral_agirlik_merkezi_Hz) - 1.556
+    //   freqMul   ~= 0.426 * ln(baskin_tepe_Hz)              - 0.991
+    //
+    // Kalibrasyon kaynagi (olculen -> kodda yazili): merkez 61->0.68,
+    // 73->0.74, 80->0.84, 101->0.94, 195->1.28, 264->1.48. Egri bu alti
+    // noktaya oturuyor; ilk egrinin uyumu cok iyi, ikincisi daha gevsek
+    // (Kas Arabasi 0.12 sapiyor).
+    //
+    // ⚠ OLCUMUN UYMADIGI YER — bilerek uyulmadi. Egriler uc yeni arac icin
+    // sunu istedi:
+    //
+    //   F1        : freqMul 1.75, cutoffMul 2.01
+    //   Motosiklet: freqMul 1.41, cutoffMul 1.64
+    //   Tir       : freqMul 0.68, cutoffMul 0.54
+    //
+    // Uc degerin besi mevcut araclarin taclarini kiriyordu (Super Araba
+    // freqMul 1.30 + cutoffMul 1.48; Boga 67 freqMul 0.76). Beety'de
+    // ogrenilen kural burada da uygulandi: yeni bir gövde, var olan bir
+    // gövdenin tek cumlelik tarifini elinden alarak kendine kimlik kuramaz.
+    // Sadece Tir'in cutoff'u (0.54 -> 0.44) olcume uydu, cunku o eksende
+    // korunan bir tac yoktu.
+    //
+    // Referanslarin neden oyunda kullanilamadigi da olculdu — 80 Hz altinda
+    // kalan enerji payi: Tir %86, Dag Kecisi %84, Beety %82. Telefon
+    // hoparloru o bandi zaten basmiyor, yani kaydin yarisindan fazlasi
+    // cihazda YOK. Sentez bu yuzden duruyor: kalinligi temel frekansla
+    // degil, harmoniklerle kuruyor.
+
+    /**
+     * **F1 — katalogun en puruzsuz ve en dengeli tarakli motoru.**
+     *
+     * Olcum, F1 referansini butun katalogdan AYRI bir kategoriye koydu.
+     * En carpici uc sayi (parantez icinde mevcut yedi aracin araligi):
+     *
+     *  - 500 Hz ustu / alti enerji orani: **1.35** (digerleri 0.002–0.089).
+     *    Yani F1, enerjisinin cogu 500 Hz'in USTUNDE olan tek referans;
+     *    ikinci sirada Super Araba 0.089 ile, 15 kat geride.
+     *  - En guclu 8 tepenin guc degisim katsayisi: **0.108** (digerleri
+     *    0.999–1.901). Dusuk deger "tepeler birbirine esit" demek.
+     *  - O 8 tepenin en zayifi / en guclusu: **0.714** (digerleri
+     *    0.007–0.032). Yuzde birler yerine yuzde yetmis.
+     *
+     * Ucu ayni seyi soyluyor: F1 tek bir kalin harmonige yiginmiyor, cok
+     * sayida ust harmonigi AYNI ANDA ve NEREDEYSE ESIT suruyor. "Ciglik"
+     * dedigimiz sey bu yogun, duz tarak.
+     *
+     * ## Kimlik hangi eksende kuruldu
+     *
+     * Tizlik tacini alamadi (Super Araba'da, 1.30) — bu yuzden F1 1.28'de,
+     * tacin bir tik altinda. Kimligi tasiyan sey bunun yerine **duz harmonik
+     * tarak**: [harmonic2]…[harmonic5] neredeyse esit (0.62/0.58/0.56/0.52)
+     * ve hepsi yuksek. Katalogda bu yapiya sahip baska gövde yok — Boga 67
+     * tek sayililara, Beety cift sayililara yiginir, geri kalan herkeste
+     * harmonikler yukari dogru azalir. F1 hicbirine benzemiyor.
+     *
+     * Bunun yan etkisi kasitli: enerjiyi ust harmoniklere yaymak, temel
+     * frekansi YUKSELTMEDEN sesin agirlik merkezini yukari tasiyor. Yani
+     * F1 tizlik tacini almadan da Super Araba'dan parlak duyulabiliyor;
+     * tac bir muhasebe kaydi olarak sahibinde kaliyor.
+     *
+     * Ikinci eksen **duzensizligin yoklugu**: [lopeDepth] 0.02, [grit] 0.04
+     * ve [noiseAmount] 0.01 ile ucu de katalogun EN DUSUGU. Bu taclar bostu
+     * (en derin lope Boga 67'nin, ama en SIGI kimsenin degildi) ve olcumle
+     * de destekleniyor: F1 referansinin zarf dalgalanmasi 0.31, butun setin
+     * en dusugu (Super Araba 0.58, Beety 0.75).
+     *
+     * Kornasi: F1'de korna YOK. Sifir yazilamadigi icin en ince (780 Hz),
+     * en kisa (0.22 s), en hizli atakli (0.006 s) ve en az vizlayan (0.30)
+     * korna verildi — "korna sayilmayacak kadar kucuk" en yakin karsilik.
+     */
+    private val F1 = CarSoundProfile(
+        id = CarCatalog.SHAPE_F1,
+        freqMul = 1.28f,
+        // DUZ TARAK — F1'in sayisal imzasi. Dorduncu harmonik ucuncunun
+        // %97'si, besinci ikincinin %84'u; en zayif/en guclu = 0.84.
+        // Test bunu >= 0.80 olarak kilitliyor.
+        harmonic2 = 0.62f,
+        harmonic3 = 0.58f,
+        harmonic4 = 0.56f,
+        harmonic5 = 0.52f,
+        grit = 0.04f,
+        noiseAmount = 0.01f,
+        lopeDepth = 0.02f,
+        // Lope zaten duyulmayacak kadar sig; hizli tutulunca kalan kirinti
+        // da ayri vuruslara ayrismiyor, dokuya karisiyor.
+        lopeRate = 0.90f,
+        gainMul = 1.02f,
+        cutoffMul = 1.46f,
+        nitroTone = 1.35f,
+        hornBaseHz = 780f,
+        hornInterval = 1.33f,
+        hornBuzz = 0.30f,
+        hornSeconds = 0.22f,
+        hornAttack = 0.006f
+    )
+
+    /**
+     * Motosiklet — tek/cift silindir: yuksek devirli ama F1'den HAM.
+     *
+     * Olcum onu F1 ile ayni ailede gosterdi (tepe degisim katsayisi 0.079,
+     * F1 0.108 — ikisi de mevcut katalogun 0.999–1.901 bandindan kopuk),
+     * ama iki sayi ikisini net ayiriyor:
+     *
+     *  - 500 Hz ustu/alti orani: motosiklet **0.115**, F1 1.348. Yani
+     *    motosikletin agirligi hala altta; F1 gibi ciglik degil.
+     *  - 200 Hz altindaki enerji payi: motosiklet **%28**, F1 %8.
+     *
+     * Bu yuzden harmonikleri F1 kadar duz DEGIL ve TEK sayililara hafifce
+     * yatik (tek silindir/cift silindir az sayida, buyuk ateslemeyle calisir).
+     * Yatiklik bilerek olculu: tek toplami 0.86, cift toplami 0.70. Boga
+     * 67'nin "V8 imzasi" testi tek > 2x cift ariyor (0.86 > 1.40 degil),
+     * yani o imza Boga'da EXCLUSIVE kaliyor.
+     *
+     * Karakterin geri kalani iki bos eksende: [grit] 0.26 (metalik puruz —
+     * zincir/tek silindir sertligi) ve yavas-derin [lopeDepth] 0.27 /
+     * [lopeRate] 0.32 ile belirgin vurus.
+     *
+     * NOT — olcumle celisen tek yer: referansin zarf dalgalanmasi 0.47
+     * cikti, yani mevcut kalin araclardan (Boga 0.65, Dag Kecisi 0.72) daha
+     * DUZGUN. Yine de lope belirgin yazildi, cunku (a) o araclarin yuksek
+     * olcumu buyuk olcude olcum eseri — zarflari lope degil, cok alcak
+     * frekansli vurudan dalgalaniyor; (b) fiziksel gerekce net: cift
+     * silindir devir basina iki kez atesler, V8 sekiz kez, dolayisiyla
+     * cevrim ici genlik degisimi dogasi geregi daha buyuktur. Sahibin
+     * dinleyip "vurus fazla/az" demesi bu sayiyi tek basina degistirir.
+     */
+    private val MOTOSIKLET = CarSoundProfile(
+        id = CarCatalog.SHAPE_MOTOSIKLET,
+        freqMul = 1.22f,
+        harmonic2 = 0.40f,
+        harmonic3 = 0.52f,
+        harmonic4 = 0.30f,
+        harmonic5 = 0.34f,
+        grit = 0.26f,
+        noiseAmount = 0.05f,
+        lopeDepth = 0.27f,
+        lopeRate = 0.32f,
+        gainMul = 1.08f,
+        cutoffMul = 1.38f,
+        nitroTone = 1.18f,
+        // Ince ve kisa, ama F1'inkinden kalin/uzun — sirayi bozmuyor.
+        hornBaseHz = 700f,
+        hornInterval = 1.30f,
+        hornBuzz = 0.42f,
+        hornSeconds = 0.26f,
+        hornAttack = 0.008f
+    )
+
+    /**
+     * **Tir — katalogun en kapali filtreli motoru** (0.44). Dizel.
+     *
+     * ⚠ Bilerek "en tok/en koyu SES" DENMIYOR, cunku olculdu ve degil.
+     * Sentezlenen ciktinin spektral agirlik merkezi: tir 173 Hz (tonal
+     * govde, tikirti kapali) — Dag Kecisi 160, Beety 161, Kus SLX 165'ten
+     * YUKSEKTE. Tikirti da hesaba katilinca tirin merkezi 352 Hz'e cikiyor
+     * ve katalogun en koyusu olmaktan iyice uzaklasiyor.
+     *
+     * Iki sebebi var ve ikisi de kasitli:
+     *
+     *  1. Asagida kalinlik icin eklenen TEK sayili harmonikler, tanimi
+     *     geregi enerjiyi yukari tasir. "Eksik temel" ile "koyu spektrum"
+     *     ayni sey degil: ilki algilanan PERDEYI dusurur, ikincisi tiniyi.
+     *     Tir ilkini hedefliyor.
+     *  2. [noiseAmount] motorun alcak geciren filtresini BYPASS eder
+     *     (EngineVoice'ta gurultu, filtreden SONRA eklenir ve yalnizca
+     *     1400 Hz'de suzulur). Yani yuksek dizel tikirtisi, filtre ne kadar
+     *     kapali olursa olsun tepeye parlak enerji koyar.
+     *
+     * Ucuncusu da fiziksel olarak DOGRU: gercek bir dizel tam olarak boyle
+     * duyulur — koyu bir govde uzerinde parlak enjektor/supap tikirtisi.
+     * Yani buradaki "yuksek merkez" bir kusur degil, tarifin sonucu.
+     * Yine de sahibi dinlerken "tir Dag Kecisi'nden parlak" izlenimi
+     * edinirse sebebi budur ve tek dokunusla ([noiseAmount]) geri alinir.
+     *
+     * Buradaki tasarim sorunu sudur: tir KALIN olmali, ama kalinligin dogal
+     * kaldiraci olan [freqMul] iki yandan kapali. Asagidan 0.76 tabani
+     * (altinda telefon hoparloru temeli tasimiyor), ustunden Boga 67'nin
+     * "katalogun en pesi" taci. Geriye 0.78 kaliyor — Dag Kecisi'nin
+     * 0.80'inin bir tik altinda, ki bu tek basina "tir" hissi vermez.
+     *
+     * Kalinlik bu yuzden BASKA IKI YERDEN geliyor:
+     *
+     *  1. **Eksik temel etkisi.** Tek sayili harmonikler yuksek
+     *     (h3 0.56, h5 0.30, toplam 0.86; ciftler 0.56). Kulak, guclu bir
+     *     harmonik serisinden temeli kendi tamamlar — yani ses, temel
+     *     frekansinin isaret ettiginden daha KALIN algilanir. Telefon
+     *     hoparloru zaten basamayacagi bir temeli calmak zorunda kalmadigi
+     *     icin bu yontem cihazda daha saglam.
+     *  2. **Katalogun en kapali filtresi** ([cutoffMul] 0.44; onceki en
+     *     kapali Dag Kecisi 0.68 idi). Uretilen ust harmonikler sonra
+     *     suzuluyor: geriye kalinlik kaliyor, havlama kalmiyor.
+     *
+     * Ikinci maddede olcum ve tasarim AYNI YERE dustu: referansin spektral
+     * agirlik merkezi 47 Hz olculdu ve kalibrasyon egrisi 0.54 istedi —
+     * yazilan 0.44 ondan da kapali. Uc yeni aracta olcume uyulabilen tek
+     * parametre bu, cunku o eksende korunan bir tac yoktu.
+     *
+     * ## Boga 67 ile neden karismiyor
+     *
+     * Ikisi de tek sayili harmoniklere yatik, ama FILTRE zit yonde:
+     * Boga 1.34 ile acik (yirtik, havlayan egzoz), tir 0.44 ile kapali
+     * (tok homurtu). Ayrica tirin yatikligi olculu — tek 0.86'ya karsi
+     * cift 0.56, yani Boga'nin "tek > 2x cift" imzasini KARSILAMIYOR;
+     * o tanim Boga'da exclusive kaliyor ve test bunu koruyor.
+     *
+     * Ayirt eden ucuncu sey dizel tikirtisi: [noiseAmount] 0.09, katalogun
+     * ikincisi — Dag Kecisi'nin 0.10'u onun kimlik garantisi, dokunulmadi.
+     *
+     * ## Hava kornasi
+     *
+     * Dosyanin basindaki "Tir hazirligi" bolumu ~110 Hz oneriyordu; Boga
+     * 67'nin 250 Hz'lik "en kalin korna" taci buna izin vermedi (test).
+     * Korna 262 Hz'de — katalogun ikinci en kalini. Hava kornasi karakteri
+     * bunun yerine bos duran uc eksenden geliyor ve ucu de acik ara birinci:
+     * en genis aralik ([hornInterval] 1.50; digerleri 1.18–1.26), acik ara
+     * en uzun ses ([hornSeconds] 1.10; onceki en uzun 0.62) ve acik ara en
+     * yavas atak ([hornAttack] 0.060; onceki en yavas 0.030). Basincin
+     * kurulmasi, borularin acilmasi ve uzun uzun otmesi bunlar.
+     */
+    private val TIR = CarSoundProfile(
+        id = CarCatalog.SHAPE_TIR,
+        // 0.76 tabani + Boga 67'nin taci = tek bosluk 0.78. Kalinlik
+        // asagidaki harmoniklerden ve 0.44 filtreden geliyor.
+        freqMul = 0.78f,
+        harmonic2 = 0.34f,
+        harmonic3 = 0.56f,
+        harmonic4 = 0.22f,
+        // h5 once 0.30'du; olcum onun PAHALI oldugunu gosterdi (asagidaki
+        // "olculen" notu). Besinci harmonik kalinliga neredeyse hic
+        // katmiyor ama parlakligi belirgin yukseltiyor — dizelde ustelik
+        // fiziksel karsiligi da zayif (dizel spektrumu 3. harmonikten sonra
+        // hizla duser). 0.20'ye cekildi: tek sayili tilt korundu
+        // (tek 0.76 / cift 0.56), gereksiz parlaklik gitti.
+        harmonic5 = 0.20f,
+        grit = 0.16f,
+        // Dizel tikirtisi. Dag Kecisi'nin 0.10'unun ALTINDA kalmali (test).
+        noiseAmount = 0.09f,
+        // Agir ve yavas rolanti. Derinlik Boga 67'nin 0.40'ini, hiz onun
+        // 0.20'sini gecmiyor — iki tac da yerinde kaliyor.
+        lopeDepth = 0.30f,
+        lopeRate = 0.22f,
+        gainMul = 1.16f,
+        // 0.52'den 0.44'e: "kalinligi filtreden kur" tarifinin agirligini
+        // artirir ve Dag Kecisi'nin 0.68'iyle arayi genisletir.
+        cutoffMul = 0.44f,
+        nitroTone = 0.78f,
+        hornBaseHz = 262f,
+        hornInterval = 1.50f,
+        hornBuzz = 0.70f,
+        hornSeconds = 1.10f,
+        hornAttack = 0.060f
+    )
+
     /** Tum profiller — testler ve olasi bir ses ayari ekrani icin acik. */
     val all: List<CarSoundProfile> = listOf(
-        BEETY, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR
+        BEETY, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR,
+        F1, MOTOSIKLET, TIR
     )
 
     /**

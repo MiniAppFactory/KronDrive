@@ -36,9 +36,12 @@ class GameEngine(
      * kozmetikti). Artik govdenin dort surus carpani fizige giriyor — bkz.
      * [CarShapeDef] ve `docs/BALANCE.md`. Boya hâlâ yalnizca cizimdir.
      *
-     * CARPISMA KUTUSU DEGISMEDI: kutu [GameConfig] sabitlerinden gelir ve
-     * sekle gore degismez (PROVENANCE #6). Carpanlar yalnizca hedef hiza,
-     * yaklasma oranina, fren cezasina ve boost tuketimine dokunur.
+     * CARPISMA KUTUSU GOVDENIN OLCU SINIFINDAN GELIR (2026-08-16, bkz.
+     * [CarShapeDef.vehicleClass] ve `docs/VEHICLE_CLASSES.md`). Dort surus
+     * carpani kutuya hâlâ DOKUNMAZ; degistiren tek sey [VehicleClass]'tir ve
+     * katalogdaki butun govdeler bugun [VehicleClass.BINEK] sinifinda, yani
+     * PROVENANCE #6'nin "arac secimi carpismayi degistirmez" kurali pratikte
+     * korunuyor. Kural yeni hâliyle: **ayni sinif icinde kutu degismez.**
      */
     val carStyle: CarStyle = CarCatalog.defaultStyle,
     private val random: Random = Random.Default
@@ -187,12 +190,55 @@ class GameEngine(
          * kadar ILERI gider. 0 = park etmis arac (eski davranis).
          * Bkz. [GameConfig.TRAFFIC_SPEED_RATIO_MIN].
          */
-        val ownSpeed: Float
+        val ownSpeed: Float,
+        /**
+         * Bu aracin OLCU SINIFI — carpisma kutusu ve gecis cizgisi bundan
+         * turer (bkz. [HitboxSpec]).
+         *
+         * Varsayilan deger [CarCatalog.trafficShape]'ten okunur, sabit
+         * yazilmaz: trafik govdesinin sinifi degistigi gun elle kurulan
+         * engeller (testler, ileride ozel dogum kurallari) sessizce eski
+         * sinifta kalmasin diye.
+         */
+        val vehicleClass: VehicleClass = CarCatalog.trafficShape.vehicleClass
     ) {
         /** Oyuncuyla dikey olarak ortusurken gorulen en kucuk yatay mesafe. */
         var minDx: Float = Float.MAX_VALUE
         /** Oyuncuyu geride biraktiginda bir kez degerlendirilir. */
         var evaluated: Boolean = false
+    }
+
+    /**
+     * Bir OLCU SINIFININ carpisma geometrisi, piksel cinsinden ve ARACIN
+     * y'sine gore. Sinif basina bir kez kurulur ([hitboxOf]) — 60 Hz'de her
+     * engel icin yeniden turetmemek icin.
+     *
+     * Buradaki her deger [VehicleClass] ve [GameConfig] uzerinden TURETILIR;
+     * elle yazilmis tek bir sayi yok. [VehicleClass.BINEK] icin sonuclar
+     * [GameConfig.CAR_HITBOX_WIDTH_PX], [GameConfig.CAR_HITBOX_HEIGHT_PX] ve
+     * [GameConfig.CAR_HITBOX_TOP_OFFSET] ile **bit bazinda** ayni cikar:
+     * ayni carpanlar ayni sirada uygulaniyor. Bu bir tesaduf degil sart —
+     * binek kutusu butun bolum hedeflerinin ve yukseltme egrilerinin
+     * cipasi. `GameEngineTest` bunu ayri bir testle donduruyor.
+     */
+    private class HitboxSpec(vehicleClass: VehicleClass) {
+        /** Carpisma kutusu genisligi. */
+        val width: Float = vehicleClass.hitboxWidthPx
+
+        /** Carpisma kutusu boyu. */
+        val height: Float = vehicleClass.hitboxHeightPx
+
+        /** Cizimin ust kenari (aracin y'sine gore). */
+        val artTop: Float = vehicleClass.artTop * GameConfig.CAR_ART_SCALE
+
+        /** Cizimin alt kenari (aracin y'sine gore). */
+        val artBottom: Float = vehicleClass.artBottom * GameConfig.CAR_ART_SCALE
+
+        /** Gorunur genislik — perfect dodge penceresi bunu kullanir. */
+        val artWidth: Float = vehicleClass.artWidthPx
+
+        /** Carpisma kutusunun ust kenari: gorselin icinde ORTALI. */
+        val hitTop: Float = artTop + (vehicleClass.artHeightPx - height) / 2f
     }
 
     class Coin(var lane: Int, var x: Float, var y: Float, var pulse: Float)
@@ -495,9 +541,16 @@ class GameEngine(
             Obstacle(
                 lane = lane,
                 x = laneCenter(lane),
-                y = GameConfig.OBSTACLE_SPAWN_Y_PX,
+                // Dogma yuksekligi SINIFA gore: sabit -150 binek icin
+                // dogruydu ama AGIR 161.6 px uzun, yani tir orada dogsa
+                // arkasi ekranin ICINDE belirirdi (2026-08-16).
+                y = GameConfig.obstacleSpawnY(CarCatalog.trafficShape.vehicleClass),
                 colorIndex = random.nextInt(OBSTACLE_COLORS.size),
-                ownSpeed = randomTrafficSpeed()
+                ownSpeed = randomTrafficSpeed(),
+                // Trafigin kutusu KENDI govdesinden gelir. Bugun tek bir
+                // trafik govdesi var ve o BINEK; birden fazla govde/sinif
+                // dogmaya baslarsa degisecek tek yer burasidir.
+                vehicleClass = CarCatalog.trafficShape.vehicleClass
             )
         )
     }
@@ -539,36 +592,46 @@ class GameEngine(
     }
 
     private fun updateObstacles(dt: Float) {
-        // Carpisma kutusu cizimden turetilir (bkz. GameConfig) — gorunmeyen
-        // bir alana carpip "haksiz kaza" hissi olusmasin diye.
-        val hitW = GameConfig.CAR_HITBOX_WIDTH_PX
-        val hitH = GameConfig.CAR_HITBOX_HEIGHT_PX
-        val playerHitLeft = playerX - hitW / 2f
-        val playerHitTop = playerY + GameConfig.CAR_HITBOX_TOP_OFFSET
-        val playerHitBottom = playerHitTop + hitH
-        val playerVisualBottom = playerY + GameConfig.CAR_HEIGHT_PX
+        // Carpisma kutusu cizimden turetilir (gorunmeyen bir alana carpip
+        // "haksiz kaza" hissi olusmasin diye) ve cizim de ARACIN OLCU
+        // SINIFINDAN gelir: oyuncununki kendi govdesinin sinifindan
+        // ([CarShapeDef.vehicleClass]), her engelinki kendi sinifindan
+        // ([Obstacle.vehicleClass]).
+        //
+        // Tek sabit kutu neden yetmiyor (docs/VEHICLE_CLASSES.md §2): 22
+        // birimlik motosiklet 40 birimlik binek kutusuyla carpsaydi oyuncu
+        // "yanimdaki bosluga carptim" derdi; 202 birimlik tir ise kendi
+        // boyunun ucte birinden kisa bir kutuyla, yani "icinden gecilebilir"
+        // olurdu. BINEK sinifi CIPA: bu blok binek-binek ciftinde bit
+        // bazinda eski degerleri uretir (bkz. HitboxSpec).
+        val playerBox = hitboxOf(car.vehicleClass)
+        val playerHitLeft = playerX - playerBox.width / 2f
+        val playerHitTop = playerY + playerBox.hitTop
+        val playerHitBottom = playerHitTop + playerBox.height
 
         var i = obstacles.size - 1
         while (i >= 0) {
             val o = obstacles[i]
+            val obstacleBox = hitboxOf(o.vehicleClass)
             // Ekrandaki asagi hiz = YAKLASMA hizi. Zemin `speed * K` ile
             // kaydigi icin aradaki fark kadar arac asfalta gore ILERI gider.
             // Fark negatife donerse (oyuncu frende, trafigin altinda) arac
             // yukari dogru uzaklasir; asagidaki ust sinir onu temizler.
             o.y += (speed - o.ownSpeed) * GameConfig.WORLD_PX_PER_SPEED_UNIT * dt
 
-            val obstacleHitLeft = o.x - hitW / 2f
-            val obstacleHitTop = o.y + GameConfig.CAR_HITBOX_TOP_OFFSET
+            val obstacleHitLeft = o.x - obstacleBox.width / 2f
+            val obstacleHitTop = o.y + obstacleBox.hitTop
             val verticallyOverlapping =
-                playerHitTop < obstacleHitTop + hitH && playerHitBottom > obstacleHitTop
+                playerHitTop < obstacleHitTop + obstacleBox.height &&
+                    playerHitBottom > obstacleHitTop
 
             if (verticallyOverlapping) {
                 val dx = abs(playerX - o.x)
                 if (dx < o.minDx) o.minDx = dx
 
                 val hit = rectHit(
-                    playerHitLeft, playerHitTop, hitW, hitH,
-                    obstacleHitLeft, obstacleHitTop, hitW, hitH
+                    playerHitLeft, playerHitTop, playerBox.width, playerBox.height,
+                    obstacleHitLeft, obstacleHitTop, obstacleBox.width, obstacleBox.height
                 )
                 if (hit && invulnerableFor <= 0f) {
                     if (secondChanceAvailable) {
@@ -585,13 +648,26 @@ class GameEngine(
             }
 
             // Oyuncuyu geride biraktigi an: gecis puani + perfect dodge kontrolu.
-            if (!o.evaluated && o.y > playerVisualBottom) {
+            //
+            // Gecis cizgisi: engelin BURNU (cizim ust kenari) oyuncunun arka
+            // tamponunun altina indiginde arac tamamen geride kalmistir.
+            // Engel asagi dogru aktigi icin en son GECEN kenari burnudur —
+            // uzun bir govdenin kuyrugu cok once gecmis olur, o yuzden pay
+            // engelin BOYUNDAN degil burun payindan hesaplanir.
+            //
+            // Pay tek bir float olarak ONCE hesaplaniyor: binek-binek
+            // ciftinde `artBottom - artTop` tam olarak
+            // [GameConfig.CAR_HEIGHT_PX] eder ve eski
+            // `playerY + CAR_HEIGHT_PX` esigi bit bazinda korunur. Terimleri
+            // ayri ayri eklemek son bitte 1 ulp kaydiriyordu.
+            val passLine = playerY + (playerBox.artBottom - obstacleBox.artTop)
+            if (!o.evaluated && o.y > passLine) {
                 o.evaluated = true
                 vehiclesPassed++
                 score += GameConfig.SCORE_PER_PASSED_VEHICLE
                 events.add(GameEvent.VehiclePassed)
-                // Esik serit araligina gore hesaplanir — bkz. GameConfig.
-                if (o.minDx <= GameConfig.perfectDodgeMaxDx(laneWidth)) registerPerfectDodge()
+                // Esik hem serit araligina hem ARAC CIFTINE bagli.
+                if (o.minDx <= perfectDodgeMaxDx(obstacleBox)) registerPerfectDodge()
             }
 
             // Iki yonlu temizlik. Ust sinir, oyuncu frene basip trafigin
@@ -599,13 +675,45 @@ class GameEngine(
             // dogru uzaklasir ve bir daha geri gelmez. `evaluated` bayragi
             // korundugu icin geri gelse bile ikinci kez puan/dodge vermez.
             val goneBelow = o.y > viewHeight + GameConfig.OBSTACLE_DESPAWN_MARGIN_PX
+            // Ust sinir da SINIFA gore: uzun arac daha yukarida dogdugu
+            // icin sabit esik ona daha az pay birakirdi.
             val goneAbove = o.y <
-                GameConfig.OBSTACLE_SPAWN_Y_PX - GameConfig.OBSTACLE_DESPAWN_TOP_MARGIN_PX
+                GameConfig.obstacleSpawnY(o.vehicleClass) -
+                GameConfig.OBSTACLE_DESPAWN_TOP_MARGIN_PX
             if (goneBelow || goneAbove) {
                 obstacles.removeAt(i)
             }
             i--
         }
+    }
+
+    /**
+     * Bu ARAC CIFTI icin perfect dodge esigi.
+     *
+     * [GameConfig.perfectDodgeMaxDx] tek kutulu dunyadan kaliyor: esigi
+     * `CAR_WIDTH_PX + (serit - CAR_WIDTH_PX) * oran` diye kuruyor, yani taban
+     * terimi BINEK'in gorunur genisligi. Sinifli dunyada dogru taban terim
+     * CIFTIN yari genisligidir, `(gorselA + gorselB) / 2` — bkz.
+     * `docs/VEHICLE_CLASSES.md` §2 "Perfect dodge penceresi bozulur".
+     *
+     * Duzeltilmezse ne olur (360 dp, serit 67.2, esik 49.6): binek oyuncunun
+     * penceresi `(28.16 , 49.6]` = 21.44 dp. Motosiklet oyuncunun carpma
+     * esigi 21.83'e duser ama esik 49.6'da kalir → pencere 27.78 dp, yani
+     * **%30 daha genis**. Dar arac hem daha az carpar hem daha cok combo
+     * yapardi; bilesik ve istenmeyen bir avantaj. Duzeltmeyle motosikletin
+     * penceresi 20.58 dp (binege gore %-4), tir trafiginde 21.82 dp (%+1.8).
+     *
+     * Duzeltme neden FARK olarak ekleniyor: pencere orani ve serit
+     * bagimliligi [GameConfig]'te TEK yerde kalsin diye. Binek-binek
+     * ciftinde fark tam olarak `0f`, yani bugunku esik bit bazinda degismez.
+     *
+     * DIKKAT: [GameConfig.perfectDodgeMaxDx] gun gelip cift yari-genisligini
+     * parametre olarak alirsa (belgedeki oneri) buradaki duzeltme
+     * SILINMELIDIR — yoksa iki kez uygulanir.
+     */
+    private fun perfectDodgeMaxDx(obstacleBox: HitboxSpec): Float {
+        val pairHalfWidth = (hitboxOf(car.vehicleClass).artWidth + obstacleBox.artWidth) / 2f
+        return GameConfig.perfectDodgeMaxDx(laneWidth) + (pairHalfWidth - GameConfig.CAR_WIDTH_PX)
     }
 
     private fun registerPerfectDodge() {
@@ -873,6 +981,16 @@ class GameEngine(
     ): Boolean = ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by
 
     companion object {
+        /**
+         * Sinif basina carpisma geometrisi, [VehicleClass.ordinal] ile
+         * indekslenir. Kosu sirasinda tahsisat ve tekrar hesap olmasin diye
+         * sinif KUMESI kadar (bugun 3) onceden kuruluyor.
+         */
+        private val HITBOXES: List<HitboxSpec> = VehicleClass.entries.map { HitboxSpec(it) }
+
+        private fun hitboxOf(vehicleClass: VehicleClass): HitboxSpec =
+            HITBOXES[vehicleClass.ordinal]
+
         /** Prototipteki engel renkleri: sari, mavi, beyaz, turuncu. */
         val OBSTACLE_COLORS = intArrayOf(0xFFFFD60A.toInt(), 0xFF00C2FF.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF7B00.toInt())
 

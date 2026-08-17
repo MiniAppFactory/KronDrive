@@ -20,14 +20,14 @@ merdiven yapiyordu.
 
 ## Hizalama sozlesmesi (bozulursa carpisma kutusu kayar)
 
-Vektor cizim uzayinda arac kutusu x -20..20, y -2..74'tur (``CarCatalog``).
-Sprite'lar tam bu orana (40:76) uretilir; cizici sprite'i her zaman TAM bu
-dikdortgene oturtur.
+Her govdenin bir OLCU SINIFI var (``VehicleClass.kt``): MOTOSIKLET 22x59,
+BINEK 40x76, AGIR 48x202 birim. Sprite tuvali gövdenin SINIFININ oranini alir;
+cizici sprite'i her zaman tam o dikdortgene oturtur.
 
 Uzun sure "orani bozmadan icine sigdir" (``min(w_orani, h_orani)``) yeterli
-sanildi. DEGIL: referansin orani 40:76'dan farkliysa fark sessizce SAYDAM
-BOSLUGA doner ve cizilen arac carpisma kutusundan DAR kalir — yani oyuncu
-aracin yanindaki bosluga carpar. Olcum (2026-08-16): Boga 67'nin cizimi
+sanildi. DEGIL: referansin orani sinifin oranindan farkliysa fark sessizce
+SAYDAM BOSLUGA doner ve cizilen arac carpisma kutusundan DAR kalir — yani
+oyuncu aracin yanindaki bosluga carpar. Olcum (2026-08-16): Boga 67'nin cizimi
 27.73 dp genisligindeydi, kutu ise 28.16 dp; kutu her kenardan 0.21 dp
 disari tasiyordu. 2026-08-13'te duzeltilen "havaya carptim" hatasinin
 milimetrik hali.
@@ -37,12 +37,15 @@ bozulmadan kutuya sigdirilir, sonra gerekiyorsa carpisma kutusunu ORTECEK
 kadar (yine oran bozulmadan) buyutulur; tasan yukseklik ustten ve alttan
 esit kirpilir. Kirpma tamponun ucundan birkac pikseli alir, [MAX_TRIM_FRACTION]
 kadarini gecerse hat DURUR — sessizce araci ezmek ya da tamponu kesmek yok.
-Gecerlilik her kosuda [audit] ile yeniden olculur (bkz. dosyanin sonu).
+Gecerlilik her kosuda [audit] ile YENIDEN ve HER GOVDE ICIN KENDI SINIFININ
+kutusuna karsi olculur (bkz. dosyanin sonu).
 
 Cikti ``drawable-nodpi`` altina yazilir: Android'in yogunluga gore on-olcekleme
 yapmasini istemiyoruz, cizici zaten hedef boyutu kendisi veriyor.
 
-Kullanim:  py tools/build_car_sprites.py
+Kullanim:
+    py tools/build_car_sprites.py
+    py tools/build_car_sprites.py --preview <klasor>   # gozle bakmak icin PNG
 """
 
 from __future__ import annotations
@@ -57,37 +60,91 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REFS = os.path.join(ROOT, "incoming", "car_refs")
 OUT = os.path.join(ROOT, "source", "app", "src", "main", "res", "drawable-nodpi")
 
-# --- Hedef kutu -----------------------------------------------------------
+# --- Doku yogunlugu -------------------------------------------------------
 #
-# CarCatalog'un cizim kutusu 40 x 76 birim; sprite ayni orani korur (240/456 =
-# 40/76 tam olarak) ki cizici tek bir dikdortgene oturtabilsin.
+# Sinif bazina gecmeden once tuval tek bir cift sayiydi (240x456) ve bu iki
+# sayinin arkasindaki KURAL yazili degildi: 240/40 = 6 ve 456/76 = 6, yani
+# hattin ortuk bir "birim basina 6 piksel" sabiti vardi. Sinif basina tuvali
+# elle yazmak yerine bu sabiti aciga cikariyoruz; boylece her sinif AYNI doku
+# yogunlugunu alir ve sahnede motosiklet ile tir birbirine gore dogru
+# keskinlikte gorunur (birinin pikselleri digerinden buyuk olmaz).
 #
-# Cozunurluk aracin ekranda EN BUYUK gorundugu yerden turetildi: garajdaki
-# secili arac karti 96x118 dp kutuda, 6 dp dolgu ile ~106 dp yuksekliginde.
-# En yogun ekranda (xxxhdpi, density 4) bu 424 px eder; oyun sahnesinde arac
-# 60.8 dp = 243 px. 456 px hepsinin ustunde kaliyor ve pay birakiyor.
-# Daha buyugu APK'ya bosuna yer yazar: 608 px denendi, 861 KB tutuyordu.
+# 6 px/birim BINEK icin su sekilde secilmisti ve gecerliligi degismedi:
+# aracin ekranda EN BUYUK gorundugu yer garajdaki secili arac karti
+# (96x118 dp kutuda ~106 dp). En yogun ekranda (xxxhdpi, density 4) bu 424 px
+# eder; oyun sahnesinde arac 60.8 dp = 243 px. 456 px hepsinin ustunde kalip
+# pay birakiyor. Daha buyugu APK'ya bosuna yer yazar: 608 px denendi,
+# 861 KB tutuyordu.
 
-TARGET_W = 240
-TARGET_H = 456
+PX_PER_UNIT = 6.0
 
-# --- Carpisma kutusu (GameConfig.kt'nin AYNASI) --------------------------
+# --- Olcek sabitleri (GameConfig.kt'nin AYNASI) --------------------------
 #
-# Bu dort sayi Kotlin tarafinda [GameConfig] icinde yasiyor; burada yalnizca
+# Bu iki sayi Kotlin tarafinda [GameConfig] icinde yasiyor; burada yalnizca
 # KOPYALARI var cunku betigin oyun kodunu okumasi yok. GameConfig'de biri
 # degisirse burasi da degismeli — [audit] yanlis esikle olcer ve hata yakalamaz.
-#
-#   CAR_ART_SCALE=0.80, cizim 40 x 76 birim  -> 32.00 x 60.80 px
-#   HITBOX_SCALE=0.88                        -> 28.16 x 53.50 px
 
 CAR_ART_SCALE = 0.80
-CAR_WIDTH_PX = 40.0 * CAR_ART_SCALE
-CAR_HEIGHT_PX = (74.0 - (-2.0)) * CAR_ART_SCALE
 HITBOX_SCALE = 0.88
 
-# Kanvas pikseli cinsinden carpisma kutusu genisligi: cizici 240 px'i
-# CAR_WIDTH_PX'e esliyor, yani oran dogrudan olceklenebilir.
-HITBOX_W_CANVAS_PX = TARGET_W * HITBOX_SCALE
+
+class VehicleClass:
+    """``game/VehicleClass.kt`` enum'unun Python aynasi.
+
+    Kotlin tarafinda oranlar referans cizimlerin oranindan turetildi; burada
+    ayni sayilari tekrar yaziyoruz ki hat, oyunun hangi kutuya cizecegini
+    bilsin. Ikisi ayrilirsa [audit] yanlis kutuya karsi olcer — bu yuzden
+    asagidaki uc satir Kotlin dosyasinin birebir kopyasi olmali.
+    """
+
+    def __init__(self, name: str, width_units: float, length_units: float):
+        self.name = name
+        self.width_units = width_units
+        self.length_units = length_units
+
+    # -- Tuval (kanvas px) --
+    @property
+    def canvas_w(self) -> int:
+        return int(round(self.width_units * PX_PER_UNIT))
+
+    @property
+    def canvas_h(self) -> int:
+        return int(round(self.length_units * PX_PER_UNIT))
+
+    # -- Ekrandaki cizim (dp) --
+    @property
+    def art_w_dp(self) -> float:
+        return self.width_units * CAR_ART_SCALE
+
+    @property
+    def art_h_dp(self) -> float:
+        return self.length_units * CAR_ART_SCALE
+
+    # -- Carpisma kutusu (dp) --
+    @property
+    def hitbox_w_dp(self) -> float:
+        return self.art_w_dp * HITBOX_SCALE
+
+    @property
+    def hitbox_h_dp(self) -> float:
+        return self.art_h_dp * HITBOX_SCALE
+
+    @property
+    def ratio(self) -> float:
+        return self.width_units / self.length_units
+
+    def dp_to_canvas_px(self, dp: float) -> float:
+        """Oyun dp'si -> kanvas px. Cizici [canvas_w]'yi [art_w_dp]'ye esler."""
+        return dp / self.art_w_dp * self.canvas_w
+
+    def __repr__(self) -> str:  # rapor satirlari icin
+        return self.name
+
+
+# MOTOSIKLET 132x354, BINEK 240x456 (degismez), AGIR 288x1212 kanvas px.
+MOTOSIKLET = VehicleClass("MOTOSIKLET", 22.0, 59.0)
+BINEK = VehicleClass("BINEK", 40.0, 76.0)
+AGIR = VehicleClass("AGIR", 48.0, 202.0)
 
 # Carpisma kutusu cizimin bu kadar ICINDE kalsin (kenar basina, dp).
 #
@@ -113,11 +170,28 @@ FIT_OVERSHOOT = 1.003
 # boyunun %2.5'i (60.8 dp'de ~1.5 dp) tamponun yuvarlatilmis dudagi kadardir;
 # bunun otesinde duz bir kesik olarak okunmaya baslar.
 #
-# Bugunku referanslarda gerceklesen kirpma: Boga 67 %1.7, Dag Kecisi %1.1,
-# kas arabasi %0.2, kalan bes govde %0. Sinira takilanlar BEKLEYEN referanslar:
-# station wagon %3.8, motosiklet %10.3, tir %24.9 — bunlar 40:76 kutusuna ait
-# DEGIL, hat onlari reddediyor (denendi, 2026-08-16).
+# Bu esik SINIF ISI DEGIL, referans-sinif uyumu isidir: dogru sinifa konmus
+# bir referansta kirpma neredeyse sifir cikar (olculdu 2026-08-17: motosiklet
+# %0.0, tir %0.0). Sinira takilan referans yanlis sinifta demektir —
+# 11_station_wagon (oran 0.434) BINEK'te %3.8 kirpma istiyor ve hat onu
+# reddediyor; hala hicbir sinifa ait degil.
 MAX_TRIM_FRACTION = 0.025
+
+# Referans orani ile sinif orani arasindaki fark bunun ustundeyse RAPORLANIR.
+#
+# Neden yalnizca rapor, neden hata degil: oran uyusmazligi tek basina zararli
+# degil, YONU zararli. Referans sinifindan DARSA cizim kutuyu ortmez ve oyuncu
+# havaya carpar — bunu [audit] zaten olcup hatta durduruyor, hem de tahminle
+# degil YAZILMIS DOSYADAN. Referans sinifindan GENISSE cizim tuvale sigmaz ya
+# da kirpma gerektirir — onu da [MAX_TRIM_FRACTION] durduruyor.
+#
+# Sert bir oran kapisi bugun F1'i (referans orani 0.473, BINEK 0.526, fark
+# %10.2) reddederdi; oysa F1 olcum sonucu BINEK'e OTURUYOR: sigdirma sonrasi
+# cizim 28.80 dp, kutu 28.16 dp, kenar basina +0.32 dp pay — bugun yayinda
+# olan Kas Arabasi'ndan (+0.25) daha iyi. Yani oran farki burada bir uyari
+# isigidir, kilit degil (bkz. docs/VEHICLE_CLASSES.md §"F1 neden yeni sinif
+# istemiyor").
+RATIO_WARN_FRACTION = 0.02
 
 # "Dolu piksel" esigi. Olcum de olcek karari da bu esikle yapilir ki hattin
 # hedefi ile denetimin olctugu sey ayni sey olsun. Tuylu kenar (alfa 8..200)
@@ -157,31 +231,78 @@ BODY_GAMMA_CEIL = 1.60
 WEBP_QUALITY_BODY = 82
 WEBP_QUALITY_DETAIL = 88
 
-# --- Govde -> referans dosyasi eslesmesi ----------------------------------
+# Sinifa gore kalite indirimi (ornek: {"AGIR": -20}). Kanca duruyor ama BUGUN
+# BOS ve bos kalmasi bilincli bir karar:
+#
+# AGIR tuvali BINEK'in 3.19 kati alanda (288x1212 vs 240x456), yani tir
+# "buyuk dosya" adayiydi. Olculdu (2026-08-17), varsayilan kalitede tir cifti
+# 129.8 KB — alan basina otomobillerden ZATEN ucuz (ortalama otomobil 71 KB /
+# 1.0x alan; oransal beklenti 227 KB olurdu). Kaliteyi dusurmenin getirisi
+# olculdu ve KUCUK cikti:
+#
+#     kalite      toplam      kazanc    RMS fark (govde / detay)
+#     82 / 88     129.8 KB       —          —
+#     72 / 78     117.1 KB     -%10      3.14 / 2.16
+#     62 / 68     112.4 KB     -%13      3.50 / 2.84
+#     52 / 58     109.2 KB     -%16      3.91 / 3.04
+#
+# Cunku dosyanin agirligi renkte degil ALFA KANALINDA: tirin cevresi uzun ve
+# ayrintili bir siluet. Kalite 30 puan dusurmek 20 KB kazandirip gorunur bir
+# bozulma birakiyor — kotu takas. Bir sinif gercekten butceyi zorlarsa
+# mekanizma burada duruyor; kullanilirsa RAKAMI raporla.
+#
+# Not: denetim (cizim >= kutu) bu indirimden SONRA, yazilmis dosyadan
+# olculuyor — sikistirma alfayi yiyip araci daraltirsa hat yine durur.
+# Olculdu: uc kalite kademesinde de tirin cizimi 38.00 x 161.07 dp kaldi.
+QUALITY_DELTA_BY_CLASS: dict[str, int] = {}
+
+# --- Govde -> (referans dosyasi, olcu sinifi) -----------------------------
 #
 # Anahtarlar CarCatalog'daki SHAPE_* kimlikleridir; cizici dosyayi bu adla
 # arar (car_<id>_body / car_<id>_detail). Yeni bir govde eklenirse buraya bir
-# satir eklemek yeterli.
+# satir eklemek yeterli — ama sinifini de yazmak ZORUNLU, cunku tuval ve
+# denetim kutusu oradan geliyor.
 
 MAPPING = {
-    "hatchback": "01_sehir",
-    "race_sedan": "02_yaris_sedan",
-    "kus_slx": "Kuş SLX",
-    "mountain_goat": "DağKeçisi",
-    "muscle": "03_kas_arabasi",
-    "muscle_67": "Boğa67",
-    "supercar": "04_super_araba",
-    "beety": "beety",
+    "hatchback": ("01_sehir", BINEK),
+    "race_sedan": ("02_yaris_sedan", BINEK),
+    "kus_slx": ("Kuş SLX", BINEK),
+    "mountain_goat": ("DağKeçisi", BINEK),
+    "muscle": ("03_kas_arabasi", BINEK),
+    "muscle_67": ("Boğa67", BINEK),
+    "supercar": ("04_super_araba", BINEK),
+    "beety": ("beety", BINEK),
+    # F1: referans orani 0.473, BINEK'in orani 0.526 — fark %10 ama YON
+    # zararsiz. Olculdu (2026-08-17, yazilmis dosyadan): cizim 28.67 dp,
+    # kutu 28.16 dp, kenar basina +0.25 dp pay. Yani F1 BINEK'e oturuyor ve
+    # ayri bir sinif gerekmiyor (docs/VEHICLE_CLASSES.md §"F1 neden yeni
+    # sinif istemiyor"; belge +0.32 ongormustu, dosyadan olculen 0.07 dp daha
+    # dar — fark LANCZOS + kayipli alfa, bu yuzden olcum belgeden degil
+    # DOSYADAN aliniyor). Kutuyu genisletmek yasak: oyuncunun kutusunu
+    # yanlamasina buyutmek dogrudan "havaya carptim" uretir.
+    "f1": ("10_f1", BINEK),
     # Trafik araci: oyuncunun alamadigi sabit govde. Sprite'a gecmesi ayrica
     # KAZANC — sahnede ayni anda onlarca trafik araci var ve her biri vektorde
     # ~20 parca cizdiriyordu.
-    "traffic": "08_trafik_arac",
+    "traffic": ("08_trafik_arac", BINEK),
+    # Motosiklet: kendi sinifi olmadan oyuna KESINLIKLE girmemeli. BINEK
+    # kutusunda cizimi 22.80 dp, kutu 28.16 dp olurdu — kenar basina 2.68 dp
+    # havaya carpma, otomobildekinin ~14 kati ve bu GORULUR.
+    "motosiklet": ("07_motosiklet", MOTOSIKLET),
+    # Tir: yalnizca trafik gövdesi olarak tasarlandi (oyuncuya verilmesi
+    # 0.80 s'lik maruz kalma suresiyle oynanisi kilitliyor). Burasi sprite
+    # uretiyor; kimin surdugune CarCatalog karar verir.
+    "tir": ("09_tir", AGIR),
 }
 
-
-def _dp_to_canvas_px(dp: float) -> float:
-    """Oyun px'i -> kanvas px. Cizici 240 kanvas px'i CAR_WIDTH_PX'e esler."""
-    return dp / CAR_WIDTH_PX * TARGET_W
+# Onizlemede kullanilan boyalar (CarCatalog'daki bodyArgb degerleri).
+PREVIEW_COLORS = [
+    ("kirmizi", (0xE1, 0x06, 0x00)),
+    ("mavi", (0x1B, 0x3F, 0xD1)),
+    ("sari", (0xF5, 0xC5, 0x18)),
+    ("buzul", (0xED, 0xF1, 0xF5)),
+    ("mor", (0x7B, 0x2F, 0xF7)),
+]
 
 
 def body_weight(mask: Image.Image) -> Image.Image:
@@ -240,7 +361,14 @@ def normalize_body(value: Image.Image, alpha: Image.Image) -> tuple[Image.Image,
     return stretched.point(lut), mid, gamma
 
 
-def build(shape_id: str, stem: str, boost: float = 1.0) -> tuple[int, int, int, float, float]:
+def build(shape_id: str, stem: str, vclass: VehicleClass, boost: float = 1.0):
+    """Bir govdeyi KENDI SINIFININ tuvaline uretir.
+
+    Doner: (body baytlari, detail baytlari, ham ortanca, gamma, kirpma orani,
+            referans orani).
+    """
+    target_w, target_h = vclass.canvas_w, vclass.canvas_h
+
     base_path = os.path.join(REFS, stem + ".png")
     mask_path = os.path.join(REFS, stem + "_mask.png")
     for p in (base_path, mask_path):
@@ -285,13 +413,15 @@ def build(shape_id: str, stem: str, boost: float = 1.0) -> tuple[int, int, int, 
     if solid is None:
         raise ValueError("referansta opak piksel yok: " + stem)
     solid_w = solid[2] - solid[0]
+    solid_h = solid[3] - solid[1]
+    ref_ratio = solid_w / float(solid_h)
 
     cw, ch = body.size
 
     # Olcek iki alt sinirin buyugu:
-    #   1) [fit]    — orani bozmadan kutuya sigdir (eski, TEK basina yetersiz
-    #                 olan davranis: dar referansta saydam bosluk birakiyordu),
-    #   2) [needed] — carpisma kutusunu ORTMEYE yeten en kucuk olcek.
+    #   1) [fit]    — orani bozmadan SINIFIN kutusuna sigdir (eski, TEK basina
+    #                 yetersiz olan davranis: dar referansta saydam bosluk),
+    #   2) [needed] — SINIFIN carpisma kutusunu ORTMEYE yeten en kucuk olcek.
     # Genis referanslarda (1), dar/uzun referanslarda (2) belirleyici olur.
     # Iki durumda da TEK bir sayi ile olceklendigi icin oran korunur; arac
     # hicbir kosulda yatayda gerdirilmez.
@@ -299,8 +429,9 @@ def build(shape_id: str, stem: str, boost: float = 1.0) -> tuple[int, int, int, 
     # [boost] yakinsama dongusunun duzeltmesi: dosyadan geri okunan genislik
     # hedefin altinda kaldiysa cagiran 1'den buyuk bir deger verir
     # (bkz. [_build_until_covered]).
-    fit = min(TARGET_W / cw, TARGET_H / ch)
-    needed = (HITBOX_W_CANVAS_PX + 2.0 * _dp_to_canvas_px(HITBOX_EDGE_MARGIN_DP)) / solid_w
+    hitbox_w_canvas = target_w * HITBOX_SCALE
+    fit = min(target_w / cw, target_h / ch)
+    needed = (hitbox_w_canvas + 2.0 * vclass.dp_to_canvas_px(HITBOX_EDGE_MARGIN_DP)) / solid_w
     scale = max(fit, needed) * boost
 
     nw, nh = max(1, round(cw * scale)), max(1, round(ch * scale))
@@ -308,47 +439,51 @@ def build(shape_id: str, stem: str, boost: float = 1.0) -> tuple[int, int, int, 
     # Yatayda tasma yalnizca referansin TUYU dolu kismindan cok genisse olur
     # (orn. cevresinde parlama efekti). O durumda kirpmak gercek cizimi keser;
     # sessizce yapmak yerine duruyoruz.
-    if nw > TARGET_W:
+    if nw > target_w:
         raise ValueError(
-            "%s: cizim yataya sigmiyor (%d > %d px). Referansin dolu govdesi "
-            "tuylu kenarina gore cok dar — kenar efektini referanstan temizle."
-            % (stem, nw, TARGET_W)
+            "%s (%s): cizim yataya sigmiyor (%d > %d px). Referansin dolu "
+            "govdesi tuylu kenarina gore cok dar — kenar efektini referanstan "
+            "temizle." % (stem, vclass.name, nw, target_w)
         )
 
     # Dikey tasma ustten ve alttan ESIT kirpilir (arac kutuda ortali kalsin).
-    trim = max(0, (nh - TARGET_H) // 2)
+    trim = max(0, (nh - target_h) // 2)
     trim_fraction = trim / float(nh)
     if trim_fraction > MAX_TRIM_FRACTION:
         raise ValueError(
             "%s: carpisma kutusunu ortmek icin her ucundan %%%.1f kirpmak "
-            "gerekiyor (sinir %%%.1f). Referansin en/boy orani %.3f, kutununki "
-            "%.3f — bu arac 40:76 kutusuna ait degil. Ya referans yeniden "
-            "cizilmeli ya da aracin kendi cizim/carpisma kutusu tanimlanmali "
-            "(GameConfig + CarCatalog isi)."
+            "gerekiyor (sinir %%%.1f). Referansin en/boy orani %.3f, %s "
+            "sinifininki %.3f — bu arac bu sinifa ait degil. Ya referans "
+            "yeniden cizilmeli, ya baska bir sinifa konmali, ya da yeni bir "
+            "sinif tanimlanmali (VehicleClass + CarCatalog isi)."
             % (stem, trim_fraction * 100.0, MAX_TRIM_FRACTION * 100.0,
-               cw / float(ch), TARGET_W / float(TARGET_H))
+               cw / float(ch), vclass.name, target_w / float(target_h))
         )
 
-    ox = (TARGET_W - nw) // 2
-    oy = 0 if nh > TARGET_H else (TARGET_H - nh) // 2
+    ox = (target_w - nw) // 2
+    oy = 0 if nh > target_h else (target_h - nh) // 2
 
+    dq = QUALITY_DELTA_BY_CLASS.get(vclass.name, 0)
     written = []
-    layers = (("body", body, WEBP_QUALITY_BODY), ("detail", detail, WEBP_QUALITY_DETAIL))
+    layers = (
+        ("body", body, WEBP_QUALITY_BODY + dq),
+        ("detail", detail, WEBP_QUALITY_DETAIL + dq),
+    )
     for name, layer, quality in layers:
         scaled = layer.resize((nw, nh), Image.LANCZOS)
-        if nh > TARGET_H:
-            top = (nh - TARGET_H) // 2
-            scaled = scaled.crop((0, top, nw, top + TARGET_H))
-        canvas = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
+        if nh > target_h:
+            top = (nh - target_h) // 2
+            scaled = scaled.crop((0, top, nw, top + target_h))
+        canvas = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
         canvas.paste(scaled, (ox, oy))
         out_path = os.path.join(OUT, f"car_{shape_id}_{name}.webp")
         canvas.save(out_path, "WEBP", quality=quality, method=6)
         written.append(os.path.getsize(out_path))
-    return written[0], written[1], raw_mid, gamma, trim_fraction
+    return written[0], written[1], raw_mid, gamma, trim_fraction, ref_ratio
 
 
-def audit(shape_id: str) -> tuple[float, float]:
-    """YAZILMIS dosyalari geri okuyup cizimin carpisma kutusunu ortup ortmedigini olcer.
+def audit(shape_id: str, vclass: VehicleClass) -> tuple[float, float]:
+    """YAZILMIS dosyalari geri okuyup cizimin SINIFIN kutusunu ortup ortmedigini olcer.
 
     Neden dosyadan geri okuyor: hattaki niyet degil, APK'ya giren SONUC onemli.
     Yuvarlama ve kayipli WebP alfasi araya girdikten sonraki gercek genislik bu.
@@ -365,17 +500,24 @@ def audit(shape_id: str) -> tuple[float, float]:
     layers = []
     for name in ("body", "detail"):
         path = os.path.join(OUT, f"car_{shape_id}_{name}.webp")
-        layers.append(Image.open(path).convert("RGBA").split()[3])
+        img = Image.open(path).convert("RGBA")
+        if img.size != (vclass.canvas_w, vclass.canvas_h):
+            raise ValueError(
+                "%s: dosya %dx%d, %s sinifinin tuvali %dx%d — eski bir uretim "
+                "kalmis olabilir." % (os.path.basename(path), img.size[0],
+                                      img.size[1], vclass.name,
+                                      vclass.canvas_w, vclass.canvas_h))
+        layers.append(img.split()[3])
     combined = ImageChops.add(layers[0], layers[1])
     box = combined.point(lambda i: 255 if i >= SOLID_ALPHA else 0).getbbox()
     if box is None:
         raise ValueError("uretilen sprite bos: " + shape_id)
-    w_px = (box[2] - box[0]) / float(TARGET_W) * CAR_WIDTH_PX
-    h_px = (box[3] - box[1]) / float(TARGET_H) * CAR_HEIGHT_PX
+    w_px = (box[2] - box[0]) / float(vclass.canvas_w) * vclass.art_w_dp
+    h_px = (box[3] - box[1]) / float(vclass.canvas_h) * vclass.art_h_dp
     return w_px, h_px
 
 
-def _build_until_covered(shape_id: str, stem: str):
+def _build_until_covered(shape_id: str, stem: str, vclass: VehicleClass):
     """Sprite'i uretir; DOSYADAN olculen genislik hedefin altindaysa yeniden uretir.
 
     Neden bir dongu: gereken olcegi referanstan hesaplamak yetmiyor. LANCZOS
@@ -385,11 +527,11 @@ def _build_until_covered(shape_id: str, stem: str):
     ya yetmez ya da gereksiz yere buyutur. Dongu her araca SADECE kendi
     kaybi kadar duzeltme uygular; hedefi tutan araca hic dokunmaz.
     """
-    target_w = CAR_WIDTH_PX * HITBOX_SCALE + 2.0 * HITBOX_EDGE_MARGIN_DP
+    target_w = vclass.hitbox_w_dp + 2.0 * HITBOX_EDGE_MARGIN_DP
     boost = 1.0
     for attempt in range(1, MAX_FIT_ATTEMPTS + 1):
-        stats = build(shape_id, stem, boost)
-        w_px, h_px = audit(shape_id)
+        stats = build(shape_id, stem, vclass, boost)
+        w_px, h_px = audit(shape_id, vclass)
         if w_px >= target_w:
             return stats, w_px, h_px, attempt
         boost *= (target_w / w_px) * FIT_OVERSHOOT
@@ -398,63 +540,117 @@ def _build_until_covered(shape_id: str, stem: str):
     return stats, w_px, h_px, MAX_FIT_ATTEMPTS
 
 
-def main() -> int:
+def write_preview(shape_id: str, vclass: VehicleClass, out_dir: str) -> str:
+    """Govde+detay katmanlarini birkac boyayla birlestirip PNG yazar.
+
+    Oyunun yaptigi isin AYNISI: govde secili boyayla CARPILIR
+    (``BlendMode.Modulate``), detay katmani ustune oldugu gibi cizilir. Amac
+    "guzel gorunuyor mu" degil, gozle iki seyi dogrulamak: (a) boya govdeye
+    gercekten islemis mi, (b) maske govde/detay sinirini dogru kesmis mi
+    (lastigin boyanmasi ya da camin gri kalmasi burada gorulur).
+    """
+    body = Image.open(os.path.join(OUT, f"car_{shape_id}_body.webp")).convert("RGBA")
+    detail = Image.open(os.path.join(OUT, f"car_{shape_id}_detail.webp")).convert("RGBA")
+    w, h = body.size
+
+    pad = 12
+    tile_w = w + pad
+    sheet = Image.new("RGBA", (tile_w * len(PREVIEW_COLORS) + pad, h + 2 * pad),
+                      (24, 27, 33, 255))
+    for i, (_, rgb) in enumerate(PREVIEW_COLORS):
+        tint = Image.new("RGBA", (w, h), rgb + (255,))
+        tinted = ImageChops.multiply(body.convert("RGB"), tint.convert("RGB"))
+        tinted = Image.merge("RGBA", (*tinted.split(), body.split()[3]))
+        frame = Image.alpha_composite(tinted, detail)
+        sheet.alpha_composite(frame, (pad + i * tile_w, pad))
+
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"preview_{shape_id}_{vclass.name.lower()}.png")
+    sheet.save(path, "PNG")
+    return path
+
+
+def main(argv: list[str]) -> int:
+    preview_dir = None
+    if "--preview" in argv:
+        i = argv.index("--preview")
+        if i + 1 >= len(argv):
+            print("--preview bir klasor yolu ister")
+            return 2
+        preview_dir = argv[i + 1]
+
     os.makedirs(OUT, exist_ok=True)
     total = 0
     rows = []
-    for shape_id, stem in MAPPING.items():
-        stats, w_px, h_px, attempts = _build_until_covered(shape_id, stem)
-        body_bytes, detail_bytes, raw_mid, gamma, trim = stats
+    for shape_id, (stem, vclass) in MAPPING.items():
+        stats, w_px, h_px, attempts = _build_until_covered(shape_id, stem, vclass)
+        body_bytes, detail_bytes, raw_mid, gamma, trim, ref_ratio = stats
         total += body_bytes + detail_bytes
         notes = ""
         if trim > 0:
             notes += "  (uc basina %%%.1f kirpildi)" % (trim * 100.0)
         if attempts > 1:
             notes += "  (%d turda oturdu)" % attempts
+        ratio_diff = abs(ref_ratio - vclass.ratio) / vclass.ratio
+        if ratio_diff > RATIO_WARN_FRACTION:
+            notes += "  (oran farki %%%.1f: ref %.3f / sinif %.3f)" % (
+                ratio_diff * 100.0, ref_ratio, vclass.ratio)
         print(
-            "%-14s <- %-16s body %5.1f KB  detail %5.1f KB  ortanca %3d -> gamma %.2f%s"
-            % (shape_id, stem, body_bytes / 1024, detail_bytes / 1024, raw_mid, gamma, notes)
+            "%-14s %-10s %4dx%-4d <- %-16s body %5.1f KB  detail %5.1f KB  "
+            "ortanca %3d -> gamma %.2f%s"
+            % (shape_id, vclass.name, vclass.canvas_w, vclass.canvas_h, stem,
+               body_bytes / 1024, detail_bytes / 1024, raw_mid, gamma, notes)
         )
-        rows.append((shape_id, w_px, h_px))
-    print("-" * 58)
+        rows.append((shape_id, vclass, w_px, h_px))
+    print("-" * 72)
     print("%d govde, toplam %.1f KB" % (len(MAPPING), total / 1024))
 
     # --- Oz-denetim -------------------------------------------------------
     #
-    # Tek kural: CIZILEN arac carpisma kutusundan DAR OLAMAZ. Dar kalirsa
-    # oyuncu aracin yanindaki bosluga carpar ("havaya carptim"). Ters yon
-    # (cizim kutudan genis) istenen durumdur — bu tur oyunlarda affedici
-    # hissettirir, bkz. GameConfig.HITBOX_SCALE.
+    # Tek kural: CIZILEN arac KENDI SINIFININ carpisma kutusundan DAR OLAMAZ.
+    # Dar kalirsa oyuncu aracin yanindaki bosluga carpar ("havaya carptim").
+    # Ters yon (cizim kutudan genis) istenen durumdur — bu tur oyunlarda
+    # affedici hissettirir, bkz. GameConfig.HITBOX_SCALE.
     #
     # Bu kontrol 2026-08-16'da eklendi: sigdirma kurali sessizce Boga 67'yi
-    # kutudan 0.21 dp dar uretmisti ve hicbir yerde patlamamisti.
-    hb_w = CAR_WIDTH_PX * HITBOX_SCALE
-    hb_h = CAR_HEIGHT_PX * HITBOX_SCALE
+    # kutudan 0.21 dp dar uretmisti ve hicbir yerde patlamamisti. 2026-08-17'de
+    # sinif bazina cevrildi: artik her govde TEK bir kutuya degil, KENDI
+    # sinifinin kutusuna karsi olculuyor — yoksa motosiklet BINEK kutusuyla
+    # olculur ve "ihlal" diye yanlis alarm verir, ya da tersi.
     print()
-    print("oz-denetim: cizim >= carpisma kutusu (%.2f x %.2f px)" % (hb_w, hb_h))
-    print("%-14s %9s %9s   %s" % ("govde", "genislik", "yukseklik", "pay (kenar basina)"))
+    print("oz-denetim: cizim >= KENDI SINIFININ carpisma kutusu")
+    print("%-14s %-10s %13s %19s   %s"
+          % ("govde", "sinif", "kutu (dp)", "cizim (dp)", "pay (kenar basina)"))
     bad = []
-    for shape_id, w_px, h_px in rows:
+    for shape_id, vclass, w_px, h_px in rows:
+        hb_w, hb_h = vclass.hitbox_w_dp, vclass.hitbox_h_dp
         mx, my = (w_px - hb_w) / 2.0, (h_px - hb_h) / 2.0
         flag = "OK " if (mx >= 0 and my >= 0) else "IHLAL"
-        print("  %s %-12s %9.2f %9.2f   x %+.2f  y %+.2f"
-              % (flag, shape_id, w_px, h_px, mx, my))
+        print("  %s %-12s %-10s %6.2fx%-6.2f %8.2fx%-8.2f   x %+.2f  y %+.2f"
+              % (flag, shape_id, vclass.name, hb_w, hb_h, w_px, h_px, mx, my))
         if mx < 0 or my < 0:
-            bad.append((shape_id, mx, my))
+            bad.append((shape_id, vclass, mx, my))
 
     if bad:
         print()
-        for shape_id, mx, my in bad:
+        for shape_id, vclass, mx, my in bad:
             print(
-                "HATA: %s carpisma kutusundan dar uretildi (x payi %+.2f dp, "
-                "y payi %+.2f dp). Bu haliyle oyuncu aracin yanindaki BOSLUGA "
-                "carpar. Referansin en/boy orani kutuya uymuyor demektir; "
-                "HITBOX_EDGE_MARGIN_DP / MAX_TRIM_FRACTION degerlerine ve "
-                "referansin kendisine bak." % (shape_id, mx, my)
+                "HATA: %s (%s) carpisma kutusundan dar uretildi (x payi %+.2f "
+                "dp, y payi %+.2f dp). Bu haliyle oyuncu aracin yanindaki "
+                "BOSLUGA carpar. Referansin en/boy orani sinifin kutusuna "
+                "uymuyor demektir; HITBOX_EDGE_MARGIN_DP / MAX_TRIM_FRACTION "
+                "degerlerine, gövdenin SINIFINA ve referansin kendisine bak."
+                % (shape_id, vclass.name, mx, my)
             )
         return 1
+
+    if preview_dir:
+        print()
+        print("onizlemeler (%d boya ile carpilmis):" % len(PREVIEW_COLORS))
+        for shape_id, vclass, _, _ in rows:
+            print("  " + write_preview(shape_id, vclass, preview_dir))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

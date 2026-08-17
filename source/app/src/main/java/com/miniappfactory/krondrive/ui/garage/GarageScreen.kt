@@ -542,9 +542,14 @@ private fun CarStatPanel(shape: CarShapeDef, language: AppLanguage) {
         }
 
         Text(
+            // Referans aracin ADI elle yazilmiyor (2026-08-16): "Sehir"
+            // yaziyordu ama referans o gun Beety'ye gecti ve ekran eskidi.
+            // Artik katalogdan okunuyor, bir daha yalan soyleyemez.
             text = language.pick(
-                tr = "Yüzdeler Şehir aracına göre; yükseltmelerin üstüne eklenir",
-                en = "Percentages are vs. the City car; applied on top of upgrades"
+                tr = "Yüzdeler ${CarCatalog.defaultShape.nameTr} aracına göre; " +
+                    "yükseltmelerin üstüne eklenir",
+                en = "Percentages are vs. the ${CarCatalog.defaultShape.nameEn}; " +
+                    "applied on top of upgrades"
             ),
             color = KronColors.TextMuted,
             fontSize = 9.sp

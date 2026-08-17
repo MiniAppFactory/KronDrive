@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 import kotlin.random.Random
 
 /**
@@ -1199,16 +1200,351 @@ class GameEngineTest {
     }
 
     @Test
-    fun `carpisma kutusu araca gore DEGISMEZ`() {
-        // PROVENANCE #6: govde secimi carpismayi etkilemez. Ayni kareye
-        // konulan engel her arac icin ayni sonucu vermeli.
+    fun `carpisma kutusu AYNI SINIF icinde araca gore DEGISMEZ`() {
+        // PROVENANCE #6 yeni hâli (2026-08-16): kutuyu degistiren tek sey
+        // OLCU SINIFI; sinif icinde govde secimi carpismayi etkilemez.
+        //
+        // Sinif dagilimi DONDURULUYOR. Bir govde sessizce sinif degistirirse
+        // bu bir DENGE degisikligidir — hedefler, yukseltme egrileri ve
+        // dodge penceresi gozden gecirilmeli. Testin isi o degisikligi
+        // gorunur kilmak, engellemek degil: beklenen dagilimi guncellemek
+        // bilincli bir hareket olsun.
+        val beklenenSinif = mapOf(
+            CarCatalog.SHAPE_MOTOSIKLET to VehicleClass.MOTOSIKLET,
+            CarCatalog.SHAPE_TIR to VehicleClass.AGIR
+        )
         CarCatalog.shapes.forEach { shape ->
+            assertEquals(
+                "${shape.id}: olcu sinifi degisti — bu bir DENGE degisikligidir, " +
+                    "hedefler ve yukseltme egrileri gozden gecirilmeli",
+                beklenenSinif[shape.id] ?: VehicleClass.BINEK,
+                shape.vehicleClass
+            )
             val e = engine(shape = shape)
             e.startRun()
             e.advance(60)
             e.placeObstacleOnPlayer()
             e.step(dt)
             assertEquals("${shape.id}: carpisma davranisi degisti", RunPhase.CRASHED, e.phase)
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // 14) Carpisma kutusu ARAC SINIFINDAN gelir (2026-08-16)
+    //
+    // Tasarim ve olculer: docs/VEHICLE_CLASSES.md. Bu bolumun tamaminin
+    // dayandigi tek gercek Minkowski toplamidir: iki AABB'nin yatay carpma
+    // esigi `(genislikA + genislikB) / 2`, dikey ortusme esigi
+    // `(boyA + boyB) / 2`. Yani oyuncunun kutusunu daraltmak esigi yari
+    // yariya daraltir — trafigin kutusu yerinde durur.
+    //
+    // Turetilen sayilar (CAR_ART_SCALE 0.80, HITBOX_SCALE 0.88):
+    //   MOTOSIKLET 22x59   -> gorsel 17.60x47.20  hitbox 15.488x41.536
+    //   BINEK      40x76   -> gorsel 32.00x60.80  hitbox 28.160x53.504
+    //   AGIR       48x202  -> gorsel 38.40x161.60 hitbox 33.792x142.208
+    // Binek trafige karsi yatay carpma esigi:
+    //   motosiklet 21.824 · binek 28.160 · agir 30.976
+    // -----------------------------------------------------------------
+
+    /** Yalnizca OLCU SINIFI icin var olan bir test govdesi. */
+    private fun classShape(vehicleClass: VehicleClass) = CarShapeDef(
+        id = "test_${vehicleClass.name.lowercase()}",
+        nameTr = "Test",
+        nameEn = "Test",
+        descriptionTr = "",
+        descriptionEn = "",
+        priceCoins = 0,
+        requiredCarLevel = 1,
+        // Dort surus carpani da 1.00 birakildi: karsilastirilan iki govde
+        // arasindaki TEK degisken sinif olsun diye.
+        parts = listOf(
+            CarPart.Box(
+                CarPaint.BODY,
+                left = vehicleClass.artLeft,
+                top = vehicleClass.artTop,
+                width = vehicleClass.widthUnits,
+                height = vehicleClass.lengthUnits
+            )
+        ),
+        vehicleClass = vehicleClass
+    )
+
+    /**
+     * Oyuncudan [dx] yanda, [dy] kadar yukarida/asagida duran tek bir engel
+     * koyup BIR kare isletir ve carpisma olup olmadigini doner.
+     *
+     * `ownSpeed = speed` bilincli: yaklasma hizi ~0 olur, engel kurdugumuz
+     * y'de kalir ve olculen sey yalnizca KUTU olur.
+     */
+    private fun crashesAt(
+        playerShape: CarShapeDef,
+        obstacleClass: VehicleClass,
+        dx: Float,
+        dy: Float = 0f
+    ): Boolean {
+        val e = engine(shape = playerShape)
+        e.startRun()
+        e.advance(30)
+        e.obstacles.clear()
+        e.obstacles.add(
+            GameEngine.Obstacle(
+                lane = e.playerLane,
+                x = e.playerX + dx,
+                y = e.playerY + dy,
+                colorIndex = 0,
+                ownSpeed = e.speed,
+                vehicleClass = obstacleClass
+            )
+        )
+        e.step(dt)
+        return e.phase == RunPhase.CRASHED
+    }
+
+    /** [dx] yanindan gecen bir arac perfect dodge sayiliyor mu. */
+    private fun dodgesAt(
+        playerShape: CarShapeDef,
+        obstacleClass: VehicleClass,
+        dx: Float
+    ): Boolean {
+        val e = engine(shape = playerShape)
+        e.startRun()
+        e.advance(60)
+        e.obstacles.clear()
+        e.obstacles.add(
+            GameEngine.Obstacle(
+                lane = e.playerLane,
+                x = e.playerX + dx,
+                y = e.playerY + 10f,
+                colorIndex = 0,
+                ownSpeed = 0f,
+                vehicleClass = obstacleClass
+            )
+        )
+        val events = ArrayList<GameEvent>()
+        repeat(30) { events.addAll(e.step(dt)) }
+        assertEquals("test kurgusu: carpisma olmamaliydi", RunPhase.RUNNING, e.phase)
+        assertTrue(
+            "test kurgusu: arac gecis cizgisini asmadi",
+            events.any { it is GameEvent.VehiclePassed }
+        )
+        return events.any { it is GameEvent.PerfectDodge }
+    }
+
+    @Test
+    fun `BINEK kutusu GameConfig sabitleriyle BIT BAZINDA ayni`() {
+        // CIPA TESTI. Motor kutuyu artik [VehicleClass]'tan turetiyor; binek
+        // sinifi eski sabitlerden BIR BIT bile sapmamali, cunku butun bolum
+        // hedefleri ve yukseltme egrileri o kutunun davranisina gore
+        // ayarlandi. Delta 0f bilerek: yuvarlama farki bile kabul degil.
+        val binek = VehicleClass.BINEK
+        assertEquals(GameConfig.CAR_WIDTH_PX, binek.artWidthPx, 0f)
+        assertEquals(GameConfig.CAR_HEIGHT_PX, binek.artHeightPx, 0f)
+        assertEquals(GameConfig.CAR_HITBOX_WIDTH_PX, binek.hitboxWidthPx, 0f)
+        assertEquals(GameConfig.CAR_HITBOX_HEIGHT_PX, binek.hitboxHeightPx, 0f)
+
+        val artTopPx = binek.artTop * GameConfig.CAR_ART_SCALE
+        val artBottomPx = binek.artBottom * GameConfig.CAR_ART_SCALE
+        assertEquals(GameConfig.CAR_ART_TOP_OFFSET, artTopPx, 0f)
+        assertEquals(GameConfig.CAR_ART_BOTTOM_OFFSET, artBottomPx, 0f)
+
+        // GameEngine.HitboxSpec.hitTop ile AYNI ifade (ayni carpanlar, ayni
+        // sirada) — motorun ozel alanina disaridan bakamadigimiz icin formul
+        // burada birebir tekrarlaniyor.
+        assertEquals(
+            GameConfig.CAR_HITBOX_TOP_OFFSET,
+            artTopPx + (binek.artHeightPx - binek.hitboxHeightPx) / 2f,
+            0f
+        )
+
+        // Gecis cizgisi payi: eski kod `playerY + CAR_HEIGHT_PX` idi, yenisi
+        // `playerY + (oyuncuArtAlt - engelArtUst)`. Binek ciftinde ayni sayi.
+        assertEquals(GameConfig.CAR_HEIGHT_PX, artBottomPx - artTopPx, 0f)
+    }
+
+    @Test
+    fun `binek carpisma esigi eski sabitin ta kendisi`() {
+        // Davranissal cipa: esik (28.16 + 28.16) / 2 = CAR_HITBOX_WIDTH_PX.
+        val binek = classShape(VehicleClass.BINEK)
+        val threshold = GameConfig.CAR_HITBOX_WIDTH_PX
+        assertTrue(
+            "esigin hemen ICINDE carpmali",
+            crashesAt(binek, VehicleClass.BINEK, dx = threshold - 0.05f)
+        )
+        assertFalse(
+            "esigin hemen DISINDA carpmamali",
+            crashesAt(binek, VehicleClass.BINEK, dx = threshold + 0.05f)
+        )
+        // Katalogdaki gercek govde de ayni esikte: sinif disinda hicbir sey
+        // (surus carpanlari dahil) kutuya dokunmuyor.
+        assertTrue(crashesAt(CarCatalog.defaultShape, VehicleClass.BINEK, threshold - 0.05f))
+        assertFalse(crashesAt(CarCatalog.defaultShape, VehicleClass.BINEK, threshold + 0.05f))
+    }
+
+    @Test
+    fun `dar arac dar kutuyla carpar`() {
+        // 24 dp yanda duran bir trafik araci: binek esigi 28.16 (carpar),
+        // motosiklet esigi 21.82 (carpmaz). Oyuncunun "yanimdaki bosluga
+        // carptim" dedigi durum tam olarak burasi.
+        val binek = classShape(VehicleClass.BINEK)
+        val motosiklet = classShape(VehicleClass.MOTOSIKLET)
+
+        assertTrue(
+            "binek bu mesafede carpmali",
+            crashesAt(binek, VehicleClass.BINEK, dx = 24f)
+        )
+        assertFalse(
+            "motosiklet dar kutusuyla bu mesafede carpMAMALI",
+            crashesAt(motosiklet, VehicleClass.BINEK, dx = 24f)
+        )
+
+        // Dar kutu "carpismaz" demek degil: esigin icinde ikisi de carpar.
+        assertTrue(crashesAt(motosiklet, VehicleClass.BINEK, dx = 20f))
+        assertTrue(crashesAt(binek, VehicleClass.BINEK, dx = 20f))
+
+        // Ve avantaj Minkowski toplami yuzunden sanildigi kadar buyuk degil:
+        // oyuncunun kutusu %45 daralirken esik yalnizca %22.5 daraliyor.
+        val binekThreshold =
+            (VehicleClass.BINEK.hitboxWidthPx + VehicleClass.BINEK.hitboxWidthPx) / 2f
+        val motoThreshold =
+            (VehicleClass.MOTOSIKLET.hitboxWidthPx + VehicleClass.BINEK.hitboxWidthPx) / 2f
+        assertEquals(28.16f, binekThreshold, 0.01f)
+        assertEquals(21.824f, motoThreshold, 0.01f)
+    }
+
+    @Test
+    fun `uzun arac uzun kutuyla carpar`() {
+        // Engel oyuncunun 100 dp ONUNDE dogsun. Binek gövdesi (hitbox boyu
+        // 53.5) o mesafede oyuncuya degmez; tirin kutusu 142.2 uzunlugunda,
+        // yani BURNU 100 dp ileride olsa bile KUYRUGU hâlâ oyuncunun
+        // yanindadir. Tek sabit kutuyla tirin icinden gecilebilirdi.
+        val binek = classShape(VehicleClass.BINEK)
+
+        assertFalse(
+            "binek engel bu mesafede degmemeli",
+            crashesAt(binek, VehicleClass.BINEK, dx = 0f, dy = -100f)
+        )
+        assertTrue(
+            "tirin govdesi bu mesafede hâlâ oyuncunun yaninda",
+            crashesAt(binek, VehicleClass.AGIR, dx = 0f, dy = -100f)
+        )
+
+        // Uzunluk sonsuz degil: kendi kutusunun disinda tir da degmez.
+        assertFalse(
+            "tir kendi kutusunun disinda carpmamali",
+            crashesAt(binek, VehicleClass.AGIR, dx = 0f, dy = -160f)
+        )
+    }
+
+    @Test
+    fun `genis arac genis kutuyla carpar`() {
+        // 29.5 dp yan mesafe: binek esigi 28.16 (temiz gecis), tir esigi
+        // 30.98 (carpma). Tirin genisligi de kutuya giriyor.
+        val binek = classShape(VehicleClass.BINEK)
+        assertFalse(crashesAt(binek, VehicleClass.BINEK, dx = 29.5f))
+        assertTrue(crashesAt(binek, VehicleClass.AGIR, dx = 29.5f))
+    }
+
+    @Test
+    fun `trafik kendi govdesinin sinifiyla dogar`() {
+        val e = engine()
+        e.startRun()
+        // 3 saniye = dogma araligi (0.78 s) x ~4 arac.
+        e.advance(framesFor(3f), clearTraffic = false)
+        assertTrue("test kurgusu: hic arac dogmadi", e.obstacles.isNotEmpty())
+        e.obstacles.forEach {
+            assertEquals(CarCatalog.trafficShape.vehicleClass, it.vehicleClass)
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // 15) Perfect dodge penceresi sinifla birlikte kaymaz
+    //
+    // docs/VEHICLE_CLASSES.md §2: esik sabit kalir da carpma esigi
+    // daralirsa, dar arac hem daha az carpar HEM daha cok combo yapar —
+    // bilesik ve istenmeyen bir avantaj. Pencere, iki aracin GORUNEN
+    // kenarlari arasindaki acikliktir; taban terim cift bazindadir.
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `perfect dodge esigi binek ciftinde GameConfig ile ayni kalir`() {
+        val binek = classShape(VehicleClass.BINEK)
+        val e = engine()
+        val threshold = GameConfig.perfectDodgeMaxDx(e.laneWidth)
+        assertEquals("360 dp'de esik 49.6 olmali", 49.6f, threshold, 0.01f)
+
+        assertTrue(
+            "esigin hemen ICINDE dodge sayilmali",
+            dodgesAt(binek, VehicleClass.BINEK, dx = threshold - 0.5f)
+        )
+        assertFalse(
+            "esigin hemen DISINDA dodge sayilmamali",
+            dodgesAt(binek, VehicleClass.BINEK, dx = threshold + 0.5f)
+        )
+    }
+
+    @Test
+    fun `perfect dodge penceresi dar aracta genislemez`() {
+        // Motosiklet cifti icin taban terim (17.6 + 32) / 2 = 24.8, yani
+        // esik 24.8 + 17.6 = 42.4 dp. Esik BINEK'inki gibi 49.6'da kalsaydi
+        // motosikletin penceresi (21.83 , 49.6] = 27.78 dp olurdu; binegin
+        // penceresi 21.44 dp, yani %30 daha genis. Duzeltmeyle 20.58 dp.
+        val motosiklet = classShape(VehicleClass.MOTOSIKLET)
+        val e = engine()
+        val binekThreshold = GameConfig.perfectDodgeMaxDx(e.laneWidth)
+
+        assertFalse(
+            "binek esigi motosiklete oldugu gibi uygulanmis (pencere genisledi)",
+            dodgesAt(motosiklet, VehicleClass.BINEK, dx = binekThreshold - 0.5f)
+        )
+        assertTrue(
+            "motosiklet kendi penceresi icinde dodge yapabilmeli",
+            dodgesAt(motosiklet, VehicleClass.BINEK, dx = 41f)
+        )
+
+        // Pencere GENISLIKLERI (esik eksi carpma esigi) birbirine yakin
+        // kalmali: iki arac da ayni "beceri" karsiliginda ayni odulu alsin.
+        val binekWindow = binekThreshold -
+            (VehicleClass.BINEK.hitboxWidthPx + VehicleClass.BINEK.hitboxWidthPx) / 2f
+        val pairBase =
+            (VehicleClass.MOTOSIKLET.artWidthPx + VehicleClass.BINEK.artWidthPx) / 2f
+        val motoThreshold = binekThreshold + (pairBase - GameConfig.CAR_WIDTH_PX)
+        val motoWindow = motoThreshold -
+            (VehicleClass.MOTOSIKLET.hitboxWidthPx + VehicleClass.BINEK.hitboxWidthPx) / 2f
+        assertEquals(21.44f, binekWindow, 0.01f)
+        assertEquals(20.576f, motoWindow, 0.01f)
+        assertTrue(
+            "pencere genisligi sinifa gore %10'dan fazla kaymamali: " +
+                "binek=$binekWindow moto=$motoWindow",
+            abs(motoWindow - binekWindow) / binekWindow < 0.10f
+        )
+    }
+
+    // -----------------------------------------------------------------
+    // 16) Serit uyumu (docs/VEHICLE_CLASSES.md §3)
+    // -----------------------------------------------------------------
+
+    @Test
+    fun `her sinif cifti en dar seritte komsu serit merkezine tasmaz`() {
+        // Desteklenen en dar ekran 320 dp: yol min(290, 320*0.56) = 179.2,
+        // serit 59.73 dp. Komsu seritteki bir arac oyuncuya DEGMEMELI,
+        // yoksa gozle bariz bosluk varken kaza olur (2026-08-13 hatasi).
+        val e = engine()
+        e.setViewport(320f, 640f)
+        assertEquals("en dar serit", 59.733f, e.laneWidth, 0.01f)
+
+        VehicleClass.entries.forEach { a ->
+            assertTrue(
+                "$a cizimi seride sigmiyor: ${a.artWidthPx} > ${e.laneWidth}",
+                a.artWidthPx < e.laneWidth
+            )
+            VehicleClass.entries.forEach { b ->
+                val threshold = (a.hitboxWidthPx + b.hitboxWidthPx) / 2f
+                assertTrue(
+                    "$a + $b carpma esigi serit araligini asiyor: " +
+                        "$threshold >= ${e.laneWidth}",
+                    threshold < e.laneWidth
+                )
+            }
         }
     }
 

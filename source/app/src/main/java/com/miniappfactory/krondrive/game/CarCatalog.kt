@@ -222,10 +222,31 @@ data class CarShapeDef(
      * boyasi gelir.
      */
     val defaultColorId: String = CarCatalog.DEFAULT_COLOR_ID,
+    /**
+     * OLCU SINIFI: cizim tuvali ve carpisma kutusu buradan gelir
+     * (bkz. [VehicleClass], `docs/VEHICLE_CLASSES.md`).
+     *
+     * Varsayilan [VehicleClass.BINEK] olmak ZORUNDA: mevcut sekiz govde ve
+     * trafik govdesi tek satir bile degismeden calissin diye.
+     */
+    val vehicleClass: VehicleClass = VehicleClass.BINEK,
     /** Garajda gosterilen tek satirlik karakter cumlesi. */
     val traitTr: String = "",
     val traitEn: String = ""
 ) : CarItem {
+
+    // AYRIM ONEMLI:
+    //   box*  = SINIFIN hedef kutusu (VehicleClass'tan gelir)
+    //   art*  = parcalarin GERCEKTEN kapladigi alan (asagida, parts'tan olculur)
+    // Degismez kural: her sekil kendi sinifinin kutusuna SIGAR ve onu DOLDURUR,
+    // yani ikisi esit olmali. Test bunu dogruluyor; esit degilse ya cizim
+    // kutudan tasiyor (oyuncu "havaya carpiyor") ya da kutuyu doldurmuyor
+    // (cizim carpisma kutusundan dar kaliyor, ayni sikayetin tersi).
+    val boxLeft: Float get() = vehicleClass.artLeft
+    val boxRight: Float get() = vehicleClass.artRight
+    val boxTop: Float get() = vehicleClass.artTop
+    val boxBottom: Float get() = vehicleClass.artBottom
+
     override fun name(language: AppLanguage): String = language.pick(tr = nameTr, en = nameEn)
 
     fun description(language: AppLanguage): String =
@@ -319,10 +340,14 @@ object CarCatalog {
     // buradaki parcalar ise ham prototip uzayinda. Olcege bolerek ayni uzaya
     // geri getiriyoruz. Sonuc: x -20..20, y -2..74.
 
-    val ART_RIGHT: Float = GameConfig.CAR_WIDTH_PX / GameConfig.CAR_ART_SCALE / 2f
-    val ART_LEFT: Float = -ART_RIGHT
-    val ART_TOP: Float = GameConfig.CAR_ART_TOP_OFFSET / GameConfig.CAR_ART_SCALE
-    val ART_BOTTOM: Float = GameConfig.CAR_ART_BOTTOM_OFFSET / GameConfig.CAR_ART_SCALE
+    // 2026-08-16: bunlar artik TEK kutu degil, [VehicleClass.BINEK]'in takma
+    // adi. Sinifa gore soru sormak isteyen `shape.artLeft` vb. kullanir.
+    // Silinmediler cunku mevcut cagri noktalari (cizici, testler, sprite
+    // hatti) binek kutusunu soruyor ve o kutu CIPA: asla degismez.
+    val ART_RIGHT: Float = VehicleClass.BINEK.artRight
+    val ART_LEFT: Float = VehicleClass.BINEK.artLeft
+    val ART_TOP: Float = VehicleClass.BINEK.artTop
+    val ART_BOTTOM: Float = VehicleClass.BINEK.artBottom
 
     // --- Tum araclarda ayni olan renkler -----------------------------------
 
@@ -435,6 +460,13 @@ object CarCatalog {
     const val SHAPE_MUSCLE_67 = "muscle_67"
     const val SHAPE_SUPERCAR = "supercar"
     const val SHAPE_BEETY = "beety"
+
+    // 2026-08-16'da eklenen uc sinif disi arac (bkz. docs/VEHICLE_CLASSES.md).
+    // Kimlikler ONCE tanimlandi ki ses profili, sprite kaydi ve carpisma
+    // tarafi paralel yazilabilsin.
+    const val SHAPE_F1 = "f1"
+    const val SHAPE_MOTOSIKLET = "motosiklet"
+    const val SHAPE_TIR = "tir"
 
     const val COLOR_KRON_RED = "kron_red"
     const val COLOR_GRAPHITE = "graphite"
@@ -1167,6 +1199,185 @@ object CarCatalog {
         ) + rearFace(top = 66f, halfTop = 13.2f, halfBottom = 12.4f)
     )
 
+
+    // =====================================================================
+    // SINIF DISI ARACLAR (2026-08-16) — bkz. docs/VEHICLE_CLASSES.md
+    // =====================================================================
+    //
+    // Bu uc arac katalogun ilk kez BINEK disina ciktigi yer. Ikisi kendi olcu
+    // sinifini getiriyor (motosiklet dar, tir uzun) ve carpisma kutulari
+    // gercekten farkli — yani arac secimi ilk kez oynanisi ADALET duzleminde
+    // degistiriyor. PROVENANCE #6'nin "arac secimi carpismayi degistirmez"
+    // kurali bu yuzden "AYNI SINIF ICINDE degistirmez" olarak daraltildi.
+
+    /**
+     * Motosiklet — katalogun tek [VehicleClass.MOTOSIKLET] govdesi.
+     *
+     * Asil ustunlugu carpanlarda DEGIL kutusunda: 22 birim genislik, binegin
+     * %55'i, carpisma alani -%31. Bu yuzden surus carpanlari bilerek olculu
+     * tutuldu — hem dar kutu hem her eksende ustunluk verilseydi arac
+     * tartisilmaz sekilde en iyisi olur ve digerleri copa donerdi.
+     *
+     * Bedeli FREN: iki tekerlekli bir aracin durmasi zordur ve dar kutunun
+     * "siyirma" avantaji ancak zamanlama iyiyse ise yarar.
+     */
+    private val MOTOSIKLET = CarShapeDef(
+        id = SHAPE_MOTOSIKLET,
+        nameTr = "Motosiklet",
+        nameEn = "Motorcycle",
+        descriptionTr = "İki teker, dar gövde — trafiğin arasından sıyrılır",
+        descriptionEn = "Two wheels, narrow body — slips between traffic",
+        priceCoins = 2800,
+        requiredCarLevel = 5,
+        vehicleClass = VehicleClass.MOTOSIKLET,
+        topSpeedMul = 1.06f,
+        accelMul = 1.12f,
+        brakeMul = 0.88f,
+        boostMul = 1.02f,
+        traitTr = "Kataloğun en dar aracı — çarpışma kutusu %31 küçük",
+        traitEn = "Narrowest in the catalog — 31% smaller hitbox",
+        parts = listOf(
+            CarPart.Box(CarPaint.TIRE, -3f, 3f, 6f, 15f, 2.4f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, -3f, 39f, 6f, 17f, 2.4f, WHEEL_ROLL),
+            // Gidon: kutunun SOL ve SAG kenarina degen tek parca.
+            CarPart.Box(CarPaint.TRIM, -11f, 16.5f, 22f, 2.6f, 1.2f, alpha = 0.92f),
+            CarPart.Box(CarPaint.BODY, -6f, 9f, 12f, 38f, 5f, BODY_ROLL),
+            // On kaporta: kutunun UST kenarina (-1.55) degiyor.
+            CarPart.Wedge(
+                CarPaint.BODY,
+                listOf(
+                    CarPoint(-3.2f, -1.55f), CarPoint(3.2f, -1.55f),
+                    CarPoint(6f, 15f), CarPoint(-6f, 15f)
+                ),
+                BODY_ROLL
+            ),
+            CarPart.Box(CarPaint.BODY_SHADE, -3f, -1.55f, 6f, 1.8f, 0.8f, NOSE_FADE),
+            CarPart.Box(CarPaint.GLASS, -4.4f, 14f, 8.8f, 6f, 3f, GLASS_SHEEN),
+            CarPart.Disc(CarPaint.DRIVER, 0f, 24f, 3.4f),
+            CarPart.Box(CarPaint.ACCENT, -1.4f, 22f, 2.8f, 20f, 0.9f, alpha = 0.85f),
+            CarPart.Box(CarPaint.GLOSS, -5.2f, 12f, 1.2f, 32f, 0.6f, alpha = 0.14f),
+            // Kuyruk: kutunun ALT kenarina (57.45) degiyor.
+            CarPart.Box(CarPaint.BODY, -4.2f, 46f, 8.4f, 9f, 3f, REAR_FADE),
+            CarPart.Box(CarPaint.TAIL, -3f, 55.25f, 6f, 2.2f, 1f)
+        )
+    )
+
+    /**
+     * Tir — katalogun tek [VehicleClass.AGIR] govdesi.
+     *
+     * 202 birim uzun, yani binegin 2.7 kati. Bu bir OZELLIK degil BEDEL:
+     * carpisma kutusu 142 dp boyunda ve yandan gecen trafik cok daha uzun sure
+     * temas riskinde kaliyor. Karsiliginda boost: agir arac bir kere hizlandi
+     * mi durmuyor.
+     *
+     * TRAFIGE KOYULMADI (dikkat). Regresyon olcumu (2026-08-16): iki tirin
+     * dikey ortusme suresi 0.72-0.95 s, dogma araligi ise 0.78 s — yani
+     * tirlarin yarisi birbirine girerdi. Trafige girmesi ayri bir is (tir icin
+     * ozel dogma araligi ya da trafik sinifina ozel butce).
+     */
+    private val TIR = CarShapeDef(
+        id = SHAPE_TIR,
+        nameTr = "Tır",
+        nameEn = "Truck",
+        descriptionTr = "Uzun ve ağır — hızlanması zor, durması daha zor",
+        descriptionEn = "Long and heavy — hard to speed up, harder to stop",
+        priceCoins = 3600,
+        requiredCarLevel = 6,
+        vehicleClass = VehicleClass.AGIR,
+        topSpeedMul = 0.94f,
+        accelMul = 0.86f,
+        brakeMul = 0.92f,
+        boostMul = 1.18f,
+        traitTr = "Kataloğun en uzunu — boost'u en güçlü, kutusu en büyük",
+        traitEn = "Longest here — strongest boost, biggest hitbox",
+        parts = listOf(
+            // Cekici tekerlekleri — kutunun SOL/SAG kenarina degiyor.
+            CarPart.Box(CarPaint.TIRE, -24f, 16f, 6f, 20f, 2.4f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, 18f, 16f, 6f, 20f, 2.4f, WHEEL_ROLL),
+            // Dorse tekerlekleri (ikili aks).
+            CarPart.Box(CarPaint.TIRE, -24f, 138f, 6f, 22f, 2.4f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, 18f, 138f, 6f, 22f, 2.4f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, -24f, 164f, 6f, 22f, 2.4f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, 18f, 164f, 6f, 22f, 2.4f, WHEEL_ROLL),
+            // Cekici kabini — kutunun UST kenarina (-5.32) degiyor.
+            CarPart.Box(CarPaint.BODY, -19f, -5.3f, 38f, 46f, 4f, BODY_ROLL),
+            CarPart.Box(CarPaint.BODY_SHADE, -17f, -5.3f, 34f, 3.2f, 1.2f, NOSE_FADE),
+            CarPart.Box(CarPaint.TRIM, -18f, -3.6f, 36f, 3f, 1.2f, alpha = 0.85f),
+            CarPart.Box(CarPaint.GLASS, -15.5f, 9f, 31f, 13f, 3f, GLASS_SHEEN),
+            CarPart.Disc(CarPaint.DRIVER, 0f, 27f, 4.6f),
+            // Dorse — uzunlugu tasiyan parca, kutunun ALT kenarina (196.68).
+            CarPart.Box(CarPaint.BODY, -21f, 44f, 42f, 152.7f, 3f, ROOF_ROLL),
+            CarPart.Box(CarPaint.BODY_SHADE, -21f, 44f, 42f, 3.4f, 1f, alpha = 0.4f),
+            // Dorse uzerindeki uzunlamasina cizgiler: uzunlugu okunur kilar.
+            CarPart.Box(CarPaint.ACCENT, -3f, 50f, 6f, 140f, 1.2f, alpha = 0.7f),
+            CarPart.Box(CarPaint.GLOSS, -19.6f, 50f, 1.6f, 140f, 0.8f, alpha = 0.14f),
+            CarPart.Box(CarPaint.TAIL, -18f, 191f, 36f, 5.7f, 1.4f)
+        )
+    )
+
+    /**
+     * F1 — [VehicleClass.BINEK] sinifinda KALIR.
+     *
+     * Sahibinin notu "F1 daha genis" idi ama referans cizim bunu SOYLEMIYOR:
+     * `10_f1` orani 0.473, Sehir'inki 0.518 — yani elimizdeki F1 sanati
+     * otomobilden DAHA DAR. Olcum sahibin beklentisiyle celisti ve olcume
+     * uyuldu (docs/VEHICLE_CLASSES.md "F1 neden yeni sinif istemiyor").
+     * Ayri bir FORMULA sinifi mumkundu ama dikey ortusmeyi %5.9 artirip
+     * kimligi bir BEDELLE getirirdi; sifir riskli yol BINEK'te birakmakti.
+     *
+     * Denge taslagi sahibinden (5000 coin, seviye 8): Super Araba'yi hiz ve
+     * ivmede gecer, fren ve boostta geride kalir — yani dominasyon testi
+     * gecer, katalogun en pahalisi olmasi onu tartismasiz "en iyi" yapmaz.
+     */
+    private val F1 = CarShapeDef(
+        id = SHAPE_F1,
+        nameTr = "Formula",
+        nameEn = "Formula",
+        descriptionTr = "Açık teker, ön ve arka kanat — pistin aracı",
+        descriptionEn = "Open wheel, front and rear wing — built for the track",
+        priceCoins = 5000,
+        requiredCarLevel = 8,
+        topSpeedMul = 1.18f,
+        accelMul = 1.15f,
+        brakeMul = 0.85f,
+        boostMul = 0.90f,
+        traitTr = "En hızlı ve en çevik — ama freni ve boost'u zayıf",
+        traitEn = "Fastest and sharpest — but weak brakes and boost",
+        parts = listOf(
+            // On kanat: kutunun UST ve iki YAN kenarina birden degiyor.
+            CarPart.Box(CarPaint.BODY, -20f, -2f, 40f, 5.4f, 1.2f, NOSE_FADE),
+            CarPart.Box(CarPaint.BODY_SHADE, -20f, 1.6f, 40f, 1.8f, 0.8f, alpha = 0.5f),
+            // Acik tekerlekler — govdenin disinda, F1'in imzasi.
+            CarPart.Box(CarPaint.TIRE, -20f, 12f, 8f, 18f, 2.6f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, 12f, 12f, 8f, 18f, 2.6f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, -20f, 48f, 8f, 20f, 2.6f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, 12f, 48f, 8f, 20f, 2.6f, WHEEL_ROLL),
+            // Ince burun ve govde: F1 dar, bu yuzden BINEK kutusunu
+            // tekerlekler ve kanatlar dolduruyor, govde degil.
+            CarPart.Wedge(
+                CarPaint.BODY,
+                listOf(
+                    CarPoint(-3.4f, 3f), CarPoint(3.4f, 3f),
+                    CarPoint(7.5f, 30f), CarPoint(-7.5f, 30f)
+                ),
+                BODY_ROLL
+            ),
+            CarPart.Box(CarPaint.BODY, -7.5f, 28f, 15f, 34f, 3f, BODY_ROLL),
+            CarPart.Box(CarPaint.ACCENT, -1.8f, 4f, 3.6f, 26f, 0.9f, alpha = 0.9f),
+            CarPart.Box(CarPaint.GLASS, -5.2f, 30f, 10.4f, 7f, 3f, GLASS_SHEEN),
+            CarPart.Disc(CarPaint.DRIVER, 0f, 34.5f, 3.6f),
+            // Yan kutular.
+            CarPart.Box(CarPaint.BODY, -13f, 34f, 6f, 24f, 2.5f, BODY_ROLL),
+            CarPart.Box(CarPaint.BODY, 7f, 34f, 6f, 24f, 2.5f, BODY_ROLL),
+            CarPart.Box(CarPaint.GLOSS, -6.8f, 32f, 1.4f, 28f, 0.7f, alpha = 0.14f),
+            // Arka kanat: kutunun ALT kenarina (74) degiyor.
+            CarPart.Box(CarPaint.BODY_SHADE, -9f, 62f, 18f, 4f, 1.2f, REAR_FADE),
+            CarPart.Box(CarPaint.BODY, -17f, 66f, 34f, 6f, 1.4f, ROOF_ROLL),
+            CarPart.Box(CarPaint.ACCENT, -16.4f, 67f, 32.8f, 1.6f, 0.7f, alpha = 0.7f),
+            CarPart.Box(CarPaint.TAIL, -6f, 71.4f, 12f, 2.6f, 1f)
+        )
+    )
+
     /**
      * Liste sirasi = garajdaki sira = FIYAT merdiveni (test bunu zorunlu
      * kiliyor: fiyat kesin artan, seviye sarti geri gitmez).
@@ -1182,7 +1393,7 @@ object CarCatalog {
      */
     val shapes: List<CarShapeDef> = listOf(
         BEETY, HATCHBACK, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67,
-        SUPERCAR
+        MOTOSIKLET, SUPERCAR, TIR, F1
     )
 
     // -----------------------------------------------------------------

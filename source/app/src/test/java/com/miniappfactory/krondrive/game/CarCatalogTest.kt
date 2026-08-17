@@ -299,20 +299,20 @@ class CarCatalogTest {
                 // EPS: sinirlar GameConfig'ten bolme ile turetiliyor, kil payi
                 // float hatasi testi kirmasin (gercek tasmalar birim buyuklugunde).
                 assertTrue(
-                    "${shape.id}: parca soldan tasiyor (${part.left} < ${CarCatalog.ART_LEFT})",
-                    part.left >= CarCatalog.ART_LEFT - EPS
+                    "${shape.id}: parca soldan tasiyor (${part.left} < ${shape.boxLeft})",
+                    part.left >= shape.boxLeft - EPS
                 )
                 assertTrue(
-                    "${shape.id}: parca sagdan tasiyor (${part.right} > ${CarCatalog.ART_RIGHT})",
-                    part.right <= CarCatalog.ART_RIGHT + EPS
+                    "${shape.id}: parca sagdan tasiyor (${part.right} > ${shape.boxRight})",
+                    part.right <= shape.boxRight + EPS
                 )
                 assertTrue(
-                    "${shape.id}: parca ustten tasiyor (${part.top} < ${CarCatalog.ART_TOP})",
-                    part.top >= CarCatalog.ART_TOP - EPS
+                    "${shape.id}: parca ustten tasiyor (${part.top} < ${shape.boxTop})",
+                    part.top >= shape.boxTop - EPS
                 )
                 assertTrue(
-                    "${shape.id}: parca alttan tasiyor (${part.bottom} > ${CarCatalog.ART_BOTTOM})",
-                    part.bottom <= CarCatalog.ART_BOTTOM + EPS
+                    "${shape.id}: parca alttan tasiyor (${part.bottom} > ${shape.boxBottom})",
+                    part.bottom <= shape.boxBottom + EPS
                 )
             }
         }
@@ -343,11 +343,11 @@ class CarCatalogTest {
             val height = shape.artBottom - shape.artTop
             assertTrue(
                 "${shape.id} kutunun genisligini doldurmuyor ($width)",
-                width >= (CarCatalog.ART_RIGHT - CarCatalog.ART_LEFT) * MIN_BOX_FILL
+                width >= (shape.boxRight - shape.boxLeft) * MIN_BOX_FILL
             )
             assertTrue(
                 "${shape.id} kutunun yuksekligini doldurmuyor ($height)",
-                height >= (CarCatalog.ART_BOTTOM - CarCatalog.ART_TOP) * MIN_BOX_FILL
+                height >= (shape.boxBottom - shape.boxTop) * MIN_BOX_FILL
             )
         }
     }
@@ -359,9 +359,12 @@ class CarCatalogTest {
             listOf(CarPaint.BODY, CarPaint.GLASS, CarPaint.TIRE, CarPaint.ACCENT).forEach { paint ->
                 assertTrue("${shape.id} icinde $paint parcasi yok", paint in paints)
             }
+            // Tekerlek sayisi SINIFA bagli: motosikletin iki tekeri var ve
+            // bu bir eksiklik degil, aracin tanimi (2026-08-16).
+            val enAzTeker = if (shape.vehicleClass == VehicleClass.MOTOSIKLET) 2 else 4
             assertTrue(
-                "${shape.id}: dort tekerlek olmali",
-                shape.parts.count { it.paint == CarPaint.TIRE } >= 4
+                "${shape.id}: en az $enAzTeker tekerlek olmali",
+                shape.parts.count { it.paint == CarPaint.TIRE } >= enAzTeker
             )
         }
     }
@@ -423,7 +426,13 @@ class CarCatalogTest {
                 CarCatalog.SHAPE_MOUNTAIN_GOAT to 1500,
                 CarCatalog.SHAPE_MUSCLE to 1800,
                 CarCatalog.SHAPE_MUSCLE_67 to 2400,
-                CarCatalog.SHAPE_SUPERCAR to 3200
+                // 2026-08-16: uc sinif disi arac. Motosiklet ve tir kendi
+                // olcu siniflarini getiriyor; F1 BINEK'te kaliyor (referans
+                // cizim otomobilden DAHA DAR, bkz. docs/VEHICLE_CLASSES.md).
+                CarCatalog.SHAPE_MOTOSIKLET to 2800,
+                CarCatalog.SHAPE_SUPERCAR to 3200,
+                CarCatalog.SHAPE_TIR to 3600,
+                CarCatalog.SHAPE_F1 to 5000
             ),
             CarCatalog.shapes.map { it.id to it.priceCoins }
         )
@@ -462,6 +471,9 @@ class CarCatalogTest {
         // kokpiti geriye alan govdelere (Boga 67, tavan tepesi 34.6) yer
         // birakiyor. Daraltirsan bir govdenin tavani hic eslesmez ve
         // maxOf bos listede PATLAR — bilerek boyle genis.
+        // Kiyas YALNIZCA binek govdeleri arasinda: motosikletin tavani yok,
+        // tirin dorsesi 152 birim ve "tavan" olarak okunursa Dag Kecisi'ni
+        // ezer — ikisi de bu iddianin konusu degil (2026-08-16).
         fun roofHeight(shape: CarShapeDef): Float = shape.parts
             .filterIsInstance<CarPart.Box>()
             .filter { it.paint == CarPaint.BODY && it.top > 25f && it.top < 40f }
@@ -469,7 +481,16 @@ class CarCatalogTest {
 
         val goatRoof = roofHeight(goat)
         assertTrue("Dag Kecisi tavani cok kisa ($goatRoof)", goatRoof >= 20f)
-        CarCatalog.shapes.filter { it.id != CarCatalog.SHAPE_MOUNTAIN_GOAT }.forEach {
+        // Kiyas yalnizca TAVANI OLAN govdeler arasinda:
+        //  - motosiklet ve tir BINEK degil, silueti bu iddianin konusu degil
+        //  - F1 acik kokpitli, yani TAVANI YOK. Testin sezgisi ("kokpitten
+        //    sonraki en uzun BODY paneli tavandir") onun ana govdesini tavan
+        //    saniyor ve 34 birimle Dag Kecisi'ni eziyor. Yanlis olan F1
+        //    degil, sezginin acik kokpite uymamasi (2026-08-16).
+        val tavanliGovdeler = setOf(CarCatalog.SHAPE_F1, CarCatalog.SHAPE_MOUNTAIN_GOAT)
+        CarCatalog.shapes.filter {
+            it.id !in tavanliGovdeler && it.vehicleClass == VehicleClass.BINEK
+        }.forEach {
             assertTrue(
                 "${it.id} tavani Dag Kecisi kadar uzun",
                 roofHeight(it) < goatRoof * 0.75f

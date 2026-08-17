@@ -141,6 +141,176 @@ class CarSoundProfilesTest {
         assertTrue("Dag Kecisi daha gurultulu kalmali", beety.noiseAmount < keci.noiseAmount)
     }
 
+    /**
+     * F1'in kimligi ne Boga 67'nin (tek harmonikler) ne Beety'nin (cift
+     * harmonikler) aynasi — UCUNCU bir yapi: **duz tarak**. Butun
+     * harmonikler birbirine yakin ve hepsi yuksek.
+     *
+     * Bu, olcumden turedi: F1 referansinda en guclu 8 tepenin guc degisim
+     * katsayisi 0.108, en zayif/en guclu orani 0.714 — mevcut yedi aracin
+     * bandi (CV 0.999–1.901, oran 0.007–0.032) ile kiyaslanamaz. F1 tek bir
+     * harmonige yiginmiyor, cok sayida ust harmonigi esit suruyor.
+     *
+     * Test ayrica F1'in HICBIR tac almadigini kilitliyor: tizlik ve filtre
+     * Super Araba'da kaliyor. F1'in kendi taclari duzensizligin YOKLUGU
+     * ekseninde (en sig lope, en az grit, en az gurultu) — bunlar bostu.
+     */
+    @Test
+    fun `F1 duz harmonik tarak tasir ve kimseden tac almaz`() {
+        val f1 = CarSoundProfiles.forShape(CarCatalog.SHAPE_F1)
+        val digerleri = CarSoundProfiles.all.filter { it.id != f1.id }
+        val superAraba = CarSoundProfiles.forShape(CarCatalog.SHAPE_SUPERCAR)
+
+        // DUZ TARAK: en zayif harmonik, en guclusunun en az %80'i olmali.
+        val harmonikler = listOf(f1.harmonic2, f1.harmonic3, f1.harmonic4, f1.harmonic5)
+        assertTrue(
+            "F1 imzasi: harmonikler birbirine yakin olmali (min/max >= 0.80), " +
+                "olculen $harmonikler",
+            harmonikler.min() >= 0.80f * harmonikler.max()
+        )
+        // ...ve hepsi GERCEKTEN yuksek olmali; dort tane 0.05 de "duz"dur.
+        assertTrue(
+            "F1 imzasi: harmonikler yuksek olmali (en zayifi >= 0.40)",
+            harmonikler.min() >= 0.40f
+        )
+        // Ne V8 ne boksor imzasi — F1 ucuncu kategori.
+        assertTrue(
+            "F1 tek sayili harmonik imzasini (Boga 67) almamali",
+            f1.harmonic3 + f1.harmonic5 <= 2f * (f1.harmonic2 + f1.harmonic4)
+        )
+        assertTrue(
+            "F1 cift sayili harmonik imzasini (Beety) almamali",
+            f1.harmonic2 + f1.harmonic4 <= 2f * (f1.harmonic3 + f1.harmonic5)
+        )
+
+        // Taclar sahibinde: tizlik ve filtre Super Araba'nin.
+        assertTrue("Super Araba daha tiz kalmali", f1.freqMul < superAraba.freqMul)
+        assertTrue("Super Araba'nin filtresi daha acik kalmali",
+            f1.cutoffMul < superAraba.cutoffMul)
+
+        // F1'in KENDI taclari: duzensizligin yoklugu.
+        assertTrue("en sig lope F1'de olmali",
+            digerleri.all { it.lopeDepth > f1.lopeDepth })
+        assertTrue("en az metalik puruz F1'de olmali",
+            digerleri.all { it.grit > f1.grit })
+        assertTrue("en az motor gurultusu F1'de olmali",
+            digerleri.all { it.noiseAmount > f1.noiseAmount })
+        // Korna: F1'de korna yok — sifir yazilamadigi icin en ince ve en kisa.
+        assertTrue("en ince korna F1'de olmali",
+            digerleri.all { it.hornBaseHz < f1.hornBaseHz })
+        assertTrue("en kisa korna F1'de olmali",
+            digerleri.all { it.hornSeconds > f1.hornSeconds })
+    }
+
+    /**
+     * Motosiklet F1 ile ayni ailede (yuksek devir, dengeli tarak) ama ondan
+     * HAM. Olcumde ikisini ayiran sey: 500 Hz ustu/alti enerji orani
+     * motosiklette 0.115, F1'de 1.348 — yani motosikletin agirligi hala
+     * altta. Profilde bu, daha kapali filtre + daha dusuk frekans + belirgin
+     * lope + metalik grit olarak karsiligini buluyor.
+     */
+    @Test
+    fun `motosiklet F1den ham ama ayni ailede`() {
+        val moto = CarSoundProfiles.forShape(CarCatalog.SHAPE_MOTOSIKLET)
+        val f1 = CarSoundProfiles.forShape(CarCatalog.SHAPE_F1)
+        val boga = CarSoundProfiles.forShape(CarCatalog.SHAPE_MUSCLE_67)
+        val superAraba = CarSoundProfiles.forShape(CarCatalog.SHAPE_SUPERCAR)
+
+        // Ayni aile: ikisi de katalogun tiz ucunda.
+        assertTrue("motosiklet yuksek devirli olmali", moto.freqMul > 1.15f)
+        // Ama F1'den ham ve daha az parlak.
+        assertTrue("F1 daha tiz kalmali", moto.freqMul < f1.freqMul)
+        assertTrue("F1'in filtresi daha acik kalmali", moto.cutoffMul < f1.cutoffMul)
+        assertTrue("motosiklet F1'den daha belirgin vurmali",
+            moto.lopeDepth > f1.lopeDepth)
+        assertTrue("motosiklet F1'den daha puruzlu olmali", moto.grit > f1.grit)
+
+        // Vurus gercekten belirgin olmali (tek/cift silindir imzasi).
+        assertTrue("motosikletin lope'u belirgin olmali", moto.lopeDepth >= 0.20f)
+
+        // Taclar sahibinde.
+        assertTrue("Super Araba daha tiz kalmali", moto.freqMul < superAraba.freqMul)
+        assertTrue("Boga 67'nin V8 imzasi exclusive kalmali",
+            moto.harmonic3 + moto.harmonic5 <= 2f * (moto.harmonic2 + moto.harmonic4))
+        assertTrue("Boga 67 daha gurultulu kalmali", moto.gainMul < boga.gainMul)
+    }
+
+    /**
+     * Tir katalogun EN KAPALI FILTRELI motoru (0.44).
+     *
+     * Dikkat — burada "en koyu SES" IDDIA EDILMIYOR ve test de onu
+     * kontrol etmiyor. Olculdu: sentezlenen tirin spektral agirlik merkezi
+     * 173 Hz (tonal govde), Dag Kecisi'nin 160 Hz'inden yuksek. Sebebi
+     * kasitli — kalinlik icin eklenen tek sayili harmonikler enerjiyi
+     * yukari tasir ve dizel tikirtisi motor filtresini bypass eder.
+     * Ayrinti [CarSoundProfiles.TIR] KDoc'unda.
+     *
+     * Kritik nokta: tirin kalinligi [CarSoundProfile.freqMul]'dan GELMIYOR
+     * — gelemez, cunku 0.76 tabani (telefon hoparloru) ve Boga 67'nin
+     * "en pes" taci o ekseni kapatiyor. Kalinlik iki yerden geliyor ve test
+     * ikisini de kilitliyor: eksik temel etkisi (tek sayili harmonikler
+     * ciftlerden agir) ve katalogun en kapali filtresi.
+     */
+    @Test
+    fun `tir en kapali filtreli motor ama frekans tacini almaz`() {
+        val tir = CarSoundProfiles.forShape(CarCatalog.SHAPE_TIR)
+        val digerleri = CarSoundProfiles.all.filter { it.id != tir.id }
+        val boga = CarSoundProfiles.forShape(CarCatalog.SHAPE_MUSCLE_67)
+        val keci = CarSoundProfiles.forShape(CarCatalog.SHAPE_MOUNTAIN_GOAT)
+
+        // 1) EN TOK: katalogun en kapali filtresi.
+        assertTrue("en kapali filtre tirda olmali",
+            digerleri.all { it.cutoffMul > tir.cutoffMul })
+        // 2) Kalinlik tek sayili harmoniklerden (eksik temel etkisi).
+        assertTrue(
+            "tirin kalinligi tek sayili harmoniklerden gelmeli",
+            tir.harmonic3 + tir.harmonic5 > tir.harmonic2 + tir.harmonic4
+        )
+        // 3) ...ama frekanstan GELMEMELI: 0.76 tabani ve Boga'nin taci.
+        assertTrue("Boga 67 katalogun en pesi kalmali", tir.freqMul > boga.freqMul)
+        assertTrue(
+            "freqMul 0.76 tabaninin altina inemez (telefon hoparloru temeli " +
+                "tasimiyor — KDoc'ta yazili)",
+            tir.freqMul >= 0.76f
+        )
+        // 4) Boga'nin V8 imzasi yine de exclusive: tirinki olculu yatiklik.
+        assertTrue(
+            "Boga 67'nin V8 imzasi (tek > 2x cift) exclusive kalmali",
+            tir.harmonic3 + tir.harmonic5 <= 2f * (tir.harmonic2 + tir.harmonic4)
+        )
+        // 5) Dizel tikirtisi yuksek ama Dag Kecisi'nin taci duruyor.
+        assertTrue("tirda belirgin dizel tikirtisi olmali", tir.noiseAmount >= 0.06f)
+        assertTrue("Dag Kecisi daha gurultulu kalmali", tir.noiseAmount < keci.noiseAmount)
+        // 6) Agir rolanti, ama Boga'nin iki lope taci da yerinde.
+        assertTrue("Boga 67'nin lope'u daha derin kalmali", tir.lopeDepth < boga.lopeDepth)
+        assertTrue("Boga 67'nin lope'u daha yavas kalmali", tir.lopeRate > boga.lopeRate)
+    }
+
+    /**
+     * Tirin HAVA KORNASI. Dosyanin basindaki "Tir hazirligi" bolumu ~110 Hz
+     * onermisti; Boga 67'nin 250 Hz'lik "en kalin korna" taci buna izin
+     * vermedi. Karakter bu yuzden bos duran uc eksene dagitildi — asil hava
+     * kornasi hissini (basinc kurmasi, uzun uzun otmesi) tasiyanlar zaten
+     * bunlar.
+     */
+    @Test
+    fun `tirin hava kornasi en genis en uzun ve en yavas`() {
+        val tir = CarSoundProfiles.forShape(CarCatalog.SHAPE_TIR)
+        val digerleri = CarSoundProfiles.all.filter { it.id != tir.id }
+        val boga = CarSoundProfiles.forShape(CarCatalog.SHAPE_MUSCLE_67)
+
+        assertTrue("hava kornasi en genis araliga sahip olmali",
+            digerleri.all { it.hornInterval < tir.hornInterval })
+        assertTrue("hava kornasi en uzun otmeli",
+            digerleri.all { it.hornSeconds < tir.hornSeconds })
+        assertTrue("hava kornasi en yavas atakli olmali (basinc kurar)",
+            digerleri.all { it.hornAttack < tir.hornAttack })
+        // Kalinlikta ikinci: tac Boga 67'de kaliyor.
+        assertTrue("Boga 67'nin kornasi en kalin kalmali", tir.hornBaseHz > boga.hornBaseHz)
+        assertTrue("tir katalogun ikinci en kalin kornasi olmali",
+            digerleri.filter { it.id != boga.id }.all { it.hornBaseHz > tir.hornBaseHz })
+    }
+
     @Test
     fun `normalizasyon ham dalgayi bir birimin altinda tutar`() {
         CarSoundProfiles.all.forEach { p ->

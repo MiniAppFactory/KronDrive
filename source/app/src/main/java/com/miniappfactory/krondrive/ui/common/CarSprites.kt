@@ -70,6 +70,12 @@ private val SPRITE_TABLE: List<Triple<String, Int, Int>> = listOf(
     Triple(CarCatalog.SHAPE_MUSCLE_67, R.drawable.car_muscle_67_body, R.drawable.car_muscle_67_detail),
     Triple(CarCatalog.SHAPE_SUPERCAR, R.drawable.car_supercar_body, R.drawable.car_supercar_detail),
     Triple(CarCatalog.SHAPE_BEETY, R.drawable.car_beety_body, R.drawable.car_beety_detail),
+    // 2026-08-16: sinif disi uc arac. Sprite tuvalleri farkli boyutta
+    // (motosiklet 132x354, tir 288x1212) ama cizici her sprite'i govdenin
+    // KENDI sinif kutusuna oturttugu icin burada ayrica bir sey gerekmiyor.
+    Triple(CarCatalog.SHAPE_MOTOSIKLET, R.drawable.car_motosiklet_body, R.drawable.car_motosiklet_detail),
+    Triple(CarCatalog.SHAPE_TIR, R.drawable.car_tir_body, R.drawable.car_tir_detail),
+    Triple(CarCatalog.SHAPE_F1, R.drawable.car_f1_body, R.drawable.car_f1_detail),
     // Trafik: oyuncunun alamadigi sabit govde. Sprite'a gecmesi ayrica kazanc —
     // sahnede ayni anda onlarca trafik araci var ve her biri vektorde ~20 parca
     // cizdiriyordu.

@@ -108,8 +108,30 @@ object GameConfig {
     const val LANE_DASH_ON_PX = 42f
     const val LANE_DASH_OFF_PX = 54f
 
-    /** Engel/coin dogma yuksekligi (ekranin ustunde, negatif y). */
+    /**
+     * Engel/coin dogma yuksekligi (ekranin ustunde, negatif y).
+     *
+     * [OBSTACLE_SPAWN_Y_PX] artik SABIT DEGIL, sinifa gore hesaplaniyor
+     * ([obstacleSpawnY]). Sebep 2026-08-16'da olculdu: sabit -150 binek icin
+     * dogruydu (cizim boyu 60.8 px) ama AGIR sinifi 161.6 px uzun, yani tir
+     * -150'de dogsa **arkasi +7.35'te, ekranin ICINDE** belirirdi — arac
+     * yoktan var olmus gibi gorunurdu.
+     *
+     * Eski sabit tarihsel deger olarak duruyor ve binek icin uretilen sayiya
+     * esit; cagri noktalari [obstacleSpawnY] kullanmali.
+     */
     const val OBSTACLE_SPAWN_Y_PX = -150f
+
+    /** Dogma yuksekliginin cizim boyunun otesinde biraktigi pay (px). */
+    const val OBSTACLE_SPAWN_CLEARANCE_PX = 89.2f
+
+    /**
+     * Bu sinifa ait bir aracin dogacagi y: butun govdesi ekranin USTUNDE
+     * kalacak sekilde. Binek icin -150 uretir (eski sabitin ta kendisi).
+     */
+    fun obstacleSpawnY(vehicleClass: VehicleClass): Float =
+        -(vehicleClass.artHeightPx + OBSTACLE_SPAWN_CLEARANCE_PX)
+
     const val COIN_SPAWN_Y_PX = -60f
 
     /** Ekranin altinda bu kadar asagi inen nesne temizlenir. */
