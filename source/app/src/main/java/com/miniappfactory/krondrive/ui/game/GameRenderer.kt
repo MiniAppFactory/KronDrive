@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -26,11 +27,13 @@ import com.miniappfactory.krondrive.ui.common.CarSpriteSet
 import com.miniappfactory.krondrive.ui.common.drawCarBody
 import com.miniappfactory.krondrive.ui.common.drawCarShadowIfVector
 import com.miniappfactory.krondrive.ui.common.drawStyledCar
+import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.random.Random
 
 /**
  * Sahnenin cizimi. Prototipteki `drawSideBackgrounds` / `drawTrack` /
@@ -51,43 +54,75 @@ fun DrawScope.drawGameScene(
     gaugeSmallSize: TextUnit,
     // Sprite kumesi disaridan gelir: yukleme Composable bir istir, cizim ise
     // her karede yurur. null verilirse cizim vektor yoluna duser.
-    sprites: CarSpriteSet? = null
+    sprites: CarSpriteSet? = null,
+    /**
+     * Carpisma vurusu ([CrashImpact]). null veya sonmus ise sahne bit bazinda
+     * eskisi gibi cizilir; kosu sirasindaki tum maliyeti asagidaki tek
+     * `takeIf` ve sifir kaymali bir `translate`tir.
+     */
+    impact: CrashImpact? = null
 ) {
-    scale(density, density, pivot = Offset.Zero) {
-        drawSideBackgrounds(engine)
-        drawTrack(engine)
-    }
-    drawSpeedometer(engine, density, textMeasurer, gaugeValueSize, gaugeLabelSize, gaugeSmallSize)
-    scale(density, density, pivot = Offset.Zero) {
-        engine.coins.forEach { drawCoin(it) }
-        engine.obstacles.forEach {
-            drawObstacleCar(
-                it.x,
-                it.y,
-                GameEngine.OBSTACLE_COLORS[it.colorIndex].toLong() and 0xFFFFFFFFL,
-                sprites
-            )
+    val beat = impact?.takeIf { it.isActive }
+    // Kamera sarsintisi TUM sahneyi kaydirir (yol, trafik, oyuncu, gosterge) —
+    // kamera sallaniyor, sahnedeki nesneler degil. HUD disarida kalir: Compose
+    // katmanindaki metinlerin sallanmasi "titreme" degil "arayuz bozuldu"
+    // okunur. Sarsinti sirasinda bir kenarda en cok [SHAKE_AMPLITUDE_DP] kadar
+    // (360 dp ekranda ~%1) bos serit acilir; alttaki Box zaten
+    // `KronColors.Background` ile dolu oldugu icin bu serit koyu kaliyor.
+    translate(
+        left = (beat?.shakeX ?: 0f) * density,
+        top = (beat?.shakeY ?: 0f) * density
+    ) {
+        scale(density, density, pivot = Offset.Zero) {
+            drawSideBackgrounds(engine)
+            drawTrack(engine)
         }
-        drawNightHeadlights(engine)
-        // Dokunulmazlik sirasinda arac yanip soner (Second Chance / reklamla devam).
-        val blink = engine.isInvulnerable() && ((engine.timeElapsed * 10f).toInt() % 2 == 0)
-        if (!blink) {
-            // Oyuncu araci garajda secilen sekil + boya ile cizilir. Trafik
-            // ayni cizici ile ama SABIT bir sekil/palet ile cizilir
-            // (drawObstacleCar) — tehdidin gorunumu her kosuda ayni olmali.
-            drawStyledCar(
-                x = engine.playerX,
-                y = engine.playerY,
-                style = engine.carStyle,
-                boosting = engine.boosting,
-                // Alevin titremesi kosunun zamanindan beslenir; ayri bir
-                // animasyon durumu tutmuyoruz (motor zaten her kare adiyor).
-                flamePhase = engine.timeElapsed,
-                sprites = sprites
-            )
+        drawSpeedometer(
+            engine,
+            density,
+            textMeasurer,
+            gaugeValueSize,
+            gaugeLabelSize,
+            gaugeSmallSize
+        )
+        scale(density, density, pivot = Offset.Zero) {
+            engine.coins.forEach { drawCoin(it) }
+            engine.obstacles.forEach {
+                drawObstacleCar(
+                    it.x,
+                    it.y,
+                    GameEngine.OBSTACLE_COLORS[it.colorIndex].toLong() and 0xFFFFFFFFL,
+                    sprites
+                )
+            }
+            drawNightHeadlights(engine)
+            // Dokunulmazlik sirasinda arac yanip soner (Second Chance / reklamla devam).
+            val blink = engine.isInvulnerable() && ((engine.timeElapsed * 10f).toInt() % 2 == 0)
+            if (!blink) {
+                // Oyuncu araci garajda secilen sekil + boya ile cizilir. Trafik
+                // ayni cizici ile ama SABIT bir sekil/palet ile cizilir
+                // (drawObstacleCar) — tehdidin gorunumu her kosuda ayni olmali.
+                drawStyledCar(
+                    x = engine.playerX,
+                    y = engine.playerY,
+                    style = engine.carStyle,
+                    boosting = engine.boosting,
+                    // Alevin titremesi kosunun zamanindan beslenir; ayri bir
+                    // animasyon durumu tutmuyoruz (motor zaten her kare adiyor).
+                    flamePhase = engine.timeElapsed,
+                    sprites = sprites
+                )
+            }
+            drawParticles(engine.particles)
+            // Carpisma kivilcimlari motorun partikulleriyle AYNI cizici ve ayni
+            // katmanda: darbe sahnenin uzerine yapistirilmis bir efekt degil,
+            // sahnenin kendi olayidir.
+            if (beat != null) drawParticles(beat.particles)
         }
-        drawParticles(engine)
     }
+    // Darbe flasi SARSINTININ DISINDA: tam ekrani kaplamasi gerekiyor, sahneyle
+    // birlikte kaysaydi bir kenarinda boyanmamis serit kalirdi.
+    if (beat != null) drawImpactFlash(beat)
 }
 
 // ---------------------------------------------------------------------------
@@ -747,8 +782,14 @@ private fun DrawScope.drawNightHeadlights(engine: GameEngine) {
     }
 }
 
-private fun DrawScope.drawParticles(engine: GameEngine) {
-    engine.particles.forEach { p ->
+/**
+ * Partikul cizimi. Eskiden dogrudan `engine`i aliyordu; artik LISTEYI aliyor,
+ * cunku ayni cizici iki kaynagi birden besliyor: motorun kendi partikulleri
+ * (coin, boost izi) ve [CrashImpact]'in kivilcimlari. Piksel cikti birebir
+ * ayni — degisen yalnizca listenin nereden geldigi.
+ */
+private fun DrawScope.drawParticles(particles: List<GameEngine.Particle>) {
+    particles.forEach { p ->
         val alpha = (p.life * 1.8f).coerceIn(0f, 1f)
         // Color bir `value class`; buradaki uretim ve `copy` yigin tahsisi
         // yapmiyor, bu yuzden dokunulmadi.
@@ -757,5 +798,304 @@ private fun DrawScope.drawParticles(engine: GameEngine) {
             topLeft = Offset(p.x, p.y),
             size = Size(p.size, p.size)
         )
+    }
+}
+
+private fun DrawScope.drawImpactFlash(impact: CrashImpact) {
+    val alpha = impact.flashAlpha
+    // Gorunmez bir tam ekran katmani cizmek bedava degil; esigin altinda hic
+    // cizmiyoruz.
+    if (alpha < FLASH_MIN_VISIBLE_ALPHA) return
+    // Konum/boyut verilmeyen `drawRect` tum cizim alanini kaplar.
+    drawRect(color = impact.flashColor.copy(alpha = alpha))
+}
+
+// ---------------------------------------------------------------------------
+// Carpisma vurusu ("crash beat")
+// ---------------------------------------------------------------------------
+//
+// SORUN (docs/REVIEW_GAMEPLAY.md §6.1, olculmus): carpismadan BIR SONRAKI
+// karede %70 opak siyah perde iniyordu. Simulasyon zaten donuyor ve sahne
+// cizilmeye devam ediyor — yani "neye carptim" bilgisi ekranda VAR, ama ayni
+// karede perdenin arkasina gomuluyor. Oyuncunun kendi hatasina bakabilecegi
+// tek bir karesi yoktu.
+//
+// COZUM ucu bir arada: perdeyi 300 ms geciktir + o surede kamerayi sars +
+// darbe flasi + temas noktasindan kivilcim. Ses BURADA YOK; carpma sesi
+// `audio/` tarafinda ayri yuruyor ve bagi disaridan kuruluyor.
+//
+// SABITLER NEDEN GameConfig'TE DEGIL: bunlarin hicbiri simulasyona girmiyor —
+// motor bu degerleri gormuyor, JVM testleri bunlara bakmiyor, degistirmek
+// hicbir dengeyi oynatmiyor. GameRenderer'in kendi gorsel sabitleriyle
+// (renkler, olculer, onbellekler) ayni kategoridedirler. `game/` paketine
+// tasinacaklarsa bunun sebebi "denge sabiti olmalari" degil, "tek yerde
+// dursunlar" tercihi olur.
+
+/**
+ * Kamera sarsintisinin suresi ve genligi.
+ *
+ * `game-depth-3d` skill'inin kurali: *"Kamera sarsintisi yalnizca carpmada.
+ * Süreklisi mide bulandirir. ≤ 200 ms, genlik ≤ 4 dp, azalan zarf."* Ucu de
+ * birebir uygulandi.
+ *
+ * Sure 300 ms'lik gecikmeden KISA olmasi bilincli: sarsinti 200 ms'de biter,
+ * geriye perde inmeden once ~100 ms'lik DURGUN bir kare kalir. Sarsinti
+ * "carptim" der, durgun kare "neye carptigimi gor" der. Ikisi ust uste
+ * binseydi oyuncu sallanan bir goruntuden bilgi okumaya calisirdi.
+ */
+private const val SHAKE_SEC = 0.20f
+private const val SHAKE_AMPLITUDE_DP = 4f
+
+/**
+ * Second Chance booster'i carpismayi yuttugunda kullanilan zayif surum: oyun
+ * DEVAM ediyor, yani bu kareler oynanis kareleri. Yarisi kadar genlik, daha
+ * kisa sure ve **flas yok** — kosu sirasinda tam ekran bir alfa katmani
+ * cizmek hedef cihazda (S8, ~40 FPS) odenmek istenmeyen bir maliyet.
+ */
+private const val SHAKE_SEC_SAVED = 0.12f
+private const val SHAKE_AMPLITUDE_DP_SAVED = 2.5f
+
+/**
+ * Sarsintinin iki ekseni FARKLI frekansta: esit olsalardi kayma tek bir
+ * kosegen boyunca gidip gelir ve "sarsinti" degil "kayma" okunurdu.
+ *
+ * Ikisi de 20 Hz'in ALTINDA secildi. Hedef cihaz ~40 FPS'te ornekleniyor;
+ * 20 Hz uzeri bir frekans orneklemeye takilip (aliasing) tahmin edilemez,
+ * cihazdan cihaza degisen yavas bir salinima donusurdu. 15 ve 11 Hz'de
+ * salinim kare basina belirgin sicrar (~2.7 ve ~3.6 ornek/cevrim), yani
+ * "sert" okunur — istenen tam olarak budur.
+ */
+private const val SHAKE_FREQ_X = 15f
+private const val SHAKE_FREQ_Y = 11f
+
+/**
+ * Baslangic fazlari SIFIR DEGIL: `sin(0) = 0` oldugu icin sifir fazda darbenin
+ * ILK karesi hic kaymadan cizilirdi — yani en sert olmasi gereken kare en
+ * sakini olurdu.
+ */
+private const val SHAKE_PHASE_X = 1.1f
+private const val SHAKE_PHASE_Y = 2.6f
+
+private const val TWO_PI = 6.2831855f
+
+/**
+ * Darbe flasi. Ilk karede beyaza yakin sicak bir vurgu ([FLASH_HOT]), sonra
+ * hizla kirmiziya donerek soner ([FLASH_COOL]) — "carpma" once isik, sonra
+ * hasar rengidir.
+ *
+ * Sonme karesel (`fade²`): dogrusal sonme 40 FPS'te bir "solma animasyonu"
+ * gibi okunuyordu, karesel sonme ilk iki karede biten bir VURUS gibi.
+ *
+ * 160 ms, perdenin 300 ms'inden once biter: flas ile perde ust uste binmez.
+ */
+private const val FLASH_SEC = 0.16f
+private const val FLASH_PEAK_ALPHA = 0.55f
+private const val FLASH_MIN_VISIBLE_ALPHA = 0.004f
+private val FLASH_HOT = Color(0xFFFFF1DC)
+private val FLASH_COOL = Color(0xFFD8281E)
+
+/**
+ * Kivilcim sayisi. Coin'in 12'sinden fazla, cunku carpisma kosunun en buyuk
+ * olayi ve sahne zaten donmus — burada cizim butcesi bosta. Second Chance
+ * surumu OYNANIS sirasinda ciziliyor, o yuzden coin'in altinda tutuldu.
+ */
+private const val CRASH_PARTICLE_COUNT = 22
+private const val CRASH_PARTICLE_COUNT_SAVED = 8
+
+/**
+ * Kivilcim hizi (dp / KARE — saniye degil).
+ *
+ * Birim bilerek boyle: `GameEngine.updateParticles` partikulleri
+ * `p.x += p.vx` diye ilerletiyor, yani kare basina. Ayni mekanizmayi yeniden
+ * kullanmak demek ayni birimi kullanmak demek. Sonucu: dusuk kare hizinda
+ * kivilcimlar saniyede daha az yol alir. Motorun coin patlamasi bu davranisi
+ * prototipten beri tasiyor; burada AYRISMAK, iki partikul kaynaginin ayni
+ * sahnede farkli fizikle hareket etmesi anlamina gelirdi.
+ */
+private const val CRASH_SPARK_SPEED_MIN = 1.2f
+private const val CRASH_SPARK_SPEED_MAX = 4.0f
+
+/**
+ * Kivilcimlara verilen yukari dogru sapma. Trafik YUKARIDAN geliyor, temas
+ * oyuncunun burnunda oluyor; simetrik bir patlama kivilcimlarin yarisini
+ * aracin altina savururdu.
+ */
+private const val CRASH_SPARK_LIFT = 1.0f
+
+private const val CRASH_SPARK_LIFE_MIN = 0.35f
+private const val CRASH_SPARK_LIFE_SPAN = 0.40f
+private const val CRASH_SPARK_SIZE_MIN = 2.5f
+private const val CRASH_SPARK_SIZE_SPAN = 3.5f
+
+/**
+ * Yercekimi — `GameEngine.updateParticles`taki `p.vy += 0.03f` ile AYNI deger.
+ * Kopya oldugu icin buraya yazildi: orasi degisirse burasi da degismeli,
+ * yoksa iki partikul kaynagi ayni sahnede farkli duser.
+ */
+private const val CRASH_SPARK_GRAVITY = 0.03f
+
+/**
+ * Kivilcim paleti: beyaz-sicak, kehribar, kirmizi. Coin patlamasi sari/turuncu
+ * — carpismanin kendi rengi olsun ki oyuncu goz ucuyla bile ikisini
+ * karistirmasin (`docs/REVIEW_GAMEPLAY.md` §6.2: *"Kirmizi/turuncu bir renk
+ * cifti eklenirse kimlik de kazanir"*).
+ */
+private val CRASH_SPARK_COLORS = intArrayOf(
+    0xFFFFF4D6.toInt(),
+    0xFFFF9A2E.toInt(),
+    0xFFE0362C.toInt()
+)
+
+/**
+ * Carpisma aninin GORSEL durumu: kamera sarsintisi + darbe flasi + kivilcim.
+ *
+ * **NEDEN COMPOSE DURUMU DEGIL.** Bu nesnenin alanlari 60 (cihazda ~40) Hz'de
+ * degisiyor. `mutableStateOf` ile sarilsalardi her kare `GameScreen`'in
+ * tamamini yeniden bestelerlerdi — projedeki en pahali hata, `GameScreen`
+ * icindeki `HudState` ve `boostReadyState` yorumlarinda uzun uzun anlatilan
+ * sey (HUD 20 Hz'de yaziliyordu ve tum ekrani yeniliyordu). Cizim tarafi zaten
+ * her kare gecersiz kilinmis durumda (`GameScreen`deki `frame` sayaci Canvas
+ * icinde okunuyor), yani bu nesnenin ekrani uyandirmasi GEREKMIYOR: yalnizca
+ * bir sonraki cizimde dogru degeri tasimasi yetiyor. Bu yuzden duz alanlar,
+ * tipki `GameEngine`in kendisi gibi.
+ *
+ * **Yasam dongusu.** `GameScreen` bunu `remember(engine)` ile tutar — yani her
+ * yeni kosu temiz bir nesneyle baslar. [step] her karede cagrilir ama [isActive]
+ * false iken ilk satirda doner: kosunun %99'unda maliyeti bir boolean okumasi.
+ */
+class CrashImpact {
+
+    /** Darbeden bu yana gecen sure (saniye). */
+    private var elapsed = 0f
+
+    /** Kosuyu bitiren carpisma mi, Second Chance ile yutulan mi. */
+    private var fatal = false
+
+    /**
+     * Motorun kendi partikulleriyle AYNI tip: ayni alanlar, ayni integrasyon
+     * ([step] icinde), ayni cizici ([drawParticles]). Sifirdan bir partikul
+     * sistemi yazilmadi — mekanizma zaten vardi, yalnizca ikinci bir kaynak
+     * kazandi.
+     *
+     * Liste MOTORUNKI DEGIL. `engine.particles`e yazmak simulasyon durumunu
+     * disaridan degistirmek olurdu; ayrica o liste `engine.step()` icinde
+     * yonetiliyor ve sahibi motordur.
+     */
+    private val sparks = ArrayList<GameEngine.Particle>(CRASH_PARTICLE_COUNT)
+
+    internal val particles: List<GameEngine.Particle> get() = sparks
+
+    /** Sahnenin bu kare kaydirilacagi mesafe, dp cinsinden. */
+    var shakeX = 0f
+        private set
+
+    var shakeY = 0f
+        private set
+
+    /** false iken ne [step] ne cizim is yapar. */
+    var isActive = false
+        private set
+
+    internal val flashAlpha: Float
+        get() {
+            // Second Chance surumunde flas YOK (bkz. [SHAKE_SEC_SAVED]).
+            if (!isActive || !fatal) return 0f
+            val t = elapsed / FLASH_SEC
+            if (t >= 1f) return 0f
+            val fade = 1f - t
+            return FLASH_PEAK_ALPHA * fade * fade
+        }
+
+    internal val flashColor: Color
+        get() = lerp(FLASH_HOT, FLASH_COOL, (elapsed / FLASH_SEC).coerceIn(0f, 1f))
+
+    /**
+     * Darbeyi baslatir.
+     *
+     * [x]/[y] TEMAS noktasidir, oyuncunun konumu degil — cagiran taraf bunu
+     * oyuncu ile carpilan aracin arasindan hesaplar. Kivilcimlarin oradan
+     * fiskirmasi oyuncunun gozunu "neye carptim" sorusunun cevabina goturur.
+     *
+     * [fatal] false iken (Second Chance) yalnizca zayif bir sarsinti ve az
+     * sayida kivilcim uretilir: oyun devam ediyor, ekrani bogmamali.
+     */
+    fun trigger(x: Float, y: Float, fatal: Boolean) {
+        this.fatal = fatal
+        elapsed = 0f
+        isActive = true
+        sparks.clear()
+        val count = if (fatal) CRASH_PARTICLE_COUNT else CRASH_PARTICLE_COUNT_SAVED
+        repeat(count) { index ->
+            // Aci esit dilimlere bolunup her dilime rastgelelik eklenir: saf
+            // rastgele acilarda kivilcimlar kumelenip patlama degil "sacilma"
+            // gorunumu veriyordu.
+            val angle = (index + Random.nextFloat()) / count * TWO_PI
+            val speed = CRASH_SPARK_SPEED_MIN +
+                Random.nextFloat() * (CRASH_SPARK_SPEED_MAX - CRASH_SPARK_SPEED_MIN)
+            sparks.add(
+                GameEngine.Particle(
+                    x = x,
+                    y = y,
+                    vx = cos(angle) * speed,
+                    vy = sin(angle) * speed - CRASH_SPARK_LIFT,
+                    life = CRASH_SPARK_LIFE_MIN + Random.nextFloat() * CRASH_SPARK_LIFE_SPAN,
+                    size = CRASH_SPARK_SIZE_MIN + Random.nextFloat() * CRASH_SPARK_SIZE_SPAN,
+                    color = CRASH_SPARK_COLORS[index % CRASH_SPARK_COLORS.size]
+                )
+            )
+        }
+        // Tetiklendigi KARE de tam genlikte cizilsin diye kayma hemen
+        // hesaplaniyor; ilk adimi bir sonraki kareye birakmak darbenin en sert
+        // karesini kaciriyordu.
+        updateShake()
+    }
+
+    /**
+     * Bir kare ilerletir. `GameEngine.step`ten ONCE cagrilmali — cagri sirasi
+     * `GameScreen`in dongusunde yazili.
+     */
+    fun step(dt: Float) {
+        if (!isActive) return
+        elapsed += dt
+
+        // Integrasyon `GameEngine.updateParticles` ile birebir ayni: ayni
+        // sirada, ayni birimlerle, ayni yercekimiyle.
+        var i = sparks.size - 1
+        while (i >= 0) {
+            val p = sparks[i]
+            p.x += p.vx
+            p.y += p.vy
+            p.life -= dt
+            p.vy += CRASH_SPARK_GRAVITY
+            if (p.life <= 0f) sparks.removeAt(i)
+            i--
+        }
+
+        updateShake()
+
+        // Sonme kosulu: hem zamanli efektler (sarsinti, flas) bitmis hem son
+        // kivilcim sonmus olmali. Ikisi FARKLI surelerde biter — sarsinti
+        // 200 ms, kivilcimlar 750 ms'ye kadar.
+        if (sparks.isEmpty() && elapsed >= SHAKE_SEC && elapsed >= FLASH_SEC) {
+            isActive = false
+            shakeX = 0f
+            shakeY = 0f
+        }
+    }
+
+    private fun updateShake() {
+        val duration = if (fatal) SHAKE_SEC else SHAKE_SEC_SAVED
+        if (elapsed >= duration) {
+            shakeX = 0f
+            shakeY = 0f
+            return
+        }
+        // Karesel zarf: genlik basta hizli, sonda yavas duser — carpma boyle
+        // hissedilir. Dogrusal zarf "sallanan kamera" gibi okunuyordu.
+        val fade = 1f - elapsed / duration
+        val amplitude =
+            (if (fatal) SHAKE_AMPLITUDE_DP else SHAKE_AMPLITUDE_DP_SAVED) * fade * fade
+        shakeX = amplitude * sin(elapsed * SHAKE_FREQ_X * TWO_PI + SHAKE_PHASE_X)
+        shakeY = amplitude * sin(elapsed * SHAKE_FREQ_Y * TWO_PI + SHAKE_PHASE_Y)
     }
 }

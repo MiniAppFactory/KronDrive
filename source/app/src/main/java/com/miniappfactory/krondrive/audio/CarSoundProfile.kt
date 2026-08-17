@@ -23,7 +23,9 @@ import com.miniappfactory.krondrive.game.CarCatalog
  * Motor dalgasi su sekilde uretilir (bkz. [EngineVoice]):
  *
  * ```
- * ham = sin(a) + h2·sin(2a) + h3·sin(3a) + h4·sin(4a) + h5·sin(5a) + grit·testere(a)
+ * h = 1 - karartma                     // bkz. [lowSpeedDarken]; hizla degisir
+ * ham = sin(a) + h2·sin(2a) + h3·h·sin(3a) + h4·h²·sin(4a) + h5·h³·sin(5a)
+ *       + grit·h²·testere(a)
  * ham *= waveNormalize          // tepe degeri 1'i asmasin
  * ham *= lope zarfi             // rolanti duzensizligi
  * cikis = alcakGecirenFiltre(ham, cutoff) * gain
@@ -49,8 +51,13 @@ import com.miniappfactory.krondrive.game.CarCatalog
  *    kirpma (clipping) riski profilden gelmez.
  *  - **[cutoffMul]** alcak geciren filtrenin acikligi: buyuk deger = daha
  *    parlak/tiz, kucuk deger = tok/bogus.
+ *  - **[lowSpeedDarken]** DUSUK hizda tiniyi karartma miktari — "once tok,
+ *    sonra tiz" ekseni. Ayrintili gerekce alanin kendi KDoc'unda.
  *  - **[nitroTone]** nitro efektinin islik ve gurultu suzulmesini olcekler;
  *    nitro da araca gore hafifce renklensin diye.
+ *
+ * Carpisma sesi ([EngineVoice.playCrash]) icin ayri bir alan YOK: rengi
+ * [crashTone] ile mevcut iki alandan turetiliyor (asagida).
  *
  * Korna alanlari ([hornBaseHz], [hornInterval], [hornBuzz], [hornSeconds],
  * [hornAttack]) ayni mantikla calisir: iki borulu (iki tonlu) bir korna,
@@ -90,6 +97,60 @@ data class CarSoundProfile(
     val lopeRate: Float = 0.50f,
     val gainMul: Float = 1.00f,
     val cutoffMul: Float = 1.00f,
+    /**
+     * **"Once tok, sonra tiz" ekseni** (2026-08-17). 0 = kapali, yani bu alan
+     * eklenmeden onceki davranisin BIREBIR aynisi. Buyudukce arac DUSUK hizda
+     * karartilir; [EngineVoice.DARKEN_PIVOT_SPEED] ve ustunde etkisi tam
+     * olarak sifirdir.
+     *
+     * ## Neden filtre tek basina yetmedi — OLCUM
+     *
+     * Proje sahibinin istegi: *"yaris motoru sesi daha tok/bogus/basli olmali
+     * baslangic hizlarinda, sonra tiz olmali."* Ilk akla gelen cozum
+     * [cutoffMul]'un hiza bagli terimini araca gore olceklemekti. Olculdu ve
+     * **calismiyor**; sebebi su:
+     *
+     * Motorun uretilen spektrumu besinci harmonikte biter. Yaris Sedan'i
+     * tepe hizda temel 158 Hz -> h5 ~790 Hz; F1'de h5 ~871 Hz. Filtre ise
+     * 700–3400 Hz bandinda geziniyor, yani **sinyalin bittigi yerin
+     * uzerinde**. Olculen bant enerjisi (steady-state, Hann pencereli guc
+     * spektrumu):
+     *
+     * | profil | hiz | >1.6 kHz enerji payi |
+     * |---|---|---|
+     * | F1 | 2.0 | %0.01 |
+     * | F1 | 7.6 | %0.01 |
+     * | Yaris Sedan | 2.0 | %0.03 |
+     * | Yaris Sedan | 7.6 | %0.04 |
+     *
+     * Filtreyi 2.5 kat egmek F1'in 200 Hz alti payini yalnizca %60.8'den
+     * %65.3'e tasidi — duyulur bir fark degil. Filtrenin uzerinde calisacagi
+     * malzeme yok.
+     *
+     * ## Bu yuzden karartma HARMONIKLERE uygulaniyor
+     *
+     * `h = 1 - karartma` olmak uzere h3 `h` ile, h4 `h²` ile, h5 `h³` ile ve
+     * [grit] `h²` ile carpiliyor. Temel ve [harmonic2] **hic dokunulmadan**
+     * kaliyor — kalinlik hissini tasiyan onlar, ustelik telefon
+     * hoparlorunun gercekten basabildigi bant da orasi (bkz. dosyanin
+     * basindaki 0.76 tabani notu).
+     *
+     * Filtre egimi yine de korundu ([EngineVoice.DARKEN_CUTOFF_GAIN]): ayni
+     * karartma degeri filtreyi de kapatiyor. Katkisi olculdu ve KUCUK, ama
+     * yonu dogru ve bedava.
+     *
+     * ## Neden yalnizca CIKARAN yonde calisir
+     *
+     * Agirliklarin hepsi <= 1. Yani ham dalga her zaman [waveNormalize]'in
+     * hesapladigi en kotu durumun ALTINDA kalir ve bu alan **hicbir degerde
+     * kirpmaya yol acamaz** — normalizasyon sozlesmesi tasarim geregi
+     * saglam. Bunun bedeli: "yuksek hizda daha parlak" bu alandan
+     * ELDE EDILEMEZ, cunku o yon eklemeyi gerektirirdi. Yuksek hiz
+     * parlakligi istendiginde profilin STATIK harmonikleri buyutulur
+     * (Yaris Sedan'da tam olarak bu yapildi) ve karartma dusuk hizi geri
+     * ceker.
+     */
+    val lowSpeedDarken: Float = 0.00f,
     val nitroTone: Float = 1.00f,
     val hornBaseHz: Float = 420f,
     val hornInterval: Float = 1.25f,
@@ -112,6 +173,28 @@ data class CarSoundProfile(
      * harmonikleri 0.5 + 0.33 + 0.25 = 1.08).
      */
     val hornNormalize: Float = 1f / (2f * (1f + hornBuzz * 1.08f))
+
+    /**
+     * Carpisma sesinin ([EngineVoice.playCrash]) perde/parlaklik carpani.
+     *
+     * **Yeni bir profil alani DEGIL, turetilmis deger** — bilerek. Carpisma
+     * bir efekt, bir enstruman degil; on bir aracin her birine elle
+     * ayarlanacak bir sayi daha eklemek envanteri buyutur ve karsiligi
+     * duyulmaz. Bunun yerine zaten var olan iki alandan turetiliyor:
+     * agir/kalin arac ([freqMul] dusuk) ve tok arac ([cutoffMul] dusuk)
+     * daha pes ve daha koyu carpar.
+     *
+     * Olculen sonuc (carpisma sesinin spektral agirlik merkezi): Tir
+     * 1894 Hz, Beety 2045 Hz, Motosiklet 2643 Hz, Super Araba 2711 Hz.
+     * Yani sahibin tarifi — *"tirin carpmasi motosikletinkinden tok
+     * olmali"* — 1.40 kat farkla karsilanmis oluyor.
+     *
+     * Araliğin ucu bilerek dar (0.70–1.35): carpisma araca gore
+     * RENKLENSIN, ama her arac icin ayri bir ses gibi duyulmasin.
+     */
+    val crashTone: Float =
+        ((0.55f + 0.45f * freqMul) * (0.80f + 0.20f * cutoffMul))
+            .coerceIn(0.70f, 1.35f)
 }
 
 /**
@@ -143,19 +226,49 @@ object CarSoundProfiles {
      */
     val DEFAULT: CarSoundProfile get() = BEETY
 
-    /** Yaris Sedan — tiz ve cevik: yuksek devir, parlak filtre, az duzensizlik. */
+    /**
+     * Yaris Sedan — tiz ve cevik: yuksek devir, parlak filtre, az duzensizlik.
+     *
+     * ## 2026-08-17 — "once tok, sonra tiz" ayari
+     *
+     * Sahibin istegi yaris motorlariniydi. Olcum, bu profilde asil sorunun
+     * dusuk hiz DEGIL yuksek hiz oldugunu gosterdi: tepe hizda (7.6)
+     * 300 Hz ustundeki enerji payi yalnizca **%21.7** idi — yani Yaris
+     * Sedan'i, katalogun **tirinden (%25.5) bile daha donuk** calisiyordu.
+     * Sebep filtre degil ([cutoffMul] 1.28 ile katalogun altincisi),
+     * harmoniklerin zayifligiydi: 0.42 / 0.30 / 0.14 / 0.07 ile seri
+     * besinci harmonikte pratik olarak bitiyordu.
+     *
+     * Bu yuzden ayar IKI ADIMDA yapildi:
+     *
+     *  1. **Ust harmonikler buyutuldu** (h3 0.30->0.44, h4 0.14->0.30,
+     *     h5 0.07->0.24, [grit] 0.10->0.16). Olculen sonuc: tepe hizda
+     *     >300 Hz payi %21.7 -> **%33.8**, spektral merkez 210 -> 270 Hz.
+     *     Artik gercekten tiz.
+     *  2. **[lowSpeedDarken] 0.45** o yeni parlakligi dusuk hizda geri
+     *     cekiyor: bolum baslangic hizinda (2.0) >300 Hz payi %1.7 ->
+     *     **%0.7**, spektral merkez 107 -> 101 Hz.
+     *
+     * Net etki, merkez orani (tepe hiz / baslangic hizi): **1.96 -> 2.67**.
+     *
+     * Taclar kontrol edildi: comb duz DEGIL (min/max 0.24/0.44 = 0.55;
+     * F1'in duz tarak imzasi >= 0.80 istiyor), tek (0.68) ve cift (0.72)
+     * harmonik toplamlari birbirinin iki katina ulasmiyor — yani ne Boga
+     * 67'nin V8 imzasi ne Beety'nin boksor imzasi aliniyor.
+     */
     private val RACE_SEDAN = CarSoundProfile(
         id = CarCatalog.SHAPE_RACE_SEDAN,
         freqMul = 1.16f,
         harmonic2 = 0.42f,
-        harmonic3 = 0.30f,
-        harmonic4 = 0.14f,
-        harmonic5 = 0.07f,
-        grit = 0.10f,
+        harmonic3 = 0.44f,
+        harmonic4 = 0.30f,
+        harmonic5 = 0.24f,
+        grit = 0.16f,
         noiseAmount = 0.02f,
         lopeDepth = 0.08f,
         gainMul = 0.96f,
         cutoffMul = 1.28f,
+        lowSpeedDarken = 0.45f,
         nitroTone = 1.12f,
         hornBaseHz = 520f,
         hornInterval = 1.26f,
@@ -438,6 +551,11 @@ object CarSoundProfiles {
      * F1 tizlik tacini almadan da Super Araba'dan parlak duyulabiliyor;
      * tac bir muhasebe kaydi olarak sahibinde kaliyor.
      *
+     * 2026-08-17 — bu bir CIKARIMDI, artik OLCUM: tepe hizda spektral
+     * agirlik merkezi F1 402 Hz / Super Araba 242 Hz, 300 Hz ustundeki
+     * enerji payi F1 %55.9 / Super Araba %19.8. Katalogun en parlagi
+     * gercekten F1 ve tizlik taci kagit uzerinde Super Araba'da.
+     *
      * Ikinci eksen **duzensizligin yoklugu**: [lopeDepth] 0.02, [grit] 0.04
      * ve [noiseAmount] 0.01 ile ucu de katalogun EN DUSUGU. Bu taclar bostu
      * (en derin lope Boga 67'nin, ama en SIGI kimsenin degildi) ve olcumle
@@ -466,6 +584,14 @@ object CarSoundProfiles {
         lopeRate = 0.90f,
         gainMul = 1.02f,
         cutoffMul = 1.46f,
+        // 2026-08-17 — "once tok, sonra tiz". F1 zaten katalogun acik ara en
+        // parlagi (tepe hizda >300 Hz payi %55.9; ikinci sirada Boga 67
+        // %46.7), yani buyutulecek bir ust harmonik YOK. Ayar tamamen dusuk
+        // hizi karartmakla yapildi: baslangic hizinda (2.0) >300 Hz payi
+        // %24.6 -> %2.9, spektral merkez 205 -> 132 Hz. Tepe hiz olcumu
+        // TAMAMEN degismedi (402 Hz / %55.9) — karartma tasarim geregi
+        // pivot hizinin ustunde hicbir sey yapmaz. Merkez orani 1.96 -> 3.05.
+        lowSpeedDarken = 0.40f,
         nitroTone = 1.35f,
         hornBaseHz = 780f,
         hornInterval = 1.33f,

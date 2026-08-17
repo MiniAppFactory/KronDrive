@@ -1561,4 +1561,103 @@ class GameEngineTest {
         }
         assertEquals(run(), run())
     }
+
+    // -----------------------------------------------------------------
+    // Hiz rampasi (2026-08-16)
+    // -----------------------------------------------------------------
+
+    /**
+     * [LevelDef.speedRampScale] carpani `min(hizTavani, skor/600)` ifadesinin
+     * SONUCUNA uygulanir — yani tavani SABITLEMEZ, ORANTILI KUCULTUR.
+     *
+     * Bu test o secimi kilitliyor ve sebebi su: reddedilen alternatif
+     * (yalnizca rampayi yavaslatip tavani birakmak) kagit uzerinde ayni
+     * seye benziyor ama tam ters sonuc veriyor — tavan degismedigi icin
+     * kosu sonunda tepki butcesi hic iyilesmiyor ve tam yukseltmeli
+     * oyuncuda HICBIR SEY degismiyor (docs/REVIEW_GAMEPLAY.md).
+     *
+     * Test kirilirsa yapilacak sey esigi gevsetmek DEGIL, hangi terimin
+     * carpildigina bakmaktir.
+     */
+    @Test
+    fun `hiz rampasi tavani orantili kuculturur, sabitlemez`() {
+        val sigma = 0.65f
+        // Yildiz veren bolumde TAM OLARAK uc hedef sart (LevelDef init'i
+        // zorluyor); bu test hedeflerle ilgilenmiyor, ucu de kolay.
+        fun bolum(ramp: Float) = LevelDef(
+            id = 99,
+            goal = LevelGoal.SurviveTime(120),
+            stars = listOf(
+                Objective.CompleteRun,
+                Objective.PassVehicles(1),
+                Objective.CoinsAtLeast(1)
+            ),
+            speedRampScale = ramp
+        )
+
+        // Ayni tohum, ayni sure: tek degisken rampa.
+        fun hiz(ramp: Float, speedLevel: Int): Float {
+            val e = engine(
+                level = bolum(ramp),
+                upgrades = UpgradeLevels(speed = speedLevel)
+            )
+            e.startRun()
+            e.advance(90)
+            return e.speed
+        }
+
+        val tamRampa = hiz(1f, 1)
+        val yavasRampa = hiz(sigma, 1)
+        assertTrue(
+            "rampa carpani hizi dusurmeli ($tamRampa -> $yavasRampa)",
+            yavasRampa < tamRampa
+        )
+
+        // ASIL IDDIA: yukseltmenin degeri ORANTILI korunuyor. Tavan
+        // sabitlenseydi yukseltmeli ve yukseltmesiz oyuncu ayni hiza
+        // yapisirdi ve asagidaki fark SIFIRA inerdi.
+        val yukseltmesizFark = hiz(1f, 1) - hiz(sigma, 1)
+        val yukseltmeliFark = hiz(1f, 8) - hiz(sigma, 8)
+        assertTrue(
+            "yukseltmeli oyuncuda rampanin etkisi kaybolmus — carpan yanlis " +
+                "terime uygulanmis olabilir (yukseltmesiz $yukseltmesizFark, " +
+                "yukseltmeli $yukseltmeliFark)",
+            yukseltmeliFark > yukseltmesizFark * 0.9f
+        )
+    }
+
+    /**
+     * Rampa YALNIZCA ogrenme bolumlerinde. 8. bolumden sonrasi tam hizda
+     * kalir; aksi halde butun kariyer yavaslatilmis olurdu ve bu bir denge
+     * degisikligi degil, oyunun karakterinin degismesi olurdu.
+     */
+    @Test
+    fun `hiz rampasi yalnizca ilk yedi bolumde`() {
+        LevelCatalog.levels.forEach { level ->
+            if (level.id <= 7) {
+                assertTrue(
+                    "bolum ${level.id}: ogrenme bolumu tam rampada " +
+                        "(${level.speedRampScale}) — kolaylastirma uygulanmamis",
+                    level.speedRampScale < 1f
+                )
+            } else {
+                assertEquals(
+                    "bolum ${level.id}: ogrenme bolumu degil, rampa 1.0 olmali",
+                    1f,
+                    level.speedRampScale,
+                    0f
+                )
+            }
+        }
+        // Rampa MONOTON artmali: bolum ilerledikce oyun hizlanmali.
+        val ogrenme = LevelCatalog.levels.filter { it.id <= 7 }
+        ogrenme.zipWithNext().forEach { (a, b) ->
+            assertTrue(
+                "rampa geriye gitti: bolum ${a.id} (${a.speedRampScale}) -> " +
+                    "${b.id} (${b.speedRampScale})",
+                b.speedRampScale > a.speedRampScale
+            )
+        }
+    }
+
 }

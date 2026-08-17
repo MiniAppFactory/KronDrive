@@ -430,13 +430,20 @@ class GameEngine(
         checkGoalReached()
     }
 
+    /** Bolumun hiz rampasi carpani; bolum yoksa (sonsuz mod) tam rampa. */
+    private val speedRamp: Float = level?.speedRampScale ?: 1f
+
     private fun updateSpeed(dt: Float) {
         val scoreCap = UpgradeCatalog.scoreSpeedCap(upgrades.speed, car)
         // Kilit acikken skordan gelen hizlanma yok sayilir (bkz. speedLocked).
         var target = if (speedLocked) {
             lockedSpeed
         } else {
-            baseSpeed + min(scoreCap, score / GameConfig.SCORE_SPEED_DIVISOR)
+            // Carpan min()'in SONUCUNA uygulanir — tavani sabitlemez,
+            // ORANTILI kucultur. Gerekce ve reddedilen alternatif:
+            // [LevelDef.speedRampScale]. Bunu "yalnizca rampaya uygula"
+            // diye degistirme; olculup reddedildi.
+            baseSpeed + speedRamp * min(scoreCap, score / GameConfig.SCORE_SPEED_DIVISOR)
         }
 
         // Parmak kalkinca kilit acilir.

@@ -95,8 +95,10 @@ import com.miniappfactory.krondrive.ui.common.SecondaryButton
 import com.miniappfactory.krondrive.ui.common.ObjectiveDots
 import com.miniappfactory.krondrive.ui.theme.KronColors
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlinx.coroutines.delay
 
 /** HUD'daki tek bir hedef satiri: "GEÇİŞ 4/10" + durumu. */
 @Immutable
@@ -208,6 +210,28 @@ fun GameScreen(
     var bonusCoins by remember(engine) { mutableIntStateOf(0) }
     var bonusLimitReached by remember(engine) { mutableStateOf(false) }
 
+    /**
+     * Carpisma vurusunun gorsel durumu (sarsinti, flas, kivilcim).
+     *
+     * `by` YOK ve `mutableStateOf` YOK — bilerek. [CrashImpact] duz alanlar
+     * tutar ve her karede degisir; snapshot durumu olsaydi darbe boyunca
+     * GameScreen'in tamami 40 Hz'de yeniden bestelenirdi. Cizim zaten her kare
+     * `frame` uzerinden gecersiz kiliniyor, yani bu nesnenin ekrani uyandirmasi
+     * gerekmiyor. Ayrintili gerekce sinifin KDoc'unda.
+     */
+    val impact = remember(engine) { CrashImpact() }
+
+    /**
+     * Olumcul carpisma sayaci — perdenin GECIKMELI inmesini tetikler.
+     *
+     * Neden sayac ve neden bir boolean degil: oyuncu reklamla devam edip
+     * ([RewardedAdManager] -> `engine.revive()`) tekrar carpabilir. Boolean
+     * olsaydi ikinci carpismada deger zaten `true` olur, [LaunchedEffect]
+     * yeniden baslamaz ve **perde bir daha hic inmezdi**. Sayac her carpismada
+     * yeni bir anahtar uretir.
+     */
+    var crashBeat by remember(engine) { mutableIntStateOf(0) }
+
     val level = engine.level
 
     fun publishResult(runResult: RunResult) {
@@ -262,6 +286,16 @@ fun GameScreen(
                 val dt = if (lastFrameNanos == 0L) 0f else (now - lastFrameNanos) / 1_000_000_000f
                 lastFrameNanos = now
 
+                // Carpisma vurusu motordan ONCE ilerletilir. Sirasi onemli:
+                // asagida bir Crash olayi gelirse `trigger` sayaci sifirlar ve
+                // BU kare tam genlikte cizilir. Once adim atsaydik darbenin en
+                // sert karesi bir kare gec gelirdi (~25 ms, cihazda gorulur).
+                //
+                // Sahne carpisma sirasinda donuyor (`step` icinde CRASHED ->
+                // Unit) ama bu dongu durmuyor: `frame++` yuruyor, Canvas her
+                // kare yeniden ciziliyor. Vurusun oynayabilmesinin sebebi bu.
+                impact.step(dt)
+
                 val events = engine.step(dt)
                 for (event in events) {
                     when (event) {
@@ -277,7 +311,58 @@ fun GameScreen(
                         is GameEvent.BoostStarted -> EngineSoundManager.playNitro()
 
                         is GameEvent.Crash -> {
-                            if (!event.saved) showCrashDialog = true
+                            // TEMAS NOKTASI. Kivilcimlar oyuncunun uzerinden
+                            // degil, iki aracin ARASINDAN fiskirmali — oyuncu
+                            // "neye carptim" sorusunun cevabina baksin diye.
+                            //
+                            // Carpilan aracin kimligi olayda tasinmiyor, ama
+                            // olumcul carpismada o arac listede DURUYOR
+                            // (`onCrash` silmiyor) ve carpisma anindaki en
+                            // yakin arac tanim geregi odur. Second Chance
+                            // durumunda motor araci olaydan ONCE siliyor, o
+                            // yuzden orada oyuncunun kendi konumu kullanilir.
+                            val hit = if (event.saved) {
+                                null
+                            } else {
+                                engine.obstacles.minByOrNull {
+                                    abs(it.x - engine.playerX) + abs(it.y - engine.playerY)
+                                }
+                            }
+                            impact.trigger(
+                                x = if (hit == null) engine.playerX else (engine.playerX + hit.x) / 2f,
+                                y = if (hit == null) engine.playerY else (engine.playerY + hit.y) / 2f,
+                                fatal = !event.saved
+                            )
+                            // Carpisma titresimi (docs/REVIEW_GAMEPLAY.md §4:
+                            // *"titresim butcesi en anlamsiz olaya
+                            // harcanmis"* — bugune kadar yalnizca serit
+                            // degistirmede ve kornada vardi).
+                            //
+                            // [HapticFeedbackType.LongPress], Compose 1.7'de
+                            // bulunan iki turden AGIR olani; digeri
+                            // (`TextHandleMove`) zaten serit degistirmenin
+                            // hafif tiki ve carpisma ondan ayirt edilmeli.
+                            //
+                            // NOT: projede titresim TERCIHI YOK — ayarlarda
+                            // yalnizca ses anahtari var (SettingsScreen.kt).
+                            // Mevcut titresim cagrilari da kosulsuz; bu satir
+                            // o desene uyuyor. Tercih eklenecekse `data/` ve
+                            // ayar ekrani gerekir, tek yer burasi degil.
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            // CARPISMA SESI — flasin tepe yaptigi KARE.
+                            //
+                            // Ayni karede motor sesi de susuyor (faz artik
+                            // RUNNING degil, asagidaki `EngineSoundManager.idle()`
+                            // devreye giriyor). Ikisi yarismiyor, tam tersi:
+                            // motorun kesilmesi darbenin altini bosaltiyor ve
+                            // vurus daha sert duyuluyor.
+                            //
+                            // Ses ayari kapaliysa yoneticinin kendisi zaten
+                            // sessiz (setEnabled), burada ayrica kontrol yok.
+                            EngineSoundManager.playCrash()
+                            // Perde artik BU KAREDE inmiyor; gecikmeyi asagidaki
+                            // LaunchedEffect yurutuyor.
+                            if (!event.saved) crashBeat++
                         }
 
                         is GameEvent.Finished -> publishResult(event.result)
@@ -313,6 +398,40 @@ fun GameScreen(
                 frame++
             }
         }
+    }
+
+    /**
+     * CARPISMA VURUSU — perdenin gecikmesi.
+     *
+     * Eskiden `showCrashDialog` carpismanin oldugu `withFrameNanos` geri
+     * cagrisinda yaziliyordu, yani oyuncu carpistigi kareden BIR SONRAKI
+     * karede %70 opak siyah bir perde goruyordu (`OverlayScrim`). Neden
+     * carptigini gorebilecegi tek bir kare yoktu — olculdu ve
+     * `docs/REVIEW_GAMEPLAY.md` §6.1'de yazili.
+     *
+     * Simdi arada [CRASH_DIALOG_DELAY_MS] var. Bu sure boyunca:
+     *  - motor DURMUS durumda (`RunPhase.CRASHED`), yani oyuncu ceza almiyor,
+     *  - sahne cizilmeye devam ediyor ve carpilan arac hala orada,
+     *  - kamera sarsiliyor, flas soniyor, kivilcimlar dagiliyor.
+     *
+     * Diyalogun KENDISI ve `revive` akisi hic degismedi: gecikme onlarin
+     * onune giriyor, yerine gecmiyor.
+     *
+     * Ikinci titresim ([CRASH_IMPACT_HAPTIC_GAP_MS]) darbeye "curt" verir:
+     * tek bir uzun titresim "bildirim" gibi okunuyor, iki kisa vurus "carptim"
+     * gibi. **Cihazda denenmedi** — S8'de iki `LongPress` bu araliktan sonra
+     * tek bir titresime birlesirse zarari yok, sadece tek vurus hissedilir.
+     *
+     * Iptal: [LaunchedEffect] besteleme kapsamiyla birlikte iptal olur (ekran
+     * kapanirsa `showCrashDialog` hic yazilmaz), anahtar [crashBeat] oldugu
+     * icin ikinci bir carpisma sayaci ilerletip efekti bastan baslatir.
+     */
+    LaunchedEffect(crashBeat) {
+        if (crashBeat == 0) return@LaunchedEffect
+        delay(CRASH_IMPACT_HAPTIC_GAP_MS)
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        delay(CRASH_DIALOG_DELAY_MS - CRASH_IMPACT_HAPTIC_GAP_MS)
+        showCrashDialog = true
     }
 
     // Arac sprite'lari: yukleme Composable bir is, cizim ise her karede yurur.
@@ -407,7 +526,10 @@ fun GameScreen(
                 gaugeValueSize = 24.sp,
                 gaugeLabelSize = 8.sp,
                 gaugeSmallSize = 9.sp,
-                sprites = carSprites
+                sprites = carSprites,
+                // Sonmusken hicbir ek is yapmaz; kosu sirasindaki maliyeti
+                // tek bir boolean okumasi.
+                impact = impact
             )
         }
 
@@ -717,6 +839,26 @@ private fun ObjectiveRow(row: HudObjective, style: TextStyle) {
 
 /** Tamamlanan hedefin rengi — yolun her temasinda okunacak kadar parlak. */
 private val OBJECTIVE_DONE = Color(0xFF3DDC84)
+
+/**
+ * Carpisma ile "ÇARPTIN!" perdesinin inmesi arasindaki sure.
+ *
+ * 300 ms nereden: hedef cihazda (~40 FPS) **12 kare**, yani goz bir sahneyi
+ * okumaya yetecek kadar. Daha kisasi (150 ms) tek goz kirpmasinin altinda
+ * kalir ve bugunku "hicbir sey gormedim" sikayetini cozmez; daha uzunu
+ * (500 ms+) oyuncunun devam etmek istedigi anda oyunun takildigi hissini
+ * verir — kaybettigini zaten anlamis oyuncuyu bekletmek ceza gibi okunur.
+ *
+ * Bu sure icinde motor DURMUS durumdadir ([RunPhase.CRASHED]), yani oyuncu
+ * hicbir sey kaybetmez; yalnizca perde bekler.
+ *
+ * Sarsinti (200 ms) ve flas (160 ms) bu surenin ICINDE biter — geriye perde
+ * inmeden once sakin bir kare kalir. Bkz. `GameRenderer.SHAKE_SEC`.
+ */
+private const val CRASH_DIALOG_DELAY_MS = 300L
+
+/** Darbenin ikinci titresimi (bkz. carpisma [LaunchedEffect]'i). */
+private const val CRASH_IMPACT_HAPTIC_GAP_MS = 80L
 
 private fun formatTime(totalSeconds: Int): String {
     val safe = totalSeconds.coerceAtLeast(0)

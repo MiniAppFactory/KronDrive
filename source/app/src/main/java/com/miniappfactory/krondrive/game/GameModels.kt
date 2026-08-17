@@ -214,6 +214,34 @@ data class LevelDef(
      */
     val startSpeedKmh: Int? = null,
     /**
+     * Bu bolumde SKORDAN gelen hizlanmanin carpani. 1.0 = tam rampa (varsayilan,
+     * 8. bolumden sonrasi). Kucuk deger = bolum daha yavas hizlanir.
+     *
+     * ⚠ HANGI TERIME UYGULANDIGI ONEMLI — yanlis secim fikri tersine cevirir.
+     * Formul su ([GameEngine.updateSpeed]):
+     *
+     *     hedef = tabanHiz + speedRampScale * min(hizTavani, skor / 600)
+     *
+     * Yani carpan `min(...)`in SONUCUNA uygulaniyor. Bunun anlami: tavan
+     * SABITLENMIYOR, ORANTILI KUCULUYOR — SPEED yukseltmesinin degerinin
+     * %65'i korunuyor. Alternatif (yalnizca rampayi yavaslatmak, tavani
+     * birakmak) OLCULDU ve REDDEDILDI: tavan degismedigi icin kosu sonunda
+     * tepki butcesi hic iyilesmiyor ve tam yukseltmeli oyuncuda hicbir sey
+     * degismiyordu (docs/REVIEW_GAMEPLAY.md).
+     *
+     * NEDEN VAR: sahibi (2026-08-16) *"4. levelde 30. saniyede max hiza
+     * standart araba ile ulasmak dogru degil"* dedi. Olcum onu dogruladi ve
+     * daha kotusunu buldu: bolum 4 tavana ~23 saniyede ulasiyor ve suresinin
+     * %42'sini tavanda geciriyor.
+     *
+     * NEDEN GLOBAL IVME DEGIL: sahibinin ilk sezgisi `ACCEL_RATE_BASE`'i
+     * dusurmekti. Olcum bunun KENDI fikrini bozdugunu gosterdi — bir boost
+     * darbesinden alinan etki %94'ten %81'e iner, yani "boost hizin ana
+     * araci olsun" istegi zayiflar. Bolum bazli carpan boost ekonomisine
+     * hic dokunmuyor.
+     */
+    val speedRampScale: Float = 1f,
+    /**
      * Bu bolumdeki trafik yogunlugu carpani. 1.0 = tam yogunluk
      * ([GameConfig.OBSTACLE_SPAWN_INTERVAL_SEC]); 0.5 = birim zamanda yarisi
      * kadar arac. Dogma araligi bu carpana BOLUNUR.

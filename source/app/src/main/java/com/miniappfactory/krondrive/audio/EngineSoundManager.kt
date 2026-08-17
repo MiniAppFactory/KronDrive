@@ -6,8 +6,9 @@ import android.media.AudioTrack
 import kotlin.concurrent.Volatile
 
 /**
- * Motor, nitro ve korna sesi — calisma aninda sentezlenir, projede tek bayt
- * ses dosyasi yoktur (bkz. `PROVENANCE.md`, "Ses varliklari").
+ * Motor, nitro, korna ve carpisma sesi — calisma aninda sentezlenir, projede
+ * tek bayt ses dosyasi yoktur (bkz. `PROVENANCE.md`, "Ses varliklari").
+ * Carpisma da bu kuralin icinde: APK'ya 0 bayt ekler.
  *
  * Bu sinif **yalnizca Android koprusu**: bir `AudioTrack` acar, ayri bir
  * thread'de [EngineVoice]'u dondurur ve ciktiyi 16-bit PCM'e cevirir.
@@ -108,6 +109,20 @@ object EngineSoundManager {
      * dolmadan cagrilirsa `false` doner (bkz. [EngineVoice.playHorn]).
      */
     fun playHorn(): Boolean = voice.playHorn()
+
+    /**
+     * Carpisma sesi — oyuncunun oldugu an calinir.
+     *
+     * ⚠ **Bu cagri su an hicbir yerden yapilmiyor.** API bilerek hazir
+     * birakildi; oyun ekranina baglama isi ayri bir degisiklik
+     * (`ui/game/GameScreen.kt` bu degisiklikte ELLENMEDI).
+     *
+     * Bagladiktan sonra dikkat edilecek tek sey sudur: [stop] cagrildiginda
+     * ses thread'i biter, yani carpismadan HEMEN sonra ses motoru
+     * durdurulursa efekt duyulmadan kesilir. Sesin tamamlanmasi icin
+     * [EngineVoice.CRASH_DURATION] kadar (0.46 sn) beklemek gerekir.
+     */
+    fun playCrash() = voice.playCrash()
 
     private fun renderLoop(audioTrack: AudioTrack) {
         val samples = FloatArray(BUFFER_FRAMES)

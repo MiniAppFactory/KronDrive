@@ -63,6 +63,7 @@ object LevelCatalog {
         LevelDef(
             id = 1,
             goal = LevelGoal.SurviveTime(25),
+            speedRampScale = 0.40f,
             startSpeedKmh = 60,
             trafficDensity = 0.30f,
             stars = listOf(
@@ -76,6 +77,7 @@ object LevelCatalog {
         LevelDef(
             id = 2,
             goal = LevelGoal.SurviveTime(30),
+            speedRampScale = 0.48f,
             startSpeedKmh = 65,
             trafficDensity = 0.55f,
             stars = listOf(
@@ -90,6 +92,7 @@ object LevelCatalog {
         LevelDef(
             id = 3,
             goal = LevelGoal.SurviveTime(35),
+            speedRampScale = 0.56f,
             startSpeedKmh = 70,
             trafficDensity = 0.70f,
             stars = listOf(
@@ -107,6 +110,7 @@ object LevelCatalog {
         LevelDef(
             id = 4,
             goal = LevelGoal.SurviveTime(40),
+            speedRampScale = 0.65f,
             startSpeedKmh = 75,
             trafficDensity = 0.85f,
             stars = listOf(
@@ -120,6 +124,7 @@ object LevelCatalog {
         LevelDef(
             id = 5,
             goal = LevelGoal.SurviveTime(45),
+            speedRampScale = 0.74f,
             trafficDensity = 1f,
             stars = listOf(
                 Objective.CompleteRun,
@@ -133,6 +138,7 @@ object LevelCatalog {
         LevelDef(
             id = 6,
             goal = LevelGoal.SurviveTime(45),
+            speedRampScale = 0.82f,
             startSpeedKmh = 75,
             trafficDensity = 0.85f,
             // 2026-08-16: ikinci hedef PerfectDodges(4) idi, yani bolumun
@@ -152,6 +158,7 @@ object LevelCatalog {
         LevelDef(
             id = 7,
             goal = LevelGoal.SurviveTime(50),
+            speedRampScale = 0.91f,
             // Bolum 6 ile ayni kusur ve ayni duzeltme (2026-08-16):
             // PerfectDodges(6) ikinci siradaydi ve combo ile birlikte iki
             // beceri hedefi yapiyordu. Olcumde temkinli oyun 1 yildiz

@@ -311,6 +311,97 @@ class CarSoundProfilesTest {
             digerleri.filter { it.id != boga.id }.all { it.hornBaseHz > tir.hornBaseHz })
     }
 
+    /**
+     * Sahibin istegi (2026-08-17): *"yaris motoru sesi daha tok/bogus/basli
+     * olmali baslangic hizlarinda, sonra tiz olmali."* Bu iki arac o istegin
+     * hedefi.
+     *
+     * Test, karartmanin var oldugunu ve YARIS araclarina ozel kaldigini
+     * kilitler: baska bir arac bu eksene girerse bilincli bir karar olmali,
+     * sessizce degil.
+     */
+    @Test
+    fun `yaris araclari once tok sonra tiz ekseninde ayarli`() {
+        val f1 = CarSoundProfiles.forShape(CarCatalog.SHAPE_F1)
+        val sedan = CarSoundProfiles.forShape(CarCatalog.SHAPE_RACE_SEDAN)
+
+        assertTrue("F1 dusuk hizda karartilmali", f1.lowSpeedDarken > 0f)
+        assertTrue("Yaris Sedan dusuk hizda karartilmali", sedan.lowSpeedDarken > 0f)
+
+        val karartanlar = CarSoundProfiles.all.filter { it.lowSpeedDarken > 0f }
+        assertEquals(
+            "karartma su an yalnizca iki yaris aracinda — baskasi eklendiyse " +
+                "bu testi ve gerekcesini birlikte guncelle",
+            setOf(CarCatalog.SHAPE_F1, CarCatalog.SHAPE_RACE_SEDAN),
+            karartanlar.map { it.id }.toSet()
+        )
+    }
+
+    /**
+     * Yaris Sedan'in ust harmonikleri 2026-08-17'de buyutuldu, cunku olcum
+     * onun tepe hizda katalogun TIRINDAN bile donuk oldugunu gosterdi
+     * (300 Hz ustu enerji payi %21.7'ye karsi %25.5). Buyutme sirasinda
+     * baskasinin taci alinmadi — test bunu koruyor.
+     */
+    @Test
+    fun `Yaris Sedan zenginlestirildi ama kimseden tac almaz`() {
+        val sedan = CarSoundProfiles.forShape(CarCatalog.SHAPE_RACE_SEDAN)
+        val f1 = CarSoundProfiles.forShape(CarCatalog.SHAPE_F1)
+        val superAraba = CarSoundProfiles.forShape(CarCatalog.SHAPE_SUPERCAR)
+
+        // Ust harmonikler gercekten guclu — "tiz"ligi tasiyan bu.
+        assertTrue(
+            "yaris sedaninin ust harmonikleri zayif kalmamali",
+            sedan.harmonic3 + sedan.harmonic4 + sedan.harmonic5 >= 0.90f
+        )
+        // F1'in DUZ TARAK imzasi exclusive: sedanin combu belirgin inmeli.
+        val h = listOf(sedan.harmonic2, sedan.harmonic3, sedan.harmonic4, sedan.harmonic5)
+        assertTrue(
+            "F1'in duz tarak imzasi (min/max >= 0.80) exclusive kalmali, olculen $h",
+            h.min() < 0.80f * h.max()
+        )
+        // Ne Boga 67'nin V8 imzasi ne Beety'nin boksor imzasi.
+        assertTrue(
+            "Boga 67'nin V8 imzasi exclusive kalmali",
+            sedan.harmonic3 + sedan.harmonic5 <= 2f * (sedan.harmonic2 + sedan.harmonic4)
+        )
+        assertTrue(
+            "Beety'nin boksor imzasi exclusive kalmali",
+            sedan.harmonic2 + sedan.harmonic4 <= 2f * (sedan.harmonic3 + sedan.harmonic5)
+        )
+        // F1 en az purüzlu kalmali (kendi taci), tizlik taci Super Araba'da.
+        assertTrue("en az metalik puruz F1'de kalmali", sedan.grit > f1.grit)
+        assertTrue("Super Araba daha tiz kalmali", sedan.freqMul < superAraba.freqMul)
+    }
+
+    /**
+     * Carpisma rengi ([CarSoundProfile.crashTone]) turetilmis bir deger, elle
+     * yazilmiyor — ama sahibin tarifini karsilamasi gerekiyor:
+     * *"tirin carpmasi motosikletinkinden tok olmali"*.
+     */
+    @Test
+    fun `carpisma rengi agir araclarda daha pes`() {
+        val tir = CarSoundProfiles.forShape(CarCatalog.SHAPE_TIR)
+        val moto = CarSoundProfiles.forShape(CarCatalog.SHAPE_MOTOSIKLET)
+
+        assertTrue(
+            "tirin carpmasi motosikletinkinden tok olmali " +
+                "(${tir.crashTone} vs ${moto.crashTone})",
+            tir.crashTone < moto.crashTone
+        )
+        // En tok carpma tirda: en dusuk freqMul+cutoffMul birlesimi onda.
+        assertTrue(
+            "en tok carpisma tirda olmali",
+            CarSoundProfiles.all.filter { it.id != tir.id }.all { it.crashTone > tir.crashTone }
+        )
+        // Aralik dar tutulmali: carpisma RENKLENSIN, ayri bir ses olmasin.
+        val tonlar = CarSoundProfiles.all.map { it.crashTone }
+        assertTrue("carpisma rengi araligi cok genis (${tonlar.min()}..${tonlar.max()})",
+            tonlar.max() / tonlar.min() <= 1.8f)
+        assertTrue("carpisma rengi sinirlarin disina tasti",
+            tonlar.all { it in 0.70f..1.35f })
+    }
+
     @Test
     fun `normalizasyon ham dalgayi bir birimin altinda tutar`() {
         CarSoundProfiles.all.forEach { p ->
