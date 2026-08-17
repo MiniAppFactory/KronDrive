@@ -108,6 +108,32 @@ class CarSoundProfilesTest {
             CarSoundProfiles.all.filter { it.id != super_.id }.all { it.cutoffMul < super_.cutoffMul })
     }
 
+    /**
+     * Beety'nin kimligi Boga 67'nin AYNASI: boksor dortlu CIFT sayili
+     * harmonikleri one cikarir, V8 tek sayililari.
+     *
+     * Bu test ayrica bir kurali korumak icin var: yeni bir govde, var olan bir
+     * govdenin tek cumlelik tarifini elinden alarak kendine kimlik kuramaz.
+     * Beety'nin ilk profili katalogun en pesi + en derin lope'u + en
+     * gurultulusu yapilmisti ve Boga 67 ile Dag Kecisi'nin garantilerini
+     * kiriyordu (2026-08-16).
+     */
+    @Test
+    fun `Beety boksor imzasi tasir ve kimseden tac almaz`() {
+        val beety = CarSoundProfiles.forShape(CarCatalog.SHAPE_BEETY)
+        val boga = CarSoundProfiles.forShape(CarCatalog.SHAPE_MUSCLE_67)
+        val keci = CarSoundProfiles.forShape(CarCatalog.SHAPE_MOUNTAIN_GOAT)
+
+        assertTrue(
+            "boksor imzasi: cift sayili harmonikler baskin olmali",
+            beety.harmonic2 + beety.harmonic4 > 2f * (beety.harmonic3 + beety.harmonic5)
+        )
+        // Taclar sahibinde kalmali.
+        assertTrue("Boga 67 daha pes kalmali", beety.freqMul > boga.freqMul)
+        assertTrue("Boga 67'nin lope'u daha derin kalmali", beety.lopeDepth < boga.lopeDepth)
+        assertTrue("Dag Kecisi daha gurultulu kalmali", beety.noiseAmount < keci.noiseAmount)
+    }
+
     @Test
     fun `normalizasyon ham dalgayi bir birimin altinda tutar`() {
         CarSoundProfiles.all.forEach { p ->

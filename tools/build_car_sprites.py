@@ -171,6 +171,7 @@ MAPPING = {
     "muscle": "03_kas_arabasi",
     "muscle_67": "Boğa67",
     "supercar": "04_super_araba",
+    "beety": "beety",
     # Trafik araci: oyuncunun alamadigi sabit govde. Sprite'a gecmesi ayrica
     # KAZANC — sahnede ayni anda onlarca trafik araci var ve her biri vektorde
     # ~20 parca cizdiriyordu.

@@ -803,14 +803,18 @@ private fun GameHud(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Duraklat 36 -> 48 dp, glif 14 -> 20 sp (2026-08-16, sahibi:
+            // "pause tusunu buyut"). 36 dp, Android'in onerdigi 48 dp'lik
+            // asgari dokunma hedefinin ALTINDAYDI — ekranin tepesinde, surus
+            // sirasinda ve tek elle basilan bir tus icin fazla kucuktu.
             Box(
                 modifier = Modifier
-                    .size(36.dp)
-                    .background(Color(0x66040C16), RoundedCornerShape(12.dp))
+                    .size(PAUSE_BUTTON_SIZE)
+                    .background(Color(0x66040C16), RoundedCornerShape(14.dp))
                     .pointerInput(Unit) { detectTapGestures(onPress = { onPause() }) },
                 contentAlignment = Alignment.Center
             ) {
-                Text("II", color = KronColors.Accent, fontSize = 14.sp)
+                Text("II", color = KronColors.Accent, fontSize = 20.sp)
             }
 
             // Hiz kilidi YALNIZCA sonsuz modda (sahibi istegi, 2026-08-15):
@@ -855,9 +859,39 @@ private fun GameHud(
  * (aradaki bosluk 30 -> 12 dp). Bir parmak fren/boost ile yon butonu arasinda
  * kisa bir kaydirmayla gidip gelebiliyor.
  */
-private val CONTROL_SIZE = 64.dp
+/**
+ * Fren ve boost olcusu. 2026-08-14'te 88 -> 76 -> 64 dp'ye indi ve **oyle
+ * kaliyor** — sahibi 2026-08-16'da acikca "fren boost buyuklugu aynen kalsin"
+ * dedi.
+ */
+private val PEDAL_SIZE = 64.dp
+
+/** HUD'daki duraklat tusu. 36 -> 48 dp (2026-08-16, sahibi istegi). */
+private val PAUSE_BUTTON_SIZE = 48.dp
+
+/**
+ * Yon (sol/sag) olcusu. **64 -> 76 dp** (2026-08-16, sahibi istegi: *"sag sol
+ * yon tusu biraz daha buyuk olsun fren ve boost a gore"*).
+ *
+ * Yon butonu fren/boost'tan farkli calisiyor: fren/boost BASILI TUTULUYOR
+ * (parmak yerinde durur), yon butonuna ise ard arda ve aceleyle DOKUNULUYOR.
+ * Acele dokunusun isabet orani hedefin alaniyla artar, basili tutmanin
+ * artmaz — yani ikisinin ayni boyda olmasi icin bir sebep yoktu.
+ *
+ * Buyuyen buton sutunu KAYDIRMIYOR: asagida yon butonunun kenar dolgusu
+ * fren/boost'un MERKEZINE gore hesaplaniyor ([STEER_EDGE_PADDING]), yoksa
+ * 12 dp'lik fark butonu ekran kenarina dogru iterdi.
+ */
+private val STEER_SIZE = 76.dp
+
 private val CONTROL_EDGE_PADDING = 16.dp
 private val CONTROL_BOTTOM_PADDING = 24.dp
+
+/** Fren/boost sutununun merkezi, ekran kenarindan. Hizalamanin dayanagi. */
+private val CONTROL_COLUMN_CENTER = CONTROL_EDGE_PADDING + PEDAL_SIZE / 2f
+
+/** Yon butonu sutun merkezine oturur; buyudugunde iki yana esit tasar. */
+private val STEER_EDGE_PADDING = CONTROL_COLUMN_CENTER - STEER_SIZE / 2f
 
 /**
  * Ayni taraftaki iki buton arasindaki dikey bosluk.
@@ -970,7 +1004,9 @@ private val CONTROL_GLASS_BRUSH = Brush.verticalGradient(
  * gradyanini yankilayabiliyor. [HornIcon] bu isi zaten boyle yapiyordu; yon,
  * boost ve fren de artik ayni dilde.
  */
-private val STEER_ICON_SIZE = 30.dp
+// Buton 64 -> 76 dp buyudu; ikon ayni oranda (30 -> 36) buyuyor ki buton
+// icinde "kaybolmus" gorunmesin (2026-08-16).
+private val STEER_ICON_SIZE = 36.dp
 private val BOOST_ICON_SIZE = 28.dp
 
 /** Ikon govdesi: ust beyaz, alt gri-mavi — butonun gradyaniyla ayni yon. */
@@ -1020,7 +1056,7 @@ private const val ICON_ROUNDING = 1.6f
 
 /** Yon butonu, alttaki fren/boost butonunun tam ustunde durur. */
 private val STEER_BOTTOM_PADDING =
-    CONTROL_BOTTOM_PADDING + CONTROL_SIZE + CONTROL_VERTICAL_GAP
+    CONTROL_BOTTOM_PADDING + PEDAL_SIZE + CONTROL_VERTICAL_GAP
 
 /**
  * Korna SAG SUTUNDA, yon okunun hemen USTUNDE (2026-08-16, proje sahibi:
@@ -1028,14 +1064,23 @@ private val STEER_BOTTOM_PADDING =
  * fonksiyonu yok"*). Onceden ekranin alt ORTASINDAYDI; orasi oynanis alaninin
  * tam altinda en degerli yer ve dekoratif bir tusa ayrilmasi dogru degildi.
  *
- * Yukseklik: boost -> yon oku -> korna diye ustuste. Yatayda 48 dp'lik korna
- * 64 dp'lik sutunun ORTASINA hizalanir, yoksa kenara yapisik durur.
+ * Yukseklik: boost -> yon oku -> korna diye ustuste. Yatayda korna sutunun
+ * ORTASINA hizalanir, yoksa kenara yapisik durur.
+ *
+ * **Korna ile yon oku arasindaki bosluk AYRI ve GENIS** (2026-08-16, sahibi:
+ * *"kornayi biraz yukari alman lazim, sag yon tusu ile arasinda bosluk kalsin
+ * ki yanlislikla ona basilmasin"*). Diger butonlar arasindaki 5 dp bilincli
+ * olarak dardi — parmak fren ile yon arasinda kaydirarak gitsin diye. Korna
+ * icin bunun tersi gecerli: oynanisa etkisi olmayan dekoratif bir tusa
+ * yanlislikla basmak, yon vermeye calisirken kaybedilen bir kare demek.
+ * O yuzden korna kendi bosluguyla ([HORN_GAP]) ayriliyor.
  */
-private val HORN_BOTTOM_PADDING =
-    STEER_BOTTOM_PADDING + CONTROL_SIZE + CONTROL_VERTICAL_GAP
+private val HORN_GAP = 24.dp
 
-private val HORN_EDGE_PADDING =
-    CONTROL_EDGE_PADDING + (CONTROL_SIZE - HORN_SIZE) / 2f
+private val HORN_BOTTOM_PADDING =
+    STEER_BOTTOM_PADDING + STEER_SIZE + HORN_GAP
+
+private val HORN_EDGE_PADDING = CONTROL_COLUMN_CENTER - HORN_SIZE / 2f
 
 /**
  * Kontrol katmani.
@@ -1067,8 +1112,8 @@ private fun DrivingControls(
             bottomColor = STEER_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = CONTROL_EDGE_PADDING, bottom = STEER_BOTTOM_PADDING)
-                .size(CONTROL_SIZE),
+                .padding(start = STEER_EDGE_PADDING, bottom = STEER_BOTTOM_PADDING)
+                .size(STEER_SIZE),
             onPress = onSteerLeft
         ) {
             ArrowIcon(pointsRight = false, modifier = Modifier.size(STEER_ICON_SIZE))
@@ -1078,8 +1123,8 @@ private fun DrivingControls(
             bottomColor = STEER_BOTTOM,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = CONTROL_EDGE_PADDING, bottom = STEER_BOTTOM_PADDING)
-                .size(CONTROL_SIZE),
+                .padding(end = STEER_EDGE_PADDING, bottom = STEER_BOTTOM_PADDING)
+                .size(STEER_SIZE),
             onPress = onSteerRight
         ) {
             ArrowIcon(pointsRight = true, modifier = Modifier.size(STEER_ICON_SIZE))
@@ -1090,7 +1135,7 @@ private fun DrivingControls(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = CONTROL_EDGE_PADDING, bottom = CONTROL_BOTTOM_PADDING)
-                .size(CONTROL_SIZE),
+                .size(PEDAL_SIZE),
             onHoldChanged = onBrake
         ) {
             // Fren METIN kaliyor, ikon olmuyor. Denenen ikonlar (fren diski,
@@ -1111,7 +1156,7 @@ private fun DrivingControls(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = CONTROL_EDGE_PADDING, bottom = CONTROL_BOTTOM_PADDING)
-                .size(CONTROL_SIZE),
+                .size(PEDAL_SIZE),
             onHoldChanged = onBoost
         ) {
             BoltIcon(ready = boostIsReady, modifier = Modifier.size(BOOST_ICON_SIZE))

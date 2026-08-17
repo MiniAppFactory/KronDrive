@@ -268,9 +268,51 @@ object CarSoundProfiles {
         hornAttack = 0.010f
     )
 
+    /**
+     * Beety — hava sogutmali boksor dortlu.
+     *
+     * ILK DENEME REDDEDILDI ve sebebi burada dursun: profil once katalogun en
+     * pesi (0.72), en derin lope'u (0.40) ve en gurultulusu (0.14) yapilmisti.
+     * Testler kirildi ve HAKLIYDILAR — o ucu Boga 67'nin ve Dağ Keçisi'nin
+     * kimlik garantileri. Yeni bir govde, var olan bir govdenin tek cumlelik
+     * tarifini elinden alarak kendine kimlik kuramaz; iki arac birden
+     * bulaniklasir.
+     *
+     * Beety'nin kimligi bu yuzden BASKA BIR EKSENDE: **harmonik yapisi**.
+     * Boksor dortlu CIFT sayili harmonikleri one cikarir — Boga 67'nin V8
+     * imzasinin (tek sayililar baskin) tam ayna goruntusu. Katalogda bu
+     * karakteri tasiyan baska govde yok ve kimsenin ustunlugunu almiyor.
+     *
+     * Geri kalan degerler bilerek IKINCI sirada: frekans 0.78 (Boga 0.76'nin
+     * hemen ustunde), lope 0.32 (Boga 0.34'un hemen altinda), gurultu 0.08
+     * (Dağ Keçisi 0.10'un altinda). "Neredeyse en pes, neredeyse en
+     * duzensiz" — ama tac sahibinde kaliyor.
+     */
+    private val BEETY = CarSoundProfile(
+        id = CarCatalog.SHAPE_BEETY,
+        freqMul = 0.78f,
+        // CIFT sayililar baskin: boksor imzasi (test bunu zorunlu kiliyor).
+        harmonic2 = 0.46f,
+        harmonic3 = 0.13f,
+        harmonic4 = 0.27f,
+        harmonic5 = 0.06f,
+        grit = 0.26f,
+        noiseAmount = 0.08f,
+        lopeDepth = 0.32f,
+        gainMul = 0.93f,
+        cutoffMul = 0.70f,
+        nitroTone = 0.88f,
+        hornBaseHz = 470f,
+        hornInterval = 1.18f,
+        hornBuzz = 0.74f,
+        hornSeconds = 0.34f,
+        hornAttack = 0.030f
+    )
+
     /** Tum profiller — testler ve olasi bir ses ayari ekrani icin acik. */
     val all: List<CarSoundProfile> = listOf(
-        DEFAULT, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR
+        DEFAULT, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR,
+        BEETY
     )
 
     private val byId: Map<String, CarSoundProfile> = all.associateBy { it.id }

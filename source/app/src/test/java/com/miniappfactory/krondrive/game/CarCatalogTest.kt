@@ -264,9 +264,17 @@ class CarCatalogTest {
     @Test
     fun `yuzde gosterimi carpanla tutarli`() {
         assertEquals(0, CarCatalog.statDeltaPercent(CarCatalog.defaultShape, UpgradeType.SPEED))
-        val supercar = CarCatalog.shapes.maxByOrNull { it.priceCoins }!!
+        // KIMLIKLE bulunuyor, "en pahali govde" ile DEGIL. Eskiden
+        // maxByOrNull { priceCoins } ile bulunuyordu ve Beety (4000) gelince
+        // test kirildi — oysa olcmek istedigi sey Super Araba'nin carpanlari.
+        val supercar = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_SUPERCAR }
         assertEquals(12, CarCatalog.statDeltaPercent(supercar, UpgradeType.SPEED))
         assertEquals(-6, CarCatalog.statDeltaPercent(supercar, UpgradeType.BRAKE))
+
+        // Beety ters yonde: hizda kayip, frende kazanc.
+        val beety = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_BEETY }
+        assertEquals(-8, CarCatalog.statDeltaPercent(beety, UpgradeType.SPEED))
+        assertEquals(12, CarCatalog.statDeltaPercent(beety, UpgradeType.BRAKE))
     }
 
     // -----------------------------------------------------------------
@@ -387,6 +395,8 @@ class CarCatalogTest {
         // Iki nostalji araci AYNI basamakta (1500, sahibi karari 2026-08-15):
         // biri otekinin ucuz alternatifi olmamali, secim zevke kalmali.
         // Boga 67 (2400) 1800 ile 3200 arasindaki EN GENIS bosluga girdi.
+        // Beety (4000, 2026-08-16) merdiveni UZATTI — onceki govdeler mevcut
+        // araliklara oturuyordu, bu ilk kez tavani yukseltiyor (sahibi karari).
         assertEquals(
             listOf(
                 CarCatalog.SHAPE_HATCHBACK to 0,
@@ -395,7 +405,8 @@ class CarCatalogTest {
                 CarCatalog.SHAPE_MOUNTAIN_GOAT to 1500,
                 CarCatalog.SHAPE_MUSCLE to 1800,
                 CarCatalog.SHAPE_MUSCLE_67 to 2400,
-                CarCatalog.SHAPE_SUPERCAR to 3200
+                CarCatalog.SHAPE_SUPERCAR to 3200,
+                CarCatalog.SHAPE_BEETY to 4000
             ),
             CarCatalog.shapes.map { it.id to it.priceCoins }
         )

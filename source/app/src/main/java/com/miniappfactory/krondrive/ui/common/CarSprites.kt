@@ -69,6 +69,7 @@ private val SPRITE_TABLE: List<Triple<String, Int, Int>> = listOf(
     Triple(CarCatalog.SHAPE_MUSCLE, R.drawable.car_muscle_body, R.drawable.car_muscle_detail),
     Triple(CarCatalog.SHAPE_MUSCLE_67, R.drawable.car_muscle_67_body, R.drawable.car_muscle_67_detail),
     Triple(CarCatalog.SHAPE_SUPERCAR, R.drawable.car_supercar_body, R.drawable.car_supercar_detail),
+    Triple(CarCatalog.SHAPE_BEETY, R.drawable.car_beety_body, R.drawable.car_beety_detail),
     // Trafik: oyuncunun alamadigi sabit govde. Sprite'a gecmesi ayrica kazanc —
     // sahnede ayni anda onlarca trafik araci var ve her biri vektorde ~20 parca
     // cizdiriyordu.

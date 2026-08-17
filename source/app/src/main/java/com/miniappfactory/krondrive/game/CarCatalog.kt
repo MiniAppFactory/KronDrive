@@ -434,12 +434,14 @@ object CarCatalog {
     const val SHAPE_MOUNTAIN_GOAT = "mountain_goat"
     const val SHAPE_MUSCLE_67 = "muscle_67"
     const val SHAPE_SUPERCAR = "supercar"
+    const val SHAPE_BEETY = "beety"
 
     const val COLOR_KRON_RED = "kron_red"
     const val COLOR_GRAPHITE = "graphite"
     const val COLOR_EMERALD = "emerald"
     const val COLOR_GLACIER = "glacier"
     const val COLOR_MAGENTA = "magenta"
+    const val COLOR_SUNBEAM = "sunbeam"
     const val COLOR_ROYAL = "royal"
     const val COLOR_VIOLET = "violet"
     const val COLOR_TEAL = "teal"
@@ -1034,6 +1036,107 @@ object CarCatalog {
     )
 
     /**
+     * Klasik "bocek" arabasi (proje sahibi karari, 2026-08-16). Katalogun
+     * EN PAHALI govdesi — 4000 coin.
+     *
+     * NOT (bilincli sapma): asagidaki liste yorumu "yeni govdeler merdiveni
+     * UZATMIYOR, mevcut basamaklara ya da aralarindaki bosluklara oturuyor"
+     * diyordu. Beety bunu bozar; merdiveni 3200'den 4000'e UZATIR. Sahibi
+     * bunu iki kez teyit etti ("en pahalisi olsun", sonra "4000 olsun").
+     * Kural iptal edilmedi, bu govde icin asildi.
+     *
+     * Silueti 32 px'de ayiran sey KOSE YARICAPI: 10 birim, katalogun acik ara
+     * en yuvarlagi (digerleri 5-6, Kas Arabasi 2.5, Kuş SLX 1.6). Ikinci
+     * isaret tekerleklerin govdeden ACIKCA disarida durmasi — ayrik
+     * camurluklar. Ucuncusu arka kaputtaki yatay havalandirma cubuklari.
+     *
+     * FABRIKA BOYASI YOK: `defaultColorId` yazilmadi, yani araç KIRMIZI
+     * (bedava temel boya) baslar. Referans cizim sari ama sari
+     * ([COLOR_SUNBEAM], 700 coin) satin alinir — sahibi karari. Kuş SLX /
+     * Dağ Keçisi / Boğa 67 desenlerinden bilerek ayriliyor.
+     *
+     * DENGE — dominasyon testi: en iyi ivme ve en iyi fren, ama katalogun
+     * ACIK ARA en dusuk son hizi (0.92; bir sonraki en dusuk Kuş SLX 0.97).
+     * Hicbir govdeyi domine etmiyor (Kuş SLX ve Dağ Keçisi son hizda ve
+     * boostta ondeler) ve kendisi de domine edilmiyor. Eksen toplami 4.18,
+     * Super Araba'nin 4.16'sinin hemen ustunde — en pahali olmasinin karsiligi
+     * bu kadar, daha fazlasi degil.
+     *
+     * Dusuk son hiz GERCEK bir bedel: skor mesafeden ve gecisten geliyor,
+     * yani Beety daha guvenli ama daha az kazandiriyor.
+     */
+    private val BEETY = CarShapeDef(
+        id = SHAPE_BEETY,
+        nameTr = "Beety",
+        nameEn = "Beety",
+        descriptionTr = "Klasik böcek gövdesi, ayrık çamurluklar",
+        descriptionEn = "Classic bug body, separate fenders",
+        priceCoins = 4000,
+        // Super Araba ile AYNI seviye. Yukseltilmedi cunku seviye kapisi bu
+        // fiyat bandinda zaten anlamli bir engel degil: oyundaki en yuksek
+        // sart 6 ve oyuncu ona 9. bolumde ulasiyor, 4000 coin cok daha uzun
+        // suruyor (bkz. docs/ECONOMY_BALANCE_PROPOSAL.md, ikinci bulgu).
+        // Gercek kapi fiyat; sahte bir seviye sarti eklemiyoruz.
+        requiredCarLevel = 6,
+        topSpeedMul = 0.92f,
+        accelMul = 1.14f,
+        brakeMul = 1.12f,
+        boostMul = 1.00f,
+        traitTr = "En çevik ama en yavaşı — trafiği deler, kaçamaz",
+        traitEn = "Nimblest but slowest — threads traffic, can't outrun it",
+        parts = listOf(
+            // Tekerlekler govdeden ACIKCA disarida: ayrik camurluk hissi.
+            // x = -20 / 13 SINIRIN TA KENDISI (ART_LEFT/RIGHT = -20..20);
+            // ilk denemede -20.5 yazilmisti ve test hakli olarak reddetti.
+            CarPart.Box(CarPaint.TIRE, -20f, 12f, 7f, 19f, 2.4f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, 13f, 12f, 7f, 19f, 2.4f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, -20f, 46f, 7f, 20f, 2.4f, WHEEL_ROLL),
+            CarPart.Box(CarPaint.TIRE, 13f, 46f, 7f, 20f, 2.4f, WHEEL_ROLL),
+            // Ana govde: dar ve COK yuvarlak — silueti tasiyan parca.
+            CarPart.Box(CarPaint.BODY, -13.5f, 8f, 27f, 62f, 10f, BODY_ROLL),
+            // On kaput daralarak buruna iniyor.
+            CarPart.Wedge(
+                CarPaint.BODY,
+                listOf(
+                    CarPoint(-7.5f, -2f), CarPoint(7.5f, -2f),
+                    CarPoint(13.5f, 16f), CarPoint(-13.5f, 16f)
+                ),
+                BODY_ROLL
+            ),
+            // Camurluk kabartilari: govdenin yanindan tasan yuvarlak kutular.
+            CarPart.Box(CarPaint.BODY, -17.5f, 11f, 5.5f, 21f, 2.5f, BODY_ROLL),
+            CarPart.Box(CarPaint.BODY, 12f, 11f, 5.5f, 21f, 2.5f, BODY_ROLL),
+            CarPart.Box(CarPaint.BODY, -17.5f, 45f, 5.5f, 22f, 2.5f, BODY_ROLL),
+            CarPart.Box(CarPaint.BODY, 12f, 45f, 5.5f, 22f, 2.5f, BODY_ROLL),
+            // ACCENT: marspiye (yan basamak) seridi. Yarisci uzunlamasina
+            // serit DEGIL — bocek arabasinin iki camurlugu birlestiren
+            // basamagi. Katalogda serit tasimayan govde yok (test zorunlu
+            // kiliyor) ama bu govdenin kimligi kaput seridi kaldirmiyor.
+            CarPart.Box(CarPaint.ACCENT, -14f, 32f, 1.8f, 17f, 0.9f, alpha = 0.8f),
+            CarPart.Box(CarPaint.ACCENT, 12.2f, 32f, 1.8f, 17f, 0.9f, alpha = 0.8f),
+            CarPart.Box(CarPaint.BODY_SHADE, -7f, -2f, 14f, 2.2f, 1f, NOSE_FADE),
+            // On krom tampon — Kuş SLX disinda krom tasiyan tek govde.
+            CarPart.Box(CarPaint.TRIM, -9.5f, -1.4f, 19f, 2.2f, 1f, alpha = 0.9f),
+            // Kokpit: kucuk ve kubbeli. On cam kisa, tavan dar.
+            CarPart.Box(CarPaint.GLASS, -9.6f, 22f, 19.2f, 8.6f, 4f, GLASS_SHEEN),
+            CarPart.Disc(CarPaint.DRIVER, 0f, 26f, 3.8f),
+            CarPart.Box(CarPaint.BODY, -10.4f, 29.6f, 20.8f, 10f, 5f, ROOF_ROLL),
+            CarPart.Box(
+                CarPaint.BODY_SHADE, -10.2f, 38.4f, 20.4f, 1.4f, 0.7f, alpha = 0.32f
+            ),
+            CarPart.Box(CarPaint.GLASS, -9.2f, 39.4f, 18.4f, 6.4f, 3f, GLASS_SHEEN),
+            // Arka kaput havalandirmasi: dort yatay cubuk. Ucuncu isaret.
+            CarPart.Box(CarPaint.BODY_SHADE, -7.6f, 50.5f, 15.2f, 1.1f, 0.5f, alpha = 0.55f),
+            CarPart.Box(CarPaint.BODY_SHADE, -7.6f, 53f, 15.2f, 1.1f, 0.5f, alpha = 0.55f),
+            CarPart.Box(CarPaint.BODY_SHADE, -7.6f, 55.5f, 15.2f, 1.1f, 0.5f, alpha = 0.55f),
+            CarPart.Box(CarPaint.BODY_SHADE, -7.6f, 58f, 15.2f, 1.1f, 0.5f, alpha = 0.55f),
+            CarPart.Box(CarPaint.GLOSS, -12.4f, 14f, 1.4f, 46f, 0.7f, alpha = 0.14f),
+            // Arka krom tampon.
+            CarPart.Box(CarPaint.TRIM, -11f, 67.5f, 22f, 2.2f, 1f, alpha = 0.9f)
+        ) + rearFace(top = 66f, halfTop = 13.2f, halfBottom = 12.4f)
+    )
+
+    /**
      * Liste sirasi = garajdaki sira = FIYAT merdiveni (test bunu zorunlu
      * kiliyor: fiyat kesin artan, seviye sarti geri gitmez).
      *
@@ -1047,7 +1150,8 @@ object CarCatalog {
      * bos bir ucurum vardi, artik ara bir hedef var. Hepsi yalnizca kozmetik.
      */
     val shapes: List<CarShapeDef> = listOf(
-        HATCHBACK, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR
+        HATCHBACK, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR,
+        BEETY
     )
 
     // -----------------------------------------------------------------
@@ -1197,6 +1301,24 @@ object CarCatalog {
             bodyArgb = 0xFFE5007D,
             shadeArgb = 0xFF8E004D,
             accentArgb = 0xFFFFFFFF
+        ),
+        CarColorDef(
+            id = COLOR_SUNBEAM,
+            nameTr = "Gün Sarısı",
+            nameEn = "Sunbeam",
+            // Palette sari YOKTU (2026-08-16) — oysa sari oyunun vurgu rengi
+            // (boost simsegi, KronColors.AccentBright). Beety'nin referans
+            // cizimi sari; sahibi karari geregi Beety KIRMIZI baslar ve
+            // oyuncu sariyi satin alarak referanstaki haline getirir. Fabrika
+            // boyasi DEGIL — bilerek: bedava verilseydi 700'luk bir boya
+            // 4000'lik gövdeye hediye olurdu.
+            priceCoins = 700,
+            requiredCarLevel = 2,
+            // Kontrast: koyu gece zemininde de gunduz asfaltinda da okunuyor;
+            // aksan koyu ki sari uzerinde beyaz serit kaybolmasin.
+            bodyArgb = 0xFFF5C518,
+            shadeArgb = 0xFF9C7C00,
+            accentArgb = 0xFF2A2000
         ),
         CarColorDef(
             id = COLOR_ROYAL,
