@@ -261,11 +261,14 @@ class GameStateRepository(private val context: Context) {
 
     /** Bolum sonucu: en iyi yildiz sayisi saklanir, sonraki bolum acilir. */
     /**
-     * Bolum sonucu. [passed] yalnizca TUM gorevler tamamlandiysa true gelir ve
-     * bir sonraki bolumun kilidi ancak o zaman acilir.
+     * Bolum sonucu. [passed] gorevlerin [GameConfig.MIN_STARS_TO_PASS]
+     * kadari tamamlandiysa true gelir (su an UC gorevin IKISI) ve bir
+     * sonraki bolumun kilidi ancak o zaman acilir.
      *
-     * Eskiden tek bir gorev (`stars > 0`) yetiyordu; sahibi karari
-     * (2026-08-15): gorevleri yapmak bolumu gecmenin ilk sarti.
+     * Esik iki kez degisti: once `stars > 0`, sonra "ucu de" (2026-08-15,
+     * sahibi karari), sonra 2 (2026-08-16, olcum: "ucu de" ilk sekiz bolumde
+     * duvar uretiyordu — bkz. docs/DIFFICULTY_REVIEW.md).
+     * Yildizlar SIRALI kazanildigi icin bu pratikte "ILK IKI gorev" demek.
      * Tamamlanan gorev sayisi yine kaydediliyor — haritadaki ilerleme
      * isaretleri ve gorev odulu ondan besleniyor.
      */

@@ -47,10 +47,27 @@ object AdFrequency {
         levelsSince: Int,
         endlessRunsSince: Int
     ): Boolean = when (mode) {
-        RunMode.CAREER, RunMode.DAILY -> {
-            val earlyLevel = levelId != null && levelId <= GameConfig.INTERSTITIAL_FREE_LEVELS
+        // Muafiyet YALNIZCA kariyere ait. Once CAREER ile DAILY ayni dalda
+        // duruyordu ve gunluk gorev sessizce HIC reklam gostermez olmustu
+        // (2026-08-16, regresyon incelemesinde bulundu): gunluk gorevin
+        // bolum kimligi (DailyChallenge.DAILY_LEVEL_ID) -1 ve -1 <= 4 oldugu
+        // icin her gun "erken bolum" sayiliyordu.
+        //
+        // Ders: esik karsilastirmasini SIRALI OLMAYAN bir kimlikle yapmak.
+        // Ayrica ilk test bunu `levelId = null` ile kontrol ediyordu, oysa
+        // uretim yolu null degil -1 geciriyor — test yesil kalip gercegi
+        // gizledi. Yeni test artik -1'i de deniyor.
+        RunMode.CAREER -> {
+            val earlyLevel = levelId != null &&
+                levelId in 1..GameConfig.INTERSTITIAL_FREE_LEVELS
             !earlyLevel && levelsSince >= GameConfig.INTERSTITIAL_EVERY_N_LEVELS
         }
+
+        // Gunluk gorev sayaci ARTIRMAZ ama sayac dolduysa cikista reklam
+        // gosterebilir. Muafiyete girmez: gunluk gorev bir kariyer bolumu
+        // degil, gunde bir kez oynanan ayri bir mod.
+        RunMode.DAILY ->
+            levelsSince >= GameConfig.INTERSTITIAL_EVERY_N_LEVELS
 
         RunMode.ENDLESS ->
             endlessRunsSince >= GameConfig.INTERSTITIAL_EVERY_N_ENDLESS_RUNS

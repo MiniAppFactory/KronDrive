@@ -35,9 +35,12 @@ object LevelCatalog {
         // pratikte ulasilamazdi — "fazla zor" sikayetinin somut kaynagi.
         //
         // SIRA ONEMLI: yildizlar SIRALI kazanilir (bkz. LevelEvaluator) ve
-        // bir sonraki bolum ancak EN AZ 1 yildizla acilir. Yani ilk hedef
-        // her zaman en kolayi olmali; PerfectDodge/Combo gibi beceri
-        // hedefleri ilk siraya konursa oyuncu bolumde tikanir. Eski bolum
+        // bir sonraki bolum [GameConfig.MIN_STARS_TO_PASS] gorevle acilir
+        // (su an 2). Yani ilk IKI hedef makul olmali; PerfectDodge/Combo gibi
+        // beceri hedefleri UCUNCU siraya konur, boylece ustalik yildizi olur
+        // ve kimseyi tikamaz. Bu yorum 2026-08-16'da duzeltildi: "en az 1
+        // yildiz" yaziyordu ama kural 15 Agustos'ta degismisti ve yorum
+        // guncellenmemisti. Eski bolum
         // 3 (`PerfectDodges(3)` ilk sirada) ve bolum 4 (`BoostDistance(500)`
         // ilk sirada) tam olarak bu hatayi yapiyordu.
         // -----------------------------------------------------------------
@@ -117,9 +120,16 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(45),
             startSpeedKmh = 75,
             trafficDensity = 0.85f,
+            // 2026-08-16: ikinci hedef PerfectDodges(4) idi, yani bolumun
+            // 2. VE 3. hedefi birden beceri hedefiydi. Olcum (LevelCurveTest)
+            // temkinli oyunun buradan yalnizca 1 yildiz aldigini gosterdi —
+            // [GameConfig.MIN_STARS_TO_PASS] = 2 kuralinda bolum TIKANIYORDU.
+            // Combo bu bolumun ogrettigi mekanik, o yuzden ustalik yildizi
+            // olarak KALDI; cifte beceri hedefinin ikincisi trafik temasini
+            // pekistiren bir gecis hedefiyle degisti.
             stars = listOf(
                 Objective.CoinsAtLeast(10),
-                Objective.PerfectDodges(4),
+                Objective.PassVehicles(30),
                 Objective.ComboAtLeast(3)
             )
         ),
@@ -127,9 +137,13 @@ object LevelCatalog {
         LevelDef(
             id = 7,
             goal = LevelGoal.SurviveTime(50),
+            // Bolum 6 ile ayni kusur ve ayni duzeltme (2026-08-16):
+            // PerfectDodges(6) ikinci siradaydi ve combo ile birlikte iki
+            // beceri hedefi yapiyordu. Olcumde temkinli oyun 1 yildiz
+            // aliyordu.
             stars = listOf(
                 Objective.ScoreAtLeast(2900),
-                Objective.PerfectDodges(6),
+                Objective.PassVehicles(45),
                 Objective.ComboAtLeast(4)
             )
         ),

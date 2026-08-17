@@ -792,9 +792,11 @@ class GameEngine(
             stats = stats,
             stars = stars,
             newStars = newStars,
-            // Kariyerde bolum ancak TUM gorevler tamamlandiysa gecilir.
+            // Kariyerde bolum, gorevlerin [GameConfig.MIN_STARS_TO_PASS]
+            // kadari tamamlandiysa gecilir (uc gorevin ikisi). Ucuncusu
+            // ustalik yildizidir; gerekcesi o sabitin basinda.
             passed = mode == RunMode.CAREER && level != null &&
-                level.awardsStars && stars == level.stars.size,
+                level.awardsStars && stars >= GameConfig.MIN_STARS_TO_PASS,
             coinsEarned = coinsEarned,
             xpEarned = xpEarned,
             dailyTiers = dailyTiers,

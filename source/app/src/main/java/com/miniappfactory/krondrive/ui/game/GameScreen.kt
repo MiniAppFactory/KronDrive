@@ -1763,11 +1763,10 @@ private fun RunResultOverlay(
     OverlayScrim {
         KronCard(modifier = Modifier.fillMaxWidth()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Kariyerde "TAMAMLANDI" yalnizca TUM gorevler bittiginde
-                // yazar. Sureyi doldurmak ama gorevleri yapmamak bolumu
-                // gecirmiyor (bkz. RunResult.passed) — baslik da bunu
-                // durustce soylemeli, aksi halde oyuncu bolumun acildigini
-                // sanip haritada kilitli buluyordu.
+                // Kariyerde "TAMAMLANDI" ancak bolum GECILDIYSE yazar
+                // (bkz. RunResult.passed / GameConfig.MIN_STARS_TO_PASS).
+                // Baslik bunu durustce soylemeli, aksi halde oyuncu bolumun
+                // acildigini sanip haritada kilitli buluyordu.
                 val careerFailed = result.mode == RunMode.CAREER && !result.passed
                 Text(
                     text = when {
@@ -1784,9 +1783,11 @@ private fun RunResultOverlay(
                 if (careerFailed) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
+                        // Metin sabiti DEGIL, sayidan turetiliyor: esik
+                        // degisirse ekran sessizce yalan soylemesin.
                         text = language.pick(
-                            tr = "Bölümü geçmek için üç görevin üçü de gerekli.",
-                            en = "All three objectives are required to pass."
+                            tr = "Bölümü geçmek için ${GameConfig.MIN_STARS_TO_PASS} görev gerekli.",
+                            en = "${GameConfig.MIN_STARS_TO_PASS} objectives are required to pass."
                         ),
                         color = KronColors.TextMuted,
                         fontSize = 12.sp,

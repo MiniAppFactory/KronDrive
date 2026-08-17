@@ -1,5 +1,6 @@
 package com.miniappfactory.krondrive.game
 
+import com.miniappfactory.krondrive.data.DailyChallenge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -142,14 +143,40 @@ class AdFrequencyTest {
         )
     }
 
+    /**
+     * REGRESYON TESTI (2026-08-16). Bu test once `levelId = null` ile
+     * yaziliydi ve GECIYORDU — ama uretim yolu null DEGIL, gunluk gorevin
+     * bolum kimligi [DailyChallenge.DAILY_LEVEL_ID] = **-1**.
+     * `-1 <= INTERSTITIAL_FREE_LEVELS` dogru oldugu icin gunluk gorev her
+     * gun "erken bolum" sayiliyor ve HIC reklam gostermiyordu.
+     *
+     * Test yesil kalip gercegi gizledi. Artik uretimin gercekten gecirdigi
+     * degerle deneniyor.
+     */
     @Test
-    fun `gunluk gorevin levelId si yok, muafiyete takilmaz`() {
-        assertTrue(
-            show(
-                levelId = null,
-                levelsSince = GameConfig.INTERSTITIAL_EVERY_N_LEVELS,
-                mode = RunMode.DAILY
+    fun `gunluk gorev muafiyete takilmaz — uretimdeki -1 kimligiyle`() {
+        listOf(null, DailyChallenge.DAILY_LEVEL_ID).forEach { id ->
+            assertTrue(
+                "gunluk gorev (levelId=$id) sayac dolunca reklam gostermeli",
+                show(
+                    levelId = id,
+                    levelsSince = GameConfig.INTERSTITIAL_EVERY_N_LEVELS,
+                    mode = RunMode.DAILY
+                )
             )
+        }
+    }
+
+    /** Muafiyet YALNIZCA kariyere ait ve yalnizca 1..N araligina. */
+    @Test
+    fun `sirali olmayan bolum kimligi muafiyet acmaz`() {
+        assertTrue(
+            "kariyerde -1 gibi bir kimlik muafiyet ACMAMALI",
+            show(levelId = -1, levelsSince = GameConfig.INTERSTITIAL_EVERY_N_LEVELS)
+        )
+        assertTrue(
+            "kariyerde 0 da muafiyet acmamali",
+            show(levelId = 0, levelsSince = GameConfig.INTERSTITIAL_EVERY_N_LEVELS)
         )
     }
 

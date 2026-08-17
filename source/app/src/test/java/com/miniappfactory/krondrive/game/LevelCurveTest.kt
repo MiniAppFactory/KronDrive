@@ -20,8 +20,8 @@ import kotlin.random.Random
  * Ikisi de bilerek VASAT: mukemmel zamanlama yapmazlar. Otopilotun
  * basaramadigi bir hedef, yeni bir oyuncu icin de fazla zordur.
  *
- * En kritik degismez: **her bolum en az 1 yildiz verebilmeli**, cunku bir
- * sonraki bolum ancak `stars > 0` ile aciliyor
+ * En kritik degismez: **her bolum [GameConfig.MIN_STARS_TO_PASS] yildiz
+ * verebilmeli** (su an 2), cunku bir sonraki bolum bununla aciliyor
  * (`GameStateRepository.recordLevelResult`). Ilk hedefi tutturamayan oyuncu
  * oyunda tikanir.
  */
@@ -158,16 +158,23 @@ class LevelCurveTest {
     }
 
     @Test
-    fun `ilk sekiz bolumde ilerleme tikanmaz — ilk yildiz her zaman alinir`() {
-        // Bir sonraki bolum `stars > 0` ile aciliyor. Ilk hedef her bolumde
-        // temkinli oyunun tutturabilecegi bir hedef olmali.
+    fun `ilk sekiz bolumde ilerleme tikanmaz — gecis yildizi her zaman alinir`() {
+        // Bu test 2026-08-16'da GUCLENDIRILDI ve neden onemli oldugu burada
+        // dursun: esik `stars >= 1` yaziyordu, oysa kural 15 Agustos'ta
+        // "ucu de" olarak degismisti. Test eski kurali dogruladigi icin
+        // gecmeye devam etti ve ilk 8 bolumdeki tikanma FARK EDILMEDI
+        // (bkz. docs/DIFFICULTY_REVIEW.md).
+        //
+        // Artik esik sabitten okunuyor: kural bir daha degisirse bu test
+        // sessizce eskimek yerine kirilir.
         LEARNING_LEVELS.forEach { level ->
             SEEDS.forEach { seed ->
                 val r = play(level, seed)
                 assertTrue(
-                    "bolum ${level.id} (tohum $seed) hic yildiz vermedi, " +
+                    "bolum ${level.id} (tohum $seed) temkinli oyunla " +
+                        "${GameConfig.MIN_STARS_TO_PASS} yildiz vermedi, " +
                         "ilerleme tikanir: ${r.describe()}",
-                    r.stars >= 1
+                    r.stars >= GameConfig.MIN_STARS_TO_PASS
                 )
             }
         }
@@ -190,19 +197,33 @@ class LevelCurveTest {
 
     @Test
     fun `risk alan oyun Perfect Dodge ve combo hedeflerine ulasir`() {
-        // Bolum 4 uc dodge, bolum 6 dort dodge + 3x combo istiyor. Yanasma
-        // manevrasi yapan otopilot bunlari tutturabiliyorsa hedefler
-        // insan eliyle de tutturulabilir.
+        // Bu test hedefin ULASILABILIR oldugunu gosterir, INSAN ELIYLE
+        // ulasilabilir oldugunu DEGIL.
+        //
+        // Eski yorum "otopilot tutturabiliyorsa insan da tutturabilir"
+        // diyordu. Bu cikarim GECERSIZ: RISKY profili her karede pikselden
+        // mesafe okuyan kapali cevrimli bir denetleyici, yani insanustu.
+        // Olcum (docs/DIFFICULTY_REVIEW.md, 2026-08-16): perfect dodge
+        // penceresinden gecis 2-3 kare (33-67 ms) suruyor, insan tepki
+        // tabani ~250 ms. Yani buradan gecen bir hedef yine de oyuncu icin
+        // duvar olabilir. Testin isi yalnizca "matematiksel olarak
+        // imkansiz degil" demek.
+        //
+        // Bolum 6 ve 7 artik dodge hedefi TASIMIYOR (ikisinde de 2. ve 3.
+        // hedef birden beceri hedefiydi, 2026-08-16'da duzeltildi) — bu
+        // yuzden dodge kontrolu kosullu.
         listOf(4, 6, 7).forEach { id ->
             val level = LevelCatalog.level(id)!!
-            val best = SEEDS.map { play(level, it, Style.RISKY) }
-                .maxByOrNull { it.stats.perfectDodges }!!
             val needed = level.stars.filterIsInstance<Objective.PerfectDodges>()
-                .maxOf { it.count }
-            assertTrue(
-                "bolum $id: risk alan oyun $needed dodge yapamadi — ${best.describe()}",
-                best.stats.perfectDodges >= needed
-            )
+                .maxOfOrNull { it.count }
+            if (needed != null) {
+                val best = SEEDS.map { play(level, it, Style.RISKY) }
+                    .maxByOrNull { it.stats.perfectDodges }!!
+                assertTrue(
+                    "bolum $id: risk alan oyun $needed dodge yapamadi — ${best.describe()}",
+                    best.stats.perfectDodges >= needed
+                )
+            }
             val combo = level.stars.filterIsInstance<Objective.ComboAtLeast>().maxOfOrNull { it.combo }
             if (combo != null) {
                 val bestCombo = SEEDS.map { play(level, it, Style.RISKY) }.maxOf { it.stats.bestCombo }

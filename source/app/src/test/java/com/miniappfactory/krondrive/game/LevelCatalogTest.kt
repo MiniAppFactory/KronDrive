@@ -120,8 +120,8 @@ class LevelCatalogTest {
 
     @Test
     fun `ogrenme bolumlerinde ilk hedef beceri hedefi degildir`() {
-        // Yildizlar SIRALI kazanilir ve bir sonraki bolum `stars > 0` ile
-        // acilir (GameStateRepository.recordLevelResult). Ilk hedef
+        // Yildizlar SIRALI kazanilir ve bir sonraki bolum
+        // [GameConfig.MIN_STARS_TO_PASS] gorevle acilir. Ilk hedef
         // PerfectDodge/Combo/BoostDistance gibi bir beceri hedefi olursa
         // oyuncu bolumde tikanir — ilk surumde bolum 3 ve 4 boyleydi.
         LevelCatalog.levels.take(8).forEach { level ->

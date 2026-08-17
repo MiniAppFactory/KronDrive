@@ -169,7 +169,8 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
                     if (levelId != null && stats.completed) {
                         // Tamamlanan gorev sayisi her zaman kaydedilir (harita
                         // isaretleri), ama bir sonraki bolumun kilidi ancak
-                        // TUM gorevler tamamlandiysa acilir (result.passed).
+                        // yeterince gorev tamamlandiysa acilir (result.passed,
+                        // esik GameConfig.MIN_STARS_TO_PASS).
                         repository.recordLevelResult(levelId, result.stars, result.passed)
                         repository.incrementMissionProgress(MissionType.COMPLETE_LEVELS, 1)
                     }

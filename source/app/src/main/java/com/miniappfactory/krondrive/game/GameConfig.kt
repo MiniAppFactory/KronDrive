@@ -386,6 +386,27 @@ object GameConfig {
     // Odul ekonomisi
     // ---------------------------------------------------------------------
 
+    /**
+     * Bir sonraki bolumun acilmasi icin gereken gorev sayisi (bolum basina uc
+     * gorev var).
+     *
+     * TARIHCE — bu sabit bir hatanin dersidir:
+     *  - Baslangic: `stars > 0`. Ilk 8 bolum acikca buna gore tasarlandi
+     *    ("ilk hedef her zaman en kolayi olmali", bkz. LevelCatalog).
+     *  - 2026-08-15: sahibi *"gorevleri tamamlamadiysa neden geciyor ki"*
+     *    dedi ve kural UCU DE olarak degistirildi. Ama bolum tasarimi
+     *    guncellenmedi; ilk hedefin kolay olmasinin sagladigi guvenlik payi
+     *    sessizce yok oldu. Eski kural uc ayri yerde yorum olarak kaldi ve
+     *    testler de eski kurali dogruladigi icin kimse yakalamadi.
+     *  - 2026-08-16: zorluk incelemesi (`docs/DIFFICULTY_REVIEW.md`) duvar
+     *    sayisinin 6'dan 19'a ciktigini olctu. Sahibi **2**'de karar kildi.
+     *
+     * Kural: **iki gorev bolumu acar, ucuncusu ustalik yildizidir.** Yani
+     * beceri hedefi (PerfectDodge/Combo) UCUNCU sirada oldugu surece hicbir
+     * oyuncu ona takilip ilerleyemez hale gelmez.
+     */
+    const val MIN_STARS_TO_PASS = 2
+
     const val COINS_PER_PICKUP = 1
 
     /**
