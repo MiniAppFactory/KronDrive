@@ -347,6 +347,10 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repository.setSoundEnabled(enabled) }
     }
 
+    fun setVibrationEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setVibrationEnabled(enabled) }
+    }
+
     fun setLanguage(language: AppLanguage) {
         viewModelScope.launch { repository.setLanguage(language) }
     }

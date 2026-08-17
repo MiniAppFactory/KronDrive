@@ -1,19 +1,23 @@
 Üç şerit, yoğun trafik ve tek bir yanlış hamle. Kron Drive, 80'ler arcade salonlarının kısa ve sert ritmini telefona getiren bir trafik atlatma ve araba yarışı oyunudur. Menü yok, bekleme yok — dokun, şerit değiştir, hayatta kal.
 
 PERFECT DODGE VE COMBO
-Bir aracın yanından kıl payı geçmek Perfect Dodge sayılır. Peş peşe yaptıkça çarpanın büyür: 1.2x, 1.5x, 2x ve 3x. Güvenli sürmek seni hayatta tutar, risk almak skoru patlatır. Zinciri koparmamak için 6 saniyen var. Bu oyunun kalbi budur.
+Bir aracın yanından kıl payı geçmek Perfect Dodge sayılır. Peş peşe yaptıkça çarpanın büyür: 1.2x, 1.5x, 2x ve 3x. Güvenli sürmek seni hayatta tutar, risk almak skoru patlatır. Zinciri koparmamak için 6 saniyen var.
 
 30 BÖLÜMLÜK KARİYER, 90 YILDIZ
-Her bölümün bir ana hedefi vardır: belirli süre hayatta kal ya da mesafeye ulaş. Üstüne üç ayrı yıldız görevi gelir — perfect dodge sayısı, combo derecesi, skor eşiği, coin toplama, frene hiç basmadan bitirme ya da süre rekoru. Toplam 90 yıldız. İlk bölümler 60 km/s ile sakin başlar, son bölümler 120 saniyede 5.000 metre ister.
+Her bölümün bir ana hedefi vardır: belirli süre hayatta kal ya da mesafeye ulaş. Üstüne üç ayrı yıldız görevi gelir — geçilen araç sayısı, skor eşiği, coin toplama, combo derecesi, boost'la alınan mesafe, frene hiç basmadan bitirme ya da süre rekoru. Toplam 90 yıldız.
+
+Üç görevden ikisi sonraki bölümü açmaya yeter; üçüncüsü ustalık isteyen oyuncu için orada durur. Her bölüm aynı hızla, 60 km/s ile başlar — kariyer boyunca artan şey trafik yoğunluğu ve bölümün senden istediğidir. Sonuncusu 120 saniyede 5.000 metre ister.
 
 SONSUZ MOD
 Süre yok, hedef yok. Sadece sen ve giderek hızlanan trafik. Her 30 saniyede hız ve araç yoğunluğu artar. Kişisel rekorun kaydedilir; rekoruna 5 saniye kala oyun sana haber verir.
 
 GARAJ VE YÜKSELTMELER
-Kazandığın coinlerle dört dalı geliştir: HIZ, İVME, FREN ve BOOST. Her dalın 8 seviyesi var ve her seviye ölçülebilir bir fark yaratır. Dikkat: hız yükseltmesi skoru artırır ama trafiği de hızlandırır. Bu bir tercihtir, bedava bir kazanç değil.
+Kazandığın coinlerle dört dalı geliştir: HIZ, İVME, FREN ve BOOST. Her dalın 8 seviyesi var ve her seviye ölçülebilir bir fark yaratır. HIZ bedava bir kazanç değildir: skorun seni çıkarabileceği tavan hızı yükseltir, sen hızlandıkça trafik de üzerine daha hızlı gelir.
 
-ARACINI SEN SEÇ
-Yedi gövde (Şehir, Yarış Sedan, Kuş SLX, Dağ Keçisi, Kas Arabası, Boğa 67, Süper Araba) ve on boya. Görünüm değişir, çarpışma kutusu değişmez — özelleştirme kimseye avantaj vermez, sadece garajın senin olur.
+ON BİR ARAÇ
+Beety, Şehir, Yarış Sedan, Kuş SLX, Dağ Keçisi, Kas Arabası, Boğa 67, Motosiklet, Süper Araba, Tır ve Formula — üstüne on bir boya.
+
+Araç sadece bir kaplama değildir. Her aracın kendi son hızı, ivmesi, freni ve boost karakteri vardır — satın almadan önce garajda çubuklarla görürsün — ayrıca Motosiklet ve Tır yolda diğerlerinden fiziksel olarak farklı boyuttadır. Boya tamamen kozmetiktir, renkten başka hiçbir şeyi değiştirmez. Oyuna Beety ile bedava başlarsın; gerisi oynayarak kazandığın coinlerle alınır. Gerçek parayla satın alınacak hiçbir şey yoktur.
 
 GÜNLÜK VE HAFTALIK GÖREVLER
 Her gün üç kademeli tek bir görev: ilk kademe erken gelir, üstü "biraz daha dayan" der. Çarpsan bile o koşuda ulaştığın kademelerin ödülünü alırsın. Haftalık beş görev daha ve hafta sonunda bir sandık bekler.
@@ -28,7 +32,7 @@ NASIL OYNANIR
 Sol ve sağ butonlarla ya da ekranda parmağını kaydırarak şerit değiştir. Fren butonu yavaşlatır ve boost barını doldurur. Boost butonu seni öne fırlatır. Şerit değişiminde titreşimli geri bildirim alırsın. Oyun dikey tutuşa göre tasarlandı; tek elle oynanır.
 
 REKLAMLAR HAKKINDA
-Oyun ücretsizdir ve reklamlarla desteklenir. Koşu sırasında asla reklam gösterilmez: banner yalnızca menü ekranlarında, geçiş reklamı yalnızca koşu bittikten sonra çıkar. Ödüllü reklamlar tamamen isteğe bağlıdır — izlersen coin kazanır ya da çarptığın koşuya bir kez devam edersin. Hiç izlemezsen oyunun hiçbir bölümü, aracı ya da yükseltmesi kapalı kalmaz.
+Oyun ücretsizdir ve reklamlarla desteklenir. Koşu sırasında asla reklam gösterilmez: banner yalnızca menü ekranlarında, geçiş reklamı yalnızca koşu bittikten sonra çıkar — ilk üç bölümde hiç çıkmaz. Ödüllü reklamlar tamamen isteğe bağlıdır — izlersen coin kazanır ya da çarptığın koşuya bir kez devam edersin. Hiç izlemezsen oyunun hiçbir bölümü, aracı ya da yükseltmesi kapalı kalmaz.
 
 Kron Drive'da gerçek para, token, cüzdan ya da kazanç mekaniği yoktur. Sadece oyun.
 

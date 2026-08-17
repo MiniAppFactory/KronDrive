@@ -67,6 +67,14 @@ class GameStateRepository(private val context: Context) {
         val ENDLESS_BEST_SCORE = intPreferencesKey("endless_best_score")
 
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
+
+        /**
+         * Titresim tercihi; 2026-08-17'de (v1.0.9 sonrasi) eklendi. Eski
+         * kayitlarda YOK ve okumasi bilerek `?: true` — titresim bu
+         * anahtardan once kosulsuz calisiyordu, varsayilan kapali olsaydi
+         * guncelleyen oyuncunun oyunu sessizce degisirdi.
+         */
+        val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         val LANGUAGE = stringPreferencesKey("language")
 
         /**
@@ -126,6 +134,9 @@ class GameStateRepository(private val context: Context) {
             endlessBestSeconds = prefs[Keys.ENDLESS_BEST_SECONDS] ?: 0,
             endlessBestScore = prefs[Keys.ENDLESS_BEST_SCORE] ?: 0,
             soundEnabled = prefs[Keys.SOUND_ENABLED] ?: true,
+            // Anahtari olmayan (guncelleme oncesi) kayit icin ACIK — bkz.
+            // Keys.VIBRATION_ENABLED.
+            vibrationEnabled = prefs[Keys.VIBRATION_ENABLED] ?: true,
             // Ilk kurulumda cihazin diline gore secilir, sonra kullanicinin
             // ayarlardaki tercihi kalicidir.
             language = prefs[Keys.LANGUAGE]?.let { AppLanguage.fromCode(it) }
@@ -473,6 +484,10 @@ class GameStateRepository(private val context: Context) {
 
     suspend fun setSoundEnabled(enabled: Boolean) {
         context.gameDataStore.edit { it[Keys.SOUND_ENABLED] = enabled }
+    }
+
+    suspend fun setVibrationEnabled(enabled: Boolean) {
+        context.gameDataStore.edit { it[Keys.VIBRATION_ENABLED] = enabled }
     }
 
     suspend fun setLanguage(language: AppLanguage) {

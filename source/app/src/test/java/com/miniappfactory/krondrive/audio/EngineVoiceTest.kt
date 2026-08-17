@@ -36,11 +36,15 @@ class EngineVoiceTest {
             voice.update(speed = 8.5f, boosting = true)
             voice.renderPeak(1f)
             // Sonra en kotu durum: motor + surekli tislama + nitro + korna +
-            // CARPISMA, hepsi AYNI ANDA. (Oyunda korna ile carpismanin ust
-            // uste binmesi mumkun: oyuncu kornaya basip hemen carpabilir.)
+            // CARPISMA + geri sayimin son bipi, hepsi AYNI ANDA. (Oyunda korna
+            // ile carpismanin ust uste binmesi mumkun: oyuncu kornaya basip
+            // hemen carpabilir. Bip de girebilir: "BASLA" bipi kosunun ilk
+            // yarim saniyesinde caliyor ve oyuncu o sirada boost'a basip
+            // carpabilir.)
             voice.playNitro()
             voice.playHorn()
             voice.playCrash()
+            voice.playCountdownBeep(final = true)
             val peak = voice.renderPeak(1f)
 
             assertTrue("${profile.id}: sessiz kaldi", peak > 0.01f)
@@ -320,6 +324,151 @@ class EngineVoiceTest {
 
         voice.reset()
         assertFalse("reset carpismayi durdurmali", voice.isCrashActive())
+    }
+
+    // ------------------------------------------------------------------
+    // Geri sayim bipi
+    // ------------------------------------------------------------------
+
+    /** Motor sustururken (gain 0) yalnizca bipi uretir. */
+    private fun beepOnly(
+        final: Boolean,
+        profile: CarSoundProfile = CarSoundProfiles.DEFAULT,
+        seconds: Float = 0.7f
+    ): FloatArray {
+        val voice = EngineVoice(sampleRate, profile)
+        voice.playCountdownBeep(final)
+        return FloatArray((sampleRate * seconds).toInt()).also { voice.render(it) }
+    }
+
+    @Test
+    fun `bip zarfi sifirdan baslar ve sifira doner`() {
+        val voice = EngineVoice(sampleRate)
+        voice.playCountdownBeep(final = false)
+        assertTrue(voice.isCountdownBeepActive())
+
+        val ilk = FloatArray(8)
+        voice.render(ilk)
+        assertEquals("bip basinda tik olmamali", 0f, ilk[0], 1e-6f)
+        // 8 ornek = 0.36 ms; atak 6 ms, yani zarf henuz acilmis olamaz.
+        assertTrue("atak cok hizli acilmamali", abs(ilk[7]) < 0.05f)
+
+        // Sure dolunca kendiliginden susar ve kuyruk birakmaz.
+        voice.renderPeak(EngineVoice.COUNTDOWN_BEEP_SECONDS + 0.1f)
+        assertFalse("bip suresi dolmus olmali", voice.isCountdownBeepActive())
+        assertEquals("bip bittikten sonra sessizlik", 0f, voice.renderPeak(0.1f), 1e-6f)
+    }
+
+    /**
+     * Olculen tepeler (`tools/preview_countdown_beep.py`): hazirlik 0.163,
+     * "BASLA" 0.224. Ikisi de korna (0.30) ve carpismanin (0.33–0.37)
+     * ALTINDA — geri sayim sessizligin uzerine caldigi icin bilincli.
+     */
+    @Test
+    fun `bip duyulur ama kornadan yuksek degildir`() {
+        val hazirlik = beepOnly(final = false).maxOf { abs(it) }
+        val basla = beepOnly(final = true).maxOf { abs(it) }
+
+        assertTrue("hazirlik bipi duyulmuyor ($hazirlik)", hazirlik > 0.12f)
+        assertTrue("BASLA bipi duyulmuyor ($basla)", basla > 0.18f)
+        assertTrue("BASLA bipi vurguyu tasimali ($basla vs $hazirlik)", basla > hazirlik)
+        assertTrue(
+            "bip kornadan yuksek olmamali ($basla)",
+            basla <= EngineVoice.HORN_LEVEL
+        )
+    }
+
+    /**
+     * Son bip bir OKTAV tiz ve belirgin olarak daha uzun. Oktav olmasi,
+     * kulagin onu "baska bir ses" degil "ayni sesin tizi" olarak isitmesini
+     * sagliyor; cozulme hissini tasiyan sey bu.
+     *
+     * Perde olcusu sifir gecis sayisi: `sin(a) + 0.30·sin(2a)` =
+     * `sin(a)·(1 + 0.6·cos(a))` ve ikinci carpan hicbir zaman isaret
+     * degistirmedigi icin (0.6 < 1) dalga tam olarak periyot basina iki kez
+     * sifiri gecer. Yani sayim dogrudan frekansi olcer.
+     */
+    @Test
+    fun `BASLA bipi bir oktav tiz ve daha uzun`() {
+        fun sifirGecis(x: FloatArray): Int {
+            var n = 0
+            for (i in 1 until x.size) if ((x[i] < 0f) != (x[i - 1] < 0f)) n++
+            return n
+        }
+
+        // Ikisinin de kesin caldigi ORTAK pencere: 0.10 sn (kisa bip 0.12 sn).
+        val pencere = (sampleRate * 0.10f).toInt()
+        val hazirlik = sifirGecis(beepOnly(final = false).copyOf(pencere))
+        val basla = sifirGecis(beepOnly(final = true).copyOf(pencere))
+
+        assertTrue(
+            "son bip bir oktav tiz olmali ($hazirlik -> $basla)",
+            basla > 1.9f * hazirlik && basla < 2.1f * hazirlik
+        )
+
+        // Sure: kisa bip biterken uzun bip hala caliyor olmali.
+        val voice = EngineVoice(sampleRate)
+        voice.playCountdownBeep(final = true)
+        voice.renderPeak(EngineVoice.COUNTDOWN_BEEP_SECONDS + 0.05f)
+        assertTrue("BASLA bipi kisa bipten uzun olmali", voice.isCountdownBeepActive())
+    }
+
+    /**
+     * **Bip bir arayuz sesi, motor sesi degil.** Motor, korna, nitro ve
+     * carpisma araca gore renklenir; bip bilerek RENKLENMEZ — geri sayim
+     * isareti her araçta ayni duyulmali, yoksa oyuncu her yeni araci
+     * aldiginda isareti yeniden ogrenmek zorunda kalir.
+     *
+     * Bu yuzden olculen sey "benzer" degil **birebir ayni ornekler**.
+     */
+    @Test
+    fun `bip araca gore degismez`() {
+        val referans = beepOnly(final = true, profile = CarSoundProfiles.DEFAULT)
+        CarSoundProfiles.all.forEach { profile ->
+            val x = beepOnly(final = true, profile = profile)
+            val fark = x.indices.maxOf { abs(x[it] - referans[it]) }
+            assertEquals("${profile.id}: bip araca gore degismis (fark $fark)", 0f, fark, 0f)
+        }
+    }
+
+    @Test
+    fun `ses kapaliyken geri sayim bipi tetiklenmez`() {
+        val voice = EngineVoice(sampleRate)
+        voice.setEnabled(false)
+        voice.playCountdownBeep(final = false)
+        assertFalse("ses kapaliyken bip calmamali", voice.isCountdownBeepActive())
+        voice.playCountdownBeep(final = true)
+        assertFalse("ses kapaliyken son bip de calmamali", voice.isCountdownBeepActive())
+        assertEquals("cikis tamamen sessiz olmali", 0f, voice.renderPeak(0.6f), 1e-6f)
+    }
+
+    /** [EngineVoice.reset] yarim kalmis bipi de temizler (ekrandan cikma). */
+    @Test
+    fun `reset yarim kalmis bipi temizler`() {
+        val voice = EngineVoice(sampleRate)
+        voice.playCountdownBeep(final = true)
+        voice.renderPeak(0.05f)
+        assertTrue(voice.isCountdownBeepActive())
+
+        voice.reset()
+        assertFalse("reset bipi durdurmali", voice.isCountdownBeepActive())
+    }
+
+    /**
+     * Uste uste tetiklenirse zarf SIFIRDAN baslar (yiginmaz) — cunku
+     * `beepRestart` fazi da sifirlar. Oyunda bu ancak rakam bir kare icinde
+     * iki kez degisirse olur, ama davranisin tanimli olmasi gerekiyor.
+     */
+    @Test
+    fun `bip yeniden tetiklenince bastan baslar`() {
+        val voice = EngineVoice(sampleRate)
+        voice.playCountdownBeep(final = false)
+        voice.renderPeak(0.05f)
+
+        voice.playCountdownBeep(final = false)
+        val ilk = FloatArray(8)
+        voice.render(ilk)
+        assertEquals("yeniden tetiklenen bip de sifirdan acilmali", 0f, ilk[0], 1e-6f)
     }
 
     @Test

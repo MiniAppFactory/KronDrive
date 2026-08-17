@@ -6,9 +6,10 @@ import android.media.AudioTrack
 import kotlin.concurrent.Volatile
 
 /**
- * Motor, nitro, korna ve carpisma sesi — calisma aninda sentezlenir, projede
- * tek bayt ses dosyasi yoktur (bkz. `PROVENANCE.md`, "Ses varliklari").
- * Carpisma da bu kuralin icinde: APK'ya 0 bayt ekler.
+ * Motor, nitro, korna, carpisma ve geri sayim sesi — calisma aninda
+ * sentezlenir, projede tek bayt ses dosyasi yoktur (bkz. `PROVENANCE.md`,
+ * "Ses varliklari"). Carpisma ve geri sayim da bu kuralin icinde: APK'ya
+ * 0 bayt eklerler.
  *
  * Bu sinif **yalnizca Android koprusu**: bir `AudioTrack` acar, ayri bir
  * thread'de [EngineVoice]'u dondurur ve ciktiyi 16-bit PCM'e cevirir.
@@ -123,6 +124,24 @@ object EngineSoundManager {
      * [EngineVoice.CRASH_DURATION] kadar (0.46 sn) beklemek gerekir.
      */
     fun playCrash() = voice.playCrash()
+
+    /**
+     * Geri sayim bipi — kosu basindaki 3 → 2 → 1 → BASLA dizisi.
+     *
+     * `ui/game/GameScreen.kt` bunu **rakam degistiginde bir kez** cagirir
+     * (kare basina degil); son cagri [final] = `true` ile, rakamin 0'a
+     * dustugu — yani kosunun basladigi — karede yapilir.
+     *
+     * Ses ayari kapaliyken sessizdir: [setEnabled] zaten [EngineVoice]
+     * uzerinde tetikleyicileri kapatiyor, cagiran tarafta ayrica kontrol
+     * gerekmez (motorun kendisi de boyle calisiyor).
+     *
+     * ⚠ [stop] cagrildiginda ses thread'i biter, yani son bip
+     * [EngineVoice.COUNTDOWN_GO_SECONDS] (0.5 sn) dolmadan ses motoru
+     * durdurulursa efekt duyulmadan kesilir. Pratikte bu yalnizca oyuncunun
+     * kosu baslar baslamaz uygulamayi arka plana almasi demektir.
+     */
+    fun playCountdownBeep(final: Boolean) = voice.playCountdownBeep(final)
 
     private fun renderLoop(audioTrack: AudioTrack) {
         val samples = FloatArray(BUFFER_FRAMES)

@@ -37,3 +37,6 @@ service-account*.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Ajanlarin urettigi gecici ses/gorsel onizlemeleri (repoya girmez).
+build-artifacts/

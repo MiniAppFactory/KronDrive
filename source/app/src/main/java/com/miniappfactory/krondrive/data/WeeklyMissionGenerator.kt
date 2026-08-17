@@ -39,12 +39,22 @@ object WeeklyMissionGenerator {
             tiers = listOf(MissionTier(80, 40), MissionTier(200, 60), MissionTier(400, 100)),
             type = MissionType.PASS_VEHICLES
         ),
+        // PERFECT DODGE GOREVI KALDIRILDI (2026-08-17).
+        //
+        // Ayni gun bu hedef 17 kariyer bolumunden kaldirilmisti; gorev
+        // tarafinda kalmis oldugu fark edilmedi. Olcum (LevelCurveTest):
+        // temkinli oyun OTUZ BOLUMUN HICBIRINDE tek bir dodge yapmiyor.
+        // Yani haftada 60 dodge isteyen bu gorev, temkinli oyuncu icin
+        // ulasilamazdi ve haftalik sandigi (haftalik gelirin ~%43'u) ona
+        // tamamen kapatiyordu.
+        //
+        // Yerine mesafe: her oynayis bicimiyle ilerler, beceri kapisi yok.
         WeeklyMissionDef(
-            id = "perfect_dodges",
-            titleTr = "{count} Perfect Dodge Yap",
-            titleEn = "Perform {count} Perfect Dodges",
-            tiers = listOf(MissionTier(15, 40), MissionTier(35, 60), MissionTier(60, 100)),
-            type = MissionType.PERFECT_DODGES
+            id = "boost_distance",
+            titleTr = "Boost'la {count} m Git",
+            titleEn = "Travel {count} m on Boost",
+            tiers = listOf(MissionTier(2000, 40), MissionTier(5000, 60), MissionTier(9000, 100)),
+            type = MissionType.DRIVE_DISTANCE
         ),
         WeeklyMissionDef(
             id = "big_combos",

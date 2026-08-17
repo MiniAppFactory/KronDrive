@@ -77,7 +77,22 @@ fun KronScreen(
                     if (onBack != null) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                // 40 -> 48 dp (2026-08-17). Bu buton Kariyer,
+                                // Garaj, Gorevler ve Ayarlar ekranlarinin
+                                // HEPSINDE tek geri donus yolu ve Android'in
+                                // onerdigi 48 dp'lik asgari dokunma hedefinin
+                                // altindaydi (docs/REVIEW_UX.md §6). Duraklat
+                                // tusu ve hiz kilidi ayni gerekceyle
+                                // 2026-08-16'da 48'e cikarilmisti; burasi o
+                                // isin eksik kalan parcasi.
+                                //
+                                // Baslik sutunu 8 dp daralir: 360 dp genislikte
+                                // satirda 14+14 dolgu, 48 buton ve baslik icin
+                                // 12+12 dolgu dusunce ~260 dp kaliyor; en uzun
+                                // baslik ("GÖREVLER", 22 sp) ~106 dp ve
+                                // yanindaki coin rozeti ~90 dp — 260 dp'ye
+                                // rahat siginiyor.
+                                .size(48.dp)
                                 .background(KronColors.Surface, RoundedCornerShape(14.dp))
                                 .border(1.dp, KronColors.SurfaceBorder, RoundedCornerShape(14.dp))
                                 .clickable(onClick = onBack),

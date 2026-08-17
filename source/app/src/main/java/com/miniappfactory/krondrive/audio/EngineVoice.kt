@@ -7,8 +7,8 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Motor + nitro + korna + carpisma sentezinin TAMAMI. **Saf Kotlin** — tek bir
- * Android importu yok.
+ * Motor + nitro + korna + carpisma + geri sayim bipinin sentezinin TAMAMI.
+ * **Saf Kotlin** — tek bir Android importu yok.
  *
  * Bu ayrimin sebebi test edilebilirlik: bu makinede hoparlor ve adb yok, yani
  * sesi *dinleyerek* dogrulamak mumkun degil. Sentez Android'in `AudioTrack`
@@ -35,6 +35,35 @@ import kotlin.math.sin
  * | Nitro fisss + islik | ~0.20 |
  * | Korna | 0.30 |
  * | Carpisma | 0.33–0.37 |
+ * | Geri sayim hazirlik bipi | 0.163 |
+ * | Geri sayim "BASLA" bipi | 0.224 |
+ *
+ * ## 2026-08-17 — geri sayim bipi eklendi
+ *
+ * Bip yukaridaki yuke ancak son bip ([playCountdownBeep] `final = true`)
+ * uzerinden girebilir: kosunun ilk 0.5 saniyesinde caliyor ve teorik olarak
+ * oyuncu o yarim saniyede boost'a basip (nitro), kornaya dokunup ve carpip
+ * her seyi ust uste bindirebilir. `EngineVoiceTest` zaten tam olarak bu
+ * senaryoyu kuruyor.
+ *
+ * `tools/preview_countdown_beep.py` (bu dosyanin TAM portu — motor + doku +
+ * nitro + korna + carpisma + bip) ayni senaryoyu on profil icin olctu:
+ *
+ * | | bipsiz | bipli |
+ * |---|---|---|
+ * | en buyuk tepe | 0.486 | **0.636** |
+ *
+ * Bipin getirdigi artis profile gore 0.124–0.218, yani hicbir yerde bipin
+ * kendi tepesini (0.224) asmiyor — beklenen davranis.
+ *
+ * ⚠ **Iki olcum aleti toplamda ayni sayiyi vermiyor** ve bu bilerek
+ * gizlenmedi: yukaridaki 0.556, bipten onceki ayri bir offline olcumden
+ * geliyor; yeni betik ayni senaryoyu 0.486 goruyor. Betigin dogrulugu
+ * carpisma katmaninda birebir teyit edildi (on profilin hepsinde 0.333–0.370,
+ * yukaridaki tabloyla ayni), yani port sadik; farkin nereden geldigi
+ * COZULMEDI. Bu yuzden guvenli sayi YUKSEK olani: 0.556 + 0.224 = **0.78**
+ * kesin ust sinir, yine de 0.90 esiginin altinda. Gercek karar mercii her
+ * durumda `EngineVoiceTest`.
  *
  * ⚠ 2026-08-17'ye kadar burada "toplam tepe ~0.65'te kalir" yaziyordu ve bu
  * **olculmemis bir tahmindi**. Ayni yuk carpisma EKLENMEDEN olculunce tepe
@@ -90,6 +119,16 @@ class EngineVoice(
     @Volatile
     private var hornRestart = false
 
+    /** Geri sayim bipi — kalan sure, "son bip mi" ve faz sifirlama bayragi. */
+    @Volatile
+    private var beepRemaining = 0f
+
+    @Volatile
+    private var beepFinal = false
+
+    @Volatile
+    private var beepRestart = false
+
     private var hornEverPlayed = false
     private var lastHornNanos = 0L
 
@@ -129,6 +168,9 @@ class EngineVoice(
     private var crashLpHi = 0f
     private var crashLpLo = 0f
 
+    /** Geri sayim bipi — yalnizca render thread'i dokunur. */
+    private var beepPhase = 0f
+
     // --- Kontrol -----------------------------------------------------------
 
     fun setProfile(shapeId: String?) {
@@ -151,6 +193,7 @@ class EngineVoice(
             nitroRemaining = 0f
             hornRemaining = 0f
             crashRemaining = 0f
+            beepRemaining = 0f
         }
     }
 
@@ -186,6 +229,7 @@ class EngineVoice(
         nitroRemaining = 0f
         hornRemaining = 0f
         crashRemaining = 0f
+        beepRemaining = 0f
     }
 
     /** Boost'a basildigi an calan nitro efekti. */
@@ -242,6 +286,46 @@ class EngineVoice(
     /** Test/gozlem icin: carpisma sesi su an caliyor mu. */
     fun isCrashActive(): Boolean = crashRemaining > 0f
 
+    /**
+     * **Geri sayim bipi.** Kosu basindaki 3 → 2 → 1 → BASLA dizisinin sesi.
+     *
+     * Klasik yaris deseni: uc kisa alcak bip, sonra bir uzun yuksek bip.
+     * Cagiran taraf her RAKAM DEGISIMINDE bir kez cagirir; son bip
+     * ([final] `true`) kosunun gercekten basladigi kareye denk gelir.
+     *
+     * ## Neden araca gore DEGISMIYOR
+     *
+     * Bu bir **arayuz sesi**, motor sesi degil. Motor, korna, nitro ve
+     * carpismanin hepsi [CarSoundProfile] ile renkleniyor; bip bilerek
+     * renklenmiyor. Sebep: geri sayim oyuncuya "hazir ol / simdi" diyen bir
+     * ISARET. Isaret aractan aracta degisirse oyuncu her yeni araci aldiginda
+     * yeniden ogrenmek zorunda kalir ve isaretin tek isi olan "tanidiklik"
+     * kaybolur. Ayni sebeple menudeki tik sesi de araca bagli degildir.
+     *
+     * Iki bipi ayiran sey tek bir sey: **oktav**. [COUNTDOWN_GO_HZ] tam olarak
+     * [COUNTDOWN_BEEP_HZ]'in iki kati, yani son bip "baska bir ses" degil
+     * "ayni sesin bir oktav tizi" olarak duyulur — cozulme hissi buradan gelir.
+     *
+     * Ses kapaliyken hicbir sey tetiklenmez. Kornadan farkli olarak **bekleme
+     * suresi yok**: bip bir tusa basisla degil, sayacin kendisiyle tetiklenir
+     * ve saniyede birden sik gelemez. Uste uste cagrilirsa zarf sifirdan
+     * baslar (yiginmaz), cunku [beepRestart] fazi da sifirlar.
+     *
+     * ⚠ Bu API'yi cagirmak **oynanisi hicbir sekilde etkilemez** ve oyun
+     * dongusunu bekletmez: yalnizca uc `volatile` alan yazar.
+     *
+     * @param final son ("BASLA") bipi mi — uzun ve bir oktav tiz calar.
+     */
+    fun playCountdownBeep(final: Boolean) {
+        if (!enabled) return
+        beepFinal = final
+        beepRemaining = if (final) COUNTDOWN_GO_SECONDS else COUNTDOWN_BEEP_SECONDS
+        beepRestart = true
+    }
+
+    /** Test/gozlem icin: geri sayim bipi su an caliyor mu. */
+    fun isCountdownBeepActive(): Boolean = beepRemaining > 0f
+
     // --- Sentez ------------------------------------------------------------
 
     /**
@@ -250,6 +334,13 @@ class EngineVoice(
      */
     fun render(out: FloatArray, count: Int = out.size) {
         val p = profile
+        // Bip cesidi tampon basina BIR KEZ okunur: ornek basina okumak uc
+        // volatile erisimi demek olurdu ve iki bip arasinda en az bir saniye
+        // var, yani tampon icinde degismesi pratikte imkansiz.
+        val beepIsFinal = beepFinal
+        val beepDuration = if (beepIsFinal) COUNTDOWN_GO_SECONDS else COUNTDOWN_BEEP_SECONDS
+        val beepHz = if (beepIsFinal) COUNTDOWN_GO_HZ else COUNTDOWN_BEEP_HZ
+        val beepLevel = if (beepIsFinal) COUNTDOWN_GO_LEVEL else COUNTDOWN_BEEP_LEVEL
 
         // --- Hiza bagli parlaklik egimi ---------------------------------
         // Tampon basina BIR KEZ: profil tampon icinde degismez ve hiz 60 Hz'de
@@ -442,6 +533,36 @@ class EngineVoice(
                 if (crashRemaining < 0f) crashRemaining = 0f
             }
 
+            // --- Geri sayim bipi --------------------------------------------
+            if (beepRestart) {
+                beepRestart = false
+                beepPhase = 0f
+            }
+            if (beepRemaining > 0f) {
+                val elapsed = beepDuration - beepRemaining
+                val t = elapsed / beepDuration
+                // Atak sifirdan acilir, birakma sifira iner (iki ucta da tik
+                // yok), aradaki ussel sonum de bipi "duz bir vinlama" olmaktan
+                // cikarip vurusu olan bir TIK yapar. Sonum NORMALIZE zamanla
+                // (t) calisir, yani kisa ve uzun bip AYNI SEKILDE soner —
+                // ikisinin ayni sesin iki boyu olarak duyulmasi bundan.
+                val envelope = min(1f, elapsed / COUNTDOWN_ATTACK) *
+                    min(1f, beepRemaining / COUNTDOWN_RELEASE) *
+                    exp(-t * COUNTDOWN_DECAY)
+
+                beepPhase = advance(beepPhase, beepHz)
+                val a = beepPhase * twoPi
+                // Temel + ikinci harmonik. Duz sinus telefon hoparlorunde
+                // yumusak ve "yutulmus" duyuluyor; ikinci harmonik bipe
+                // elektronik bir kenar verip motorun ustunden gecmesini
+                // sagliyor (son bip kosunun ilk yarim saniyesiyle cakisiyor).
+                val tone = sin(a) + COUNTDOWN_HARMONIC * sin(2f * a)
+                sample += tone * COUNTDOWN_NORMALIZE * beepLevel * envelope
+
+                beepRemaining -= dt
+                if (beepRemaining < 0f) beepRemaining = 0f
+            }
+
             out[i] = sample.coerceIn(-1f, 1f)
         }
     }
@@ -564,5 +685,85 @@ class EngineVoice(
         /** Kirilma dokusunun bant geciren sinirlari (profil oteler). */
         const val CRASH_NOISE_HI_HZ = 3600f
         const val CRASH_NOISE_LO_HZ = 380f
+
+        // --- Geri sayim bipi -----------------------------------------------
+        //
+        // Frekanslar telefon hoparlorune gore secildi. Motor bilerek 45–150 Hz
+        // bandinda (dosyanin basindaki not) ve o bandi kucuk hoparlor zaten
+        // zor basiyor — motorda bu bir sorun degil, cunku motorun isi arka
+        // planda "hissedilmek". Bip ise ANLASILMAK zorunda, o yuzden tam
+        // tersi bir yere kondu: 880 Hz ve 1760 Hz, kucuk hoparlorlerin en
+        // verimli oldugu banda. Ayrica motorun urettigi spektrum besinci
+        // harmonikte biter (tepe hizda ~870 Hz), yani 1760 Hz'lik son bip
+        // motorun HIC dolduramadigi bir bosluga oturur ve maskelenmez.
+
+        /** Hazirlik bipi: A5. Uc kez calar (3, 2, 1). */
+        const val COUNTDOWN_BEEP_HZ = 880f
+
+        /**
+         * "BASLA" bipi: A6 — tam olarak [COUNTDOWN_BEEP_HZ]'in IKI KATI.
+         * Oktav olmasi kasitli: kulak bunu "baska bir ses" degil "ayni sesin
+         * tizi" olarak isitir, cozulme hissini tasiyan sey bu.
+         */
+        const val COUNTDOWN_GO_HZ = 1760f
+
+        /**
+         * Hazirlik bipinin suresi. 880 Hz'de 0.12 sn ~106 cevrim eder — perde
+         * tereddutsuz duyulur, ama saniyede bir gelen bipler arasinda
+         * fazlasiyla sessizlik kalir (0.88 sn), yani uc bip birbirine
+         * yapismaz.
+         */
+        const val COUNTDOWN_BEEP_SECONDS = 0.12f
+
+        /**
+         * "BASLA" bipinin suresi. Rakam 0'a dustugu kare kosunun basladigi
+         * karedir; bip o kareden sonra 0.5 sn daha surer ve bilerek kosunun
+         * UZERINE tasar — bip tam baslangicta kesilirse "git" demek yerine
+         * "bitti" demis oluyor. Daha uzun tutulmadi cunku motor sesi ~90 ms'de
+         * (SMOOTHING) tam seviyesine ciktigi icin bipin altinda zaten dolu bir
+         * ses var.
+         */
+        const val COUNTDOWN_GO_SECONDS = 0.50f
+
+        /**
+         * Atak. 880 Hz'de ~5, 1760 Hz'de ~11 cevrim: baslangictaki tik'i
+         * temizlemeye yeter, ama 6 ms insan kulaginin "gecikme" olarak
+         * algiladigi esigin (~20 ms) cok altinda — yani bip hala ANINDA
+         * duyulur.
+         */
+        const val COUNTDOWN_ATTACK = 0.006f
+
+        /** Son bu kadar saniye sonumlenerek biter (sonda tik birakmaz). */
+        const val COUNTDOWN_RELEASE = 0.045f
+
+        /**
+         * Zarfin ussel sonumu, NORMALIZE zaman uzerinden (`exp(-t·decay)`,
+         * t = 0..1). Bipin sonunda kalan carpan `exp(-1.2)` = 0.30. Kisa ve
+         * uzun bip ayni egriden gectigi icin ikisi "ayni sesin iki boyu"
+         * olarak duyulur; egri olmasaydi 0.5 sn'lik son bip vinlayan bir
+         * sinyal sesine donerdi.
+         */
+        const val COUNTDOWN_DECAY = 1.2f
+
+        /**
+         * Tepe seviyeler. Kornadan (0.30) ve carpismadan (~0.35) ALCAK
+         * olmasi kasitli: geri sayim SESSIZLIGIN uzerine caliyor (o sirada
+         * `phase != RUNNING` oldugu icin motorun hedef genligi 0), yani
+         * duyulmak icin yuksek olmasi gerekmiyor. Son bipin hazirlik bipinden
+         * yuksek olmasi ise gerekiyor — vurgu onda.
+         */
+        const val COUNTDOWN_BEEP_LEVEL = 0.20f
+        const val COUNTDOWN_GO_LEVEL = 0.26f
+
+        /**
+         * Ikinci harmonigin payi ve onu ±1'e sigdiran carpan — profillerdeki
+         * `waveNormalize` ile ayni sozlesme. Bolen (1 + pay) oldugu icin
+         * garanti muhafazakar: `sin(a) + 0.30·sin(2a)`'nin gercek tepesi
+         * 1.1365 (a = 1.1547 rad), yani normalize edilmis dalganin tepesi
+         * 0.8742 — bipin olculen tepeleri de bu carpandan cikiyor
+         * (0.26 · 0.8742 · zarf = 0.224).
+         */
+        const val COUNTDOWN_HARMONIC = 0.30f
+        const val COUNTDOWN_NORMALIZE = 1f / (1f + COUNTDOWN_HARMONIC)
     }
 }

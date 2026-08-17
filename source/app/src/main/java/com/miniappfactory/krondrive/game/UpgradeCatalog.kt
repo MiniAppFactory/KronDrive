@@ -69,6 +69,14 @@ object UpgradeCatalog {
     }
 
     /** SPEED: skordan gelen hiz tavani buyur (seviye 8'de +1.12 birim ~ 216 km/h). */
+    /**
+     * Kariyerin baslangic hizi (birim). Butun bolumler bunu kullaniyor
+     * ([LevelCatalog], `startSpeedKmh = 60`); garaj gostergesi de buna gore
+     * hesaplar. [GameConfig.BASE_SPEED] (80 km/h) yalnizca sonsuz modun
+     * tabani.
+     */
+    val CAREER_BASE_SPEED: Float = GameConfig.speedFromKmh(60)
+
     fun scoreSpeedCap(speedLevel: Int): Float =
         GameConfig.SCORE_SPEED_CAP_BASE + 1.12f * curve(speedLevel)
 
@@ -151,8 +159,27 @@ object UpgradeCatalog {
      * (bkz. docs/REVIEW_GAMEPLAY.md).
      */
     fun displayValue(type: UpgradeType, level: Int, car: CarShapeDef): String = when (type) {
+        // TABAN: kariyerin baslangic hizi, [GameConfig.BASE_SPEED] DEGIL.
+        //
+        // 2026-08-17'de her bolum 60 km/h'den baslar oldu (once 60-75 arasi
+        // rampaliydi ve 9+ bolumler 80'lik varsayilana dusuyordu). Garaj ise
+        // hesabini hala 80 tabaniyla yapiyordu, yani KARIYERDE ULASILMAYACAK
+        // bir sayi yaziyordu: seviye 1 icin 177, gercekte 158.
+        //
+        // Bu, 2026-08-16'da kapatilan "garaj her arac icin ayni hizi yaziyor"
+        // kusurunun ayni ailesinden — ama bu sefer sayinin kendisi yanlisti.
+        //
+        // Neden kariyer tabani secildi: 30 bolumun 30'u kariyerde ve garaj
+        // yukseltmeleri oraya hizmet ediyor. Sonsuz modda oyuncu bu sayinin
+        // biraz USTUNE cikar; az soz verip fazlasini vermek, tersinden
+        // daha iyidir.
+        //
+        // ⚠ Bolum bazli [LevelDef.speedRampScale] yuzunden erken bolumlerde
+        // gercek tavan daha da dusuk (bolum 1'de ~100 km/h). Tek bir sayi
+        // butun bolumleri anlatamaz; burada gosterilen, rampa 1.0 olan
+        // bolumlerin tavanidir.
         UpgradeType.SPEED ->
-            "${GameConfig.speedToKmh(GameConfig.BASE_SPEED + scoreSpeedCap(level, car))} km/h"
+            "${GameConfig.speedToKmh(CAREER_BASE_SPEED + scoreSpeedCap(level, car))} km/h"
 
         // Saniye yerine MILISANIYE: "0.2 s" gosterimi seviye 2'den sonra tum
         // seviyelerde "0.1 s"e yuvarlaniyordu, yani garaj oyuncuya "ivme

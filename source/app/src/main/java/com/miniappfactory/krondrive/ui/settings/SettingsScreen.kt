@@ -38,7 +38,7 @@ import com.miniappfactory.krondrive.ui.theme.KronColors
 private val ROW_MIN_HEIGHT = 56.dp
 
 /**
- * Ayarlar: ses, dil ve salt okunur bilgi blogu.
+ * Ayarlar: ses, titresim, dil ve salt okunur bilgi blogu.
  *
  * Dil degisikligi Activity'yi yeniden yaratmaz — metinler [AppLanguage.pick] ile
  * secildigi icin recomposition yeterlidir.
@@ -48,6 +48,7 @@ fun SettingsScreen(
     progress: PlayerProgress,
     adsConsentResolved: Boolean,
     onSoundEnabled: (Boolean) -> Unit,
+    onVibrationEnabled: (Boolean) -> Unit,
     onLanguage: (AppLanguage) -> Unit,
     onBack: () -> Unit
 ) {
@@ -66,10 +67,35 @@ fun SettingsScreen(
                 .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            SoundCard(
-                soundEnabled = progress.soundEnabled,
-                language = language,
-                onSoundEnabled = onSoundEnabled
+            ToggleCard(
+                title = language.pick(tr = "SES", en = "SOUND"),
+                subtitle = if (progress.soundEnabled) {
+                    language.pick(tr = "Efektler açık", en = "Effects on")
+                } else {
+                    language.pick(tr = "Efektler kapalı", en = "Effects off")
+                },
+                checked = progress.soundEnabled,
+                onCheckedChange = onSoundEnabled
+            )
+
+            // Titresim anahtari (2026-08-17). Bu anahtardan once serit
+            // degistirme, korna ve carpisma titresimleri kosulsuzdu ve
+            // oyuncunun kapatma yolu yoktu (docs/REVIEW_UX.md §6 notu).
+            // Varsayilan ACIK — bkz. PlayerProgress.vibrationEnabled.
+            ToggleCard(
+                title = language.pick(tr = "TİTREŞİM", en = "VIBRATION"),
+                // Alt satir SES kartiyla ayni kalipta ve kisa tutuldu:
+                // "Şerit değiştirme ve çarpışmada titreşir" 11 sp'de ~220 dp
+                // ve 360 dp'lik ekranda anahtardan sonra kalan ~252 dp'lik
+                // sutuna ancak siginiyordu — Turkce metin biraz uzasa ya da
+                // yazi olcegi buyutulse iki satira dusuyordu.
+                subtitle = if (progress.vibrationEnabled) {
+                    language.pick(tr = "Titreşim açık", en = "Vibration on")
+                } else {
+                    language.pick(tr = "Titreşim kapalı", en = "Vibration off")
+                },
+                checked = progress.vibrationEnabled,
+                onCheckedChange = onVibrationEnabled
             )
 
             LanguageCard(current = language, onLanguage = onLanguage)
@@ -129,11 +155,19 @@ private fun PrivacyCard(language: AppLanguage) {
     }
 }
 
+/**
+ * Baslik + durum satiri + anahtar. Eskiden yalnizca ses icin vardi
+ * (`SoundCard`); titresim anahtari eklenirken ayni karti ikinci kez yazmak
+ * yerine metinler disari alindi. Duzen, olculer ve anahtar renkleri
+ * DEGISMEDI — ses karti bu degisiklikten once nasil goruniyorsa oyle
+ * gorunmeye devam eder.
+ */
 @Composable
-private fun SoundCard(
-    soundEnabled: Boolean,
-    language: AppLanguage,
-    onSoundEnabled: (Boolean) -> Unit
+private fun ToggleCard(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
 ) {
     KronCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -147,25 +181,21 @@ private fun SoundCard(
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(
-                    text = language.pick(tr = "SES", en = "SOUND"),
+                    text = title,
                     color = KronColors.TextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black
                 )
                 Text(
-                    text = if (soundEnabled) {
-                        language.pick(tr = "Efektler açık", en = "Effects on")
-                    } else {
-                        language.pick(tr = "Efektler kapalı", en = "Effects off")
-                    },
+                    text = subtitle,
                     color = KronColors.TextMuted,
                     fontSize = 11.sp
                 )
             }
 
             Switch(
-                checked = soundEnabled,
-                onCheckedChange = onSoundEnabled,
+                checked = checked,
+                onCheckedChange = onCheckedChange,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = KronColors.Background,
                     checkedTrackColor = KronColors.Accent,

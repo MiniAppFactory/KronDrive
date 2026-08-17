@@ -96,18 +96,24 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
             // Odullu "bedava coin" reklami: odul SADECE SDK gercekten
             // "kazanildi" derse verilir, reklam yuklenemezse ekran normal calisir.
             var coinAdInFlight by remember { mutableStateOf(false) }
+            // Reklam yuklenemezse ekran SUSMUYOR (docs/REVIEW_UX.md §4).
+            // Eskiden `onFailure` bostu: buton bir an "…" olup normale
+            // donuyor, coin gelmiyor ve hicbir aciklama cikmiyordu.
+            var coinAdFailed by remember { mutableStateOf(false) }
             GarageScreen(
                 progress = progress,
                 adsConsentResolved = adsConsentResolved,
                 adInFlight = coinAdInFlight,
+                adFailed = coinAdFailed,
                 onWatchAdForCoins = {
                     if (activity != null && !coinAdInFlight) {
                         coinAdInFlight = true
+                        coinAdFailed = false
                         RewardedAdManager.loadAndShow(
                             context = activity,
                             activity = activity,
                             onRewardEarned = { viewModel.grantRewardedCoins() },
-                            onFailure = { },
+                            onFailure = { coinAdFailed = true },
                             onAdClosed = { coinAdInFlight = false }
                         )
                     }
@@ -140,6 +146,7 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 progress = progress,
                 adsConsentResolved = adsConsentResolved,
                 onSoundEnabled = viewModel::setSoundEnabled,
+                onVibrationEnabled = viewModel::setVibrationEnabled,
                 onLanguage = viewModel::setLanguage,
                 onBack = { navController.popBackStack() }
             )

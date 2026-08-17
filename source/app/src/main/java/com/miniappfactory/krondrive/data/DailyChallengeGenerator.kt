@@ -110,12 +110,21 @@ object DailyChallengeGenerator {
     }
 
     private val TEMPLATES: List<DailyChallenge> = listOf(
+        // "dodge" gorevi KALDIRILDI (2026-08-17), yerine boost mesafesi.
+        //
+        // Ayni gun perfect dodge hedefleri 17 kariyer bolumunden ve haftalik
+        // gorevlerden kaldirilmisti; gunluk sablonlar arasinda kalmis oldugu
+        // gozden kacmisti. Olcum (LevelCurveTest): temkinli oyun otuz bolumun
+        // HICBIRINDE tek bir dodge yapmiyor — yani bu gorev yedi gunde bir
+        // gelip o oyuncuya gunun tamamini kapatiyordu.
+        //
+        // Mekanik duruyor ve hala skor + combo veriyor; SART olmaktan cikti.
         challenge(
-            id = "dodge",
+            id = "boost",
             objectives = listOf(
-                Objective.PerfectDodges(6),
-                Objective.PerfectDodges(14),
-                Objective.PerfectDodges(25)
+                Objective.BoostDistance(350),
+                Objective.BoostDistance(800),
+                Objective.BoostDistance(1400)
             )
         ),
         challenge(
@@ -129,9 +138,13 @@ object DailyChallengeGenerator {
         challenge(
             id = "combo",
             objectives = listOf(
+                // Ucuncu kademe 7 -> 5: [GameConfig.COMBO_MULTIPLIERS]
+                // combo 5'te DOYUYOR, yani oyun 7'yi odullendirmiyor.
+                // Kendi odullendirmedigi sayiyi istemek ayni gun kariyer
+                // bolumlerinde de duzeltilmisti (2026-08-17).
+                Objective.ComboAtLeast(2),
                 Objective.ComboAtLeast(3),
-                Objective.ComboAtLeast(5),
-                Objective.ComboAtLeast(7)
+                Objective.ComboAtLeast(5)
             )
         ),
         challenge(

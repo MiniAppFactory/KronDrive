@@ -61,6 +61,15 @@ data class PlayerProgress(
     val endlessBestSeconds: Int = 0,
     val endlessBestScore: Int = 0,
     val soundEnabled: Boolean = true,
+    /**
+     * Titresim (haptik) tercihi — 2026-08-17'de eklendi.
+     *
+     * VARSAYILAN ACIK olmak ZORUNDA: bu alan gelmeden once serit degistirme,
+     * korna ve carpisma titresimleri KOSULSUZ calisiyordu. Kaydinda bu anahtar
+     * bulunmayan mevcut oyuncu icin `true` okunur (bkz. GameStateRepository)
+     * ve oyun bugunku gibi davranmaya devam eder; goc gerektiren tek nokta bu.
+     */
+    val vibrationEnabled: Boolean = true,
     val language: AppLanguage = AppLanguage.EN,
     /**
      * Oyuncu dili KENDISI secti mi. false ise ilk acilis dil ekrani gosterilir;

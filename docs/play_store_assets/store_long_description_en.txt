@@ -1,19 +1,23 @@
 Three lanes, heavy traffic, and one wrong move. Kron Drive is an arcade racing game about dodging traffic, built on the short, sharp rhythm of 80s arcade cabinets. No menus to wade through, no waiting — tap, switch lanes, survive.
 
 PERFECT DODGE AND COMBO
-Slipping past a car by inches counts as a Perfect Dodge. Chain them and your multiplier climbs: 1.2x, 1.5x, 2x and 3x. Driving safely keeps you alive; taking risks is what makes the score explode. You have 6 seconds to keep the chain alive. This is the heart of the game.
+Slipping past a car by inches counts as a Perfect Dodge. Chain them and your multiplier climbs: 1.2x, 1.5x, 2x and 3x. Driving safely keeps you alive; taking risks is what makes the score explode. You have 6 seconds to keep the chain alive.
 
 30-LEVEL CAREER, 90 STARS
-Every level has one main goal: survive for a set time or reach a distance. On top of that sit three separate star objectives — perfect dodge count, combo rank, score threshold, coins collected, finishing without touching the brake, or beating a time. Ninety stars in total. Early levels open gently at 60 km/h; the last ones ask for 5,000 metres in 120 seconds.
+Every level has one main goal: survive for a set time or reach a distance. On top of that sit three separate star objectives — cars passed, a score threshold, coins collected, a combo rank, distance covered on boost, finishing without touching the brake, or beating a time. Ninety stars in total.
+
+Two of the three objectives are enough to open the next level; the third one is there for players who want to master it. Every level starts you at the same 60 km/h — what rises across the career is traffic density and what the level asks of you. The last one wants 5,000 metres in 120 seconds.
 
 ENDLESS MODE
 No timer, no target. Just you and traffic that keeps getting faster. Speed and vehicle density step up every 30 seconds. Your personal best is saved, and the game tells you when you finish within 5 seconds of your record.
 
 GARAGE AND UPGRADES
-Spend the coins you earn across four branches: SPEED, ACCELERATION, BRAKE and BOOST. Each branch has 8 levels and every level makes a measurable difference. Careful: upgrading speed raises your score but also speeds up traffic. It is a trade-off, not a free win.
+Spend the coins you earn across four branches: SPEED, ACCELERATION, BRAKE and BOOST. Each branch has 8 levels and every level makes a measurable difference. SPEED is not a free win: it raises the top speed your score can push you to, and the faster you drive, the faster traffic closes in on you.
 
-BUILD YOUR CAR
-Seven bodies (City, Race Sedan, Kuş SLX, Mountain Goat, Muscle Car, Boğa 67 and Supercar) and ten paints. The look changes, the hitbox does not — customisation gives nobody an advantage, it just makes the garage yours.
+ELEVEN VEHICLES
+Beety, City, Race Sedan, Kuş SLX, Mountain Goat, Muscle Car, Boğa 67, Motorcycle, Supercar, Truck and Formula, plus eleven paints.
+
+A vehicle is more than a skin. Each one has its own top speed, acceleration, braking and boost character — shown as bars in the garage before you buy — and the motorcycle and the truck are physically narrower and larger on the road than the rest. Paint is purely cosmetic and changes nothing but the colour. You start with Beety for free; everything else is bought with coins you earn by playing. There is nothing to buy with real money.
 
 DAILY AND WEEKLY MISSIONS
 Each day brings one mission with three rising tiers: the first reward lands early, the rest say "hold on a little longer". Even if you crash, you keep the rewards for every tier you reached in that run. Five weekly missions and an end-of-week crate round it out.
@@ -28,7 +32,7 @@ HOW TO PLAY
 Change lanes with the left and right buttons or by swiping across the screen. The brake button slows you down and refills the boost bar. The boost button throws you forward. Lane changes give haptic feedback. The game is designed for portrait and plays one-handed.
 
 ABOUT ADS
-The game is free and supported by ads. Ads never appear during a run: banners live only on menu screens, and an interstitial only shows after a run has ended. Rewarded ads are entirely optional — watch one to earn coins or to continue a run once after crashing. If you never watch a single ad, no level, car or upgrade stays locked.
+The game is free and supported by ads. Ads never appear during a run: banners live only on menu screens, and an interstitial only shows after a run has ended — never in the first three levels. Rewarded ads are entirely optional — watch one to earn coins or to continue a run once after crashing. If you never watch a single ad, no level, car or upgrade stays locked.
 
 Kron Drive has no real money, tokens, wallets or earning mechanics of any kind. It is just a game.
 

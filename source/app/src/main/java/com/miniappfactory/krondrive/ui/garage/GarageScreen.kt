@@ -72,6 +72,8 @@ fun GarageScreen(
     progress: PlayerProgress,
     adsConsentResolved: Boolean,
     adInFlight: Boolean,
+    /** Odullu reklam yuklenemediyse "bedava coin" kartinda aciklama cikar. */
+    adFailed: Boolean,
     onWatchAdForCoins: () -> Unit,
     onUpgrade: (UpgradeType) -> Unit,
     onBuyBooster: (BoosterType) -> Unit,
@@ -119,6 +121,7 @@ fun GarageScreen(
             FreeCoinsCard(
                 remainingToday = progress.rewardedCoinsRemainingToday,
                 adInFlight = adInFlight,
+                adFailed = adFailed,
                 language = language,
                 onWatchAd = onWatchAdForCoins
             )
@@ -162,6 +165,7 @@ fun GarageScreen(
 private fun FreeCoinsCard(
     remainingToday: Int,
     adInFlight: Boolean,
+    adFailed: Boolean,
     language: AppLanguage,
     onWatchAd: () -> Unit
 ) {
@@ -197,6 +201,28 @@ private fun FreeCoinsCard(
                     color = KronColors.TextMuted,
                     fontSize = 11.sp
                 )
+                // Reklam yuklenemezse tek cumlelik aciklama. CUMLE
+                // CrashOverlay'dekiyle birebir ayni (docs/REVIEW_UX.md §4):
+                // oyuncu ayni hatayi ekrandan ekrana ayni sozlerle okusun.
+                //
+                // RENK farkli (orada TextMuted, burada Danger) ve bu bilincli:
+                // burada mesajin hemen ustunde zaten TextMuted 11 sp bir satir
+                // var ("Bugun kalan hak: N"). Ayni gri ile yazsaydik mesaj o
+                // satirin devami gibi okunur ve fark edilmezdi — yani sessiz
+                // basarisizligi baska bir bicimde surdururduk.
+                //
+                // Yalnizca hata aninda ciktigi icin kartin normal yuksekligi
+                // degismiyor.
+                if (adFailed) {
+                    Text(
+                        text = language.pick(
+                            tr = "Reklam yüklenemedi. İnternet bağlantını kontrol et.",
+                            en = "Ad could not be loaded. Check your connection."
+                        ),
+                        color = KronColors.Danger,
+                        fontSize = 11.sp
+                    )
+                }
             }
             Spacer(modifier = Modifier.width(10.dp))
             PrimaryButton(

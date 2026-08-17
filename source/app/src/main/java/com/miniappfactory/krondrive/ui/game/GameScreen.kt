@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -167,6 +170,33 @@ fun GameScreen(
     val textMeasurer = rememberTextMeasurer()
     val haptics = LocalHapticFeedback.current
 
+    /**
+     * TITRESIMIN TEK KAPISI (2026-08-17).
+     *
+     * Ayarlarda artik bir titresim anahtari var
+     * (`PlayerProgress.vibrationEnabled`, varsayilan acik). Bu ekrandaki
+     * butun titresim cagrilari — serit degistirme, korna, carpisma — daha
+     * once KOSULSUZDU; hepsi buradan geciyor ki tercih tek bir yerde
+     * uygulansin ve yeni bir cagri eklerken unutulmasin.
+     *
+     * Neden [rememberUpdatedState] ve neden dogrudan `progress.x` degil:
+     * asagidaki kontrol lambdalari ve kare dongusu bilerek `remember` /
+     * `LaunchedEffect(engine)` icinde kuruluyor (nesne kimligi sabit kalsin
+     * diye — gerekce onSteerLeft'in ustunde yazili). Tercihi degeriyle
+     * yakalasalardi ayar degistiginde ESKI degeri tasirlardi. Durum nesnesi
+     * okununca gecerli olan cagri anindaki degerdir.
+     *
+     * Okuma BESTELEME ICINDE yapilmiyor (lambda gorunumden degil, dokunma ve
+     * kare geri cagrilarindan cagriliyor), yani hicbir yeniden besteleme
+     * tetiklemez — 40 FPS'lik kosu bundan etkilenmez.
+     */
+    val vibrationEnabled = rememberUpdatedState(progress.vibrationEnabled)
+    val buzz = remember(haptics) {
+        { type: HapticFeedbackType ->
+            if (vibrationEnabled.value) haptics.performHapticFeedback(type)
+        }
+    }
+
     // Yeniden dene: anahtari degistirmek yeni bir motor (yeni kosu) yaratir.
     var runKey by remember { mutableIntStateOf(0) }
     val engine = remember(runKey, mode, levelId) { viewModel.createEngine(mode, levelId) }
@@ -198,6 +228,18 @@ fun GameScreen(
     var countdownSeconds by remember(engine) {
         mutableIntStateOf(kotlin.math.ceil(engine.countdownRemaining).toInt())
     }
+    /**
+     * Geri sayimda EN SON SESLENDIRILEN rakam. Compose durumu DEGIL ve
+     * bilerek oyle: bu deger ekranda hicbir sey cizmiyor, yalnizca "bu rakamin
+     * bipini caldim mi" sorusunu cevapliyor — snapshot durumu olsaydi her
+     * yazma bos yere bir besteleme daha tetiklerdi.
+     *
+     * `countdownSeconds`'in kendisi bu is icin YETMEZ: ilk deger zaten 3 ile
+     * baslar, yani "3" ekrana ilk geldiginde bir DEGISIM olmaz ve ilk bip hic
+     * calmazdi. Buradaki [Int.MIN_VALUE] tohumu ilk karede de bir degisim
+     * uretir. Kosu yeniden baslarsa (`remember(engine)`) tohum da sifirlanir.
+     */
+    val lastCountdownTick = remember(engine) { intArrayOf(Int.MIN_VALUE) }
     var dodgeBanner by remember(engine) { mutableStateOf<String?>(null) }
     var dodgeBannerUntil by remember(engine) { mutableStateOf(0L) }
     var result by remember(engine) { mutableStateOf<RunResult?>(null) }
@@ -238,6 +280,10 @@ fun GameScreen(
         if (result != null) return
         result = runResult
         showCrashDialog = false
+        // Carpisma ekraninda kalmis "reklam yuklenemedi" uyarisi SONUC
+        // ekranina tasinmasin: iki overlay ayni bayragi paylasiyor ve
+        // oyuncu daha butona basmadan hata mesaji gormemeli.
+        adFailed = false
         EngineSoundManager.idle()
         viewModel.onRunFinished(runResult)
     }
@@ -343,12 +389,11 @@ fun GameScreen(
                             // (`TextHandleMove`) zaten serit degistirmenin
                             // hafif tiki ve carpisma ondan ayirt edilmeli.
                             //
-                            // NOT: projede titresim TERCIHI YOK — ayarlarda
-                            // yalnizca ses anahtari var (SettingsScreen.kt).
-                            // Mevcut titresim cagrilari da kosulsuz; bu satir
-                            // o desene uyuyor. Tercih eklenecekse `data/` ve
-                            // ayar ekrani gerekir, tek yer burasi degil.
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            // 2026-08-17'den beri ayarlarda bir TITRESIM
+                            // ANAHTARI var; cagri `buzz` uzerinden geciyor ve
+                            // oyuncu kapattiysa hicbir sey olmuyor (eskiden
+                            // bu satir kosulsuzdu).
+                            buzz(HapticFeedbackType.LongPress)
                             // CARPISMA SESI — flasin tepe yaptigi KARE.
                             //
                             // Ayni karede motor sesi de susuyor (faz artik
@@ -379,11 +424,32 @@ fun GameScreen(
                 if (dodgeBanner != null && now > dodgeBannerUntil) dodgeBanner = null
                 if (engine.phase != phase) phase = engine.phase
 
-                if (engine.phase == RunPhase.COUNTDOWN) {
-                    // Ekranda GORUNEN rakam degistiyse yaz. Ham float'i yazmak
-                    // 60 Hz'de bestelemeye donerdi; goruntu ayni, maliyet 60 kat.
-                    val seconds = kotlin.math.ceil(engine.countdownRemaining).toInt()
-                    if (seconds != countdownSeconds) countdownSeconds = seconds
+                // --- GERI SAYIM: rakam, isik ve bip TEK olaydan gelir --------
+                //
+                // Ekranda GORUNEN rakam degistiyse yaz. Ham float'i yazmak
+                // 60 Hz'de bestelemeye donerdi; goruntu ayni, maliyet 60 kat.
+                //
+                // Bip ve isiklarin ayni satirdan gelmesi kasitli: ikisi ayri
+                // ayri zamanlansaydi (ornegin bip bir efektten, isik
+                // bestelemeden) cihazda birbirinden kayarlar ve "ses gec
+                // geliyor" hissi olusurdu. Isik sayisi zaten `countdownSeconds`
+                // uzerinden turetiliyor ([CountdownOverlay]), yani ikisi ayni
+                // KAREDE degisiyor.
+                //
+                // `RunPhase.COUNTDOWN` kontrolu BILEREK YOK. Faz kontrolu
+                // olsaydi son bip hic calmazdi: `step` rakami 0'a indirdigi
+                // KARENIN KENDISINDE faz zaten RUNNING'e geciyor. Kontrol
+                // yerine sayacin kendisi kullaniliyor ve bu bedava — geri
+                // sayim bittikten sonra `countdownRemaining` 0'da sabit
+                // kaldigi icin `seconds` da 0'da kalir ve asagisi bir daha hic
+                // calismaz.
+                val seconds = kotlin.math.ceil(engine.countdownRemaining).toInt()
+                if (seconds != lastCountdownTick[0]) {
+                    lastCountdownTick[0] = seconds
+                    countdownSeconds = seconds
+                    // seconds == 0 -> kosunun basladigi kare: uzun, bir oktav
+                    // tiz "BASLA" bipi. 3/2/1 -> kisa hazirlik bipi.
+                    EngineSoundManager.playCountdownBeep(final = seconds <= 0)
                 }
 
                 // Boost hazirligi ancak DEGISTIGINDE yazilir.
@@ -429,7 +495,7 @@ fun GameScreen(
     LaunchedEffect(crashBeat) {
         if (crashBeat == 0) return@LaunchedEffect
         delay(CRASH_IMPACT_HAPTIC_GAP_MS)
-        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        buzz(HapticFeedbackType.LongPress)
         delay(CRASH_DIALOG_DELAY_MS - CRASH_IMPACT_HAPTIC_GAP_MS)
         showCrashDialog = true
     }
@@ -447,26 +513,26 @@ fun GameScreen(
     // nesne olarak iniyordu; bu da butonlarin parametrelerini "degismis"
     // gosterip bes butonu bastan kurduruyordu. Davranis birebir ayni, yalnizca
     // nesne kimligi sabit.
-    val onSteerLeft = remember(engine, haptics) {
+    val onSteerLeft = remember(engine, buzz) {
         {
             engine.steerLeft()
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            buzz(HapticFeedbackType.TextHandleMove)
         }
     }
-    val onSteerRight = remember(engine, haptics) {
+    val onSteerRight = remember(engine, buzz) {
         {
             engine.steerRight()
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            buzz(HapticFeedbackType.TextHandleMove)
         }
     }
     val onBrake = remember(engine) { { held: Boolean -> engine.setBrake(held) } }
     val onBoost = remember(engine) { { held: Boolean -> engine.setBoost(held) } }
-    val onHorn = remember(haptics) {
+    val onHorn = remember(buzz) {
         {
             // Bekleme suresi dolmadiysa ses calmaz; titresim de ancak ses
             // gercekten caldiysa verilir.
             if (EngineSoundManager.playHorn()) {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                buzz(HapticFeedbackType.TextHandleMove)
             }
             Unit
         }
@@ -564,11 +630,11 @@ fun GameScreen(
                             accumulated += dragAmount
                             if (accumulated >= threshold) {
                                 engine.steerRight()
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                buzz(HapticFeedbackType.TextHandleMove)
                                 accumulated = 0f
                             } else if (accumulated <= -threshold) {
                                 engine.steerLeft()
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                buzz(HapticFeedbackType.TextHandleMove)
                                 accumulated = 0f
                             }
                         }
@@ -690,9 +756,12 @@ fun GameScreen(
                 bonusCoins = bonusCoins,
                 bonusLimitReached = bonusLimitReached,
                 adInFlight = adInFlight,
+                adFailed = adFailed,
                 onDoubleCoins = {
                     if (activity != null && !adInFlight) {
                         adInFlight = true
+                        // Yeni denemede eski hata mesaji silinir.
+                        adFailed = false
                         RewardedAdManager.loadAndShow(
                             context = context,
                             activity = activity,
@@ -707,7 +776,11 @@ fun GameScreen(
                                     bonusLimitReached = granted == 0
                                 }
                             },
-                            onFailure = { },
+                            // Sessiz basarisizlik yok (docs/REVIEW_UX.md §4):
+                            // buton eski etiketine donuyor ama coin gelmiyordu,
+                            // ekran da hicbir sey demiyordu — okunusu "buton
+                            // bozuk" idi. Ayni desen zaten CrashOverlay'de var.
+                            onFailure = { adFailed = true },
                             onAdClosed = { adInFlight = false }
                         )
                     }
@@ -1779,6 +1852,30 @@ private fun ControlLabel(text: String) {
 // Overlay'ler
 // ---------------------------------------------------------------------------
 
+/**
+ * Overlay'lerin ortak zemini: karartma + guvenli alan dolgusu.
+ *
+ * KAYDIRILABILIR (2026-08-17). Sonuc karti dar ekranda TASIYORDU: kariyerde
+ * basarisiz bir kosunun karti (baslik + "N gorev gerekli" satiri + 3 nokta +
+ * 7 istatistik satiri + gorev odulu + 3 hedef satiri + reklam butonu +
+ * ANA MENU) hesapla ~535 dp; 360x640 dp bir telefonda scrim dolgusu ve sistem
+ * cubuklari dusunce ~528 dp kaliyor. Kart ortalandigi icin tasma alttan ve
+ * ustten esit kirpiliyor ve EN ALTTAKI "ANA MENU" BUTONU EKRAN DISINDA
+ * KALIYORDU (docs/REVIEW_UX.md §1). Yazi tipi olcegi buyutulunce tasma
+ * artiyor ve buton tamamen kayboluyor. S8'de (360x740 dp) ~100 dp fazladan
+ * yer oldugu icin cihazda bugune kadar gorulmedi.
+ *
+ * ORTALAMA BOZULMUYOR — sirasi onemli: `fillMaxSize` zincirde
+ * `verticalScroll`tan ONCE geliyor, yani kaydirma katmanina SABIT bir
+ * yukseklik geliyor ve o da icerige `minHeight = ekran yuksekligi` olarak
+ * gecirilir (`Constraints.copy(maxHeight = Infinity)` minHeight'i korur).
+ * Icerik kisaysa Box yine tam ekran olur ve `Alignment.Center` aynen calisir;
+ * uzunsa Box icerik kadar buyur ve kaydirilir. Kisa overlay'lerin (geri
+ * sayim, duraklatma, carpisma) gorunumu bu yuzden degismiyor.
+ *
+ * Kosu sirasinda maliyeti YOK: bu sarmalayici yalnizca bir overlay aciktayken
+ * bestelenir, overlay aciksa da motor zaten durmus/duraklamis durumdadir.
+ */
 @Composable
 private fun OverlayScrim(content: @Composable () -> Unit) {
     Box(
@@ -1786,7 +1883,8 @@ private fun OverlayScrim(content: @Composable () -> Unit) {
             .fillMaxSize()
             .background(Color(0xB3010610))
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(20.dp),
+            .padding(20.dp)
+            .verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.Center
     ) { content() }
 }
@@ -1796,6 +1894,10 @@ private fun OverlayScrim(content: @Composable () -> Unit) {
  * durumu degil, o yuzden "kacinci saniyedeyiz" bilgisi cagri yerinde durum
  * olarak tutuluyor ve yalnizca rakam degistiginde yaziliyor. Gosterilen metin
  * ayni ([kotlin.math.ceil] ile yuvarlama artik cagri yerinde yapiliyor).
+ *
+ * Isiklar ve geri sayim bipi de AYNI [seconds] degerinden turuyor — yani
+ * "bir isik sondu" ile "bip caldi" tek olay, ayri ayri zamanlanmis iki sey
+ * degil (bkz. cagri yerindeki not).
  */
 @Composable
 private fun CountdownOverlay(seconds: Int, language: AppLanguage) {
@@ -1807,7 +1909,9 @@ private fun CountdownOverlay(seconds: Int, language: AppLanguage) {
                     color = KronColors.Accent,
                     fontSize = 30.sp
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+                CountdownLights(seconds)
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = if (seconds <= 0) "GO!" else "$seconds",
                     color = KronColors.BlueBright,
@@ -1817,6 +1921,96 @@ private fun CountdownOverlay(seconds: Int, language: AppLanguage) {
         }
     }
 }
+
+/**
+ * Geri sayim isiklari — **yanan isik sayisi = kalan rakam**.
+ *
+ * ```
+ * 3  ●●●     2  ●●○     1  ●○○     0 / BASLA  ○○○
+ * ```
+ *
+ * Eslemenin bu kadar duz olmasi kasitli: F1 baslangic isigini bilmeyen
+ * oyuncu icin bile kendiliginden anlasilir (isik sayisi zaten rakami
+ * soyluyor), bilen icin de son isigin sonmesi kosunun baslamasi demek.
+ *
+ * ## ⚠ "Hepsi sonuk" karesi CIZILMIYOR — ve bu dogru
+ *
+ * Yukaridaki tablonun son hucresi (0 → ○○○) bir DURUM olarak vardir ama
+ * ekranda gorunmez. Sebep motorun kendisi: `GameEngine.step` sayaci sifira
+ * indirdigi KARENIN ICINDE fazi `RUNNING`'e ceviriyor, [CountdownOverlay]
+ * ise yalnizca `RunPhase.COUNTDOWN` boyunca ciziliyor. Yani oyuncunun gordugu
+ * son geri sayim karesi TEK ISIK, ondan sonraki karede kart tamamen kalkiyor
+ * ve oyun basliyor.
+ *
+ * Deger olarak yine de dogru yazildi ve BOYLE kalmali: sonuc, isiklarin
+ * kartla birlikte ayni anda yok olmasi — "lights out and away we go" anini
+ * tasiyan sey zaten bu. Isik sayisini bir rakam kaydirip 0 halini gorunur
+ * kilmak "3 → iki isik" demek olurdu ve kuralin kendisini bozardi. Gercekten
+ * gorunmesi istenirse dogru cozum kartin ~150 ms daha ekranda tutulmasidir,
+ * ama o kosunun ilk karelerine perde (`OverlayScrim`) indirir — ayri bir
+ * karar, burada verilmedi.
+ *
+ * ## Uc karar ve gerekceleri
+ *
+ * **Sonen isik KAYBOLMAZ**, yalnizca kararir. Sonen isik yok edilseydi Row
+ * daralir, kalan isiklar ortalanmak icin kayar ve geri sayim her saniye
+ * "titriyormus" gibi okunurdu. Yer koruma bu yuzden gorsel degil, okunabilirlik
+ * karari.
+ *
+ * **Renk kirmizi**, sari degil. Kirmizi bu oyunda zaten "dikkat" demek
+ * (kerb, carpisma flasi); sari ise boost/enerji rengi
+ * ([KronColors.Accent]) ve geri sayimda kullanilsa iki anlam cakisirdi.
+ * Yanan isik icin [KronColors.PlayerRed] — oyuncunun kendi araci da o
+ * kirmizi. Sonuk hal [KronColors.Locked]: katalogda "henuz acilmadi"
+ * anlamini tasiyan koyu lacivert, burada da "bu isik artik yok" diyor.
+ *
+ * **Golge/bulaniklik YOK.** Cihaz S8 (API 24) ve oyun ~40 FPS'te; `blur`
+ * burada pahali. "Parliyor" hissini bunun yerine ince bir halka tasiyor:
+ * yanan isik ampulden acik kirmizi bir cerceve, sonuk isik neredeyse
+ * gorunmez bir ic hat aliyor. Cizim uc `Box` — sahne zaten yalnizca geri
+ * sayim boyunca duruyor, ama ucuz olmasinin da bir bedeli yok.
+ *
+ * Metin icermez, bu yuzden [AppLanguage] almaz.
+ */
+@Composable
+private fun CountdownLights(litCount: Int) {
+    Row(horizontalArrangement = Arrangement.spacedBy(COUNTDOWN_LIGHT_GAP)) {
+        repeat(COUNTDOWN_LIGHT_COUNT) { index ->
+            // Sondurme SAGDAN sola ilerler (index 2, sonra 1, sonra 0):
+            // yakit/sarj gostergesi gibi "kalan miktar" okunur.
+            val lit = index < litCount
+            Box(
+                modifier = Modifier
+                    .size(COUNTDOWN_LIGHT_SIZE)
+                    .clip(CircleShape)
+                    .background(if (lit) KronColors.PlayerRed else KronColors.Locked)
+                    .border(
+                        width = COUNTDOWN_LIGHT_RING,
+                        color = if (lit) COUNTDOWN_LIGHT_RING_ON else COUNTDOWN_LIGHT_RING_OFF,
+                        shape = CircleShape
+                    )
+            )
+        }
+    }
+}
+
+/**
+ * Isik sayisi geri sayimin kendisinden TURETILIR, elle yazilmaz: kural
+ * "yanan isik sayisi = kalan rakam" oldugu icin ikisi ayri yerlerde
+ * tutulsaydi biri degistiginde sessizce yalan soylerlerdi (ornegin sayac
+ * 5'e cikarilir, isiklar 3'te kalir ve geri sayim iki saniye boyunca
+ * "3 isik" gosterirdi).
+ */
+private const val COUNTDOWN_LIGHT_COUNT = GameConfig.COUNTDOWN_SECONDS
+private val COUNTDOWN_LIGHT_SIZE = 22.dp
+private val COUNTDOWN_LIGHT_GAP = 12.dp
+private val COUNTDOWN_LIGHT_RING = 2.dp
+
+/** Yanan isigin sicak kenari — ampulun kendisinden acik, "parliyor" hissi. */
+private val COUNTDOWN_LIGHT_RING_ON = Color(0xFFFF8A80)
+
+/** Sonuk isigin ic hatti: yerini belli eder, dikkat cekmez. */
+private val COUNTDOWN_LIGHT_RING_OFF = Color(0x33FFFFFF)
 
 @Composable
 private fun PausedOverlay(
@@ -1930,6 +2124,8 @@ private fun RunResultOverlay(
     /** Odullu reklamin gunluk siniri dolduysa buton yerine aciklama gosterilir. */
     bonusLimitReached: Boolean,
     adInFlight: Boolean,
+    /** Reklam yuklenemediyse butonun altinda tek cumlelik aciklama cikar. */
+    adFailed: Boolean,
     onDoubleCoins: () -> Unit,
     onNext: () -> Unit,
     onHome: () -> Unit
@@ -2121,19 +2317,37 @@ private fun RunResultOverlay(
                             textAlign = TextAlign.Center
                         )
 
-                        else -> PrimaryButton(
-                            text = if (adInFlight) {
-                                language.pick(tr = "YÜKLENİYOR…", en = "LOADING…")
-                            } else {
-                                language.pick(
-                                    tr = "REKLAM İZLE → +$bonusOffer COIN",
-                                    en = "WATCH AD → +$bonusOffer COINS"
+                        else -> {
+                            PrimaryButton(
+                                text = if (adInFlight) {
+                                    language.pick(tr = "YÜKLENİYOR…", en = "LOADING…")
+                                } else {
+                                    language.pick(
+                                        tr = "REKLAM İZLE → +$bonusOffer COIN",
+                                        en = "WATCH AD → +$bonusOffer COINS"
+                                    )
+                                },
+                                enabled = !adInFlight,
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = onDoubleCoins
+                            )
+                            // Metin ve yerlesim CrashOverlay'dekiyle BIREBIR
+                            // ayni (docs/REVIEW_UX.md §4: "cozum zaten kodda
+                            // var, ayni desen tasinmali") — oyuncu ayni hatayi
+                            // iki ekranda iki farkli cumleyle okumasin.
+                            if (adFailed) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    language.pick(
+                                        tr = "Reklam yüklenemedi. İnternet bağlantını kontrol et.",
+                                        en = "Ad could not be loaded. Check your connection."
+                                    ),
+                                    color = KronColors.TextMuted,
+                                    fontSize = 11.sp,
+                                    textAlign = TextAlign.Center
                                 )
-                            },
-                            enabled = !adInFlight,
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = onDoubleCoins
-                        )
+                            }
+                        }
                     }
                 }
 
