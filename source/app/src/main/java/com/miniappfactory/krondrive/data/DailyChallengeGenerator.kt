@@ -70,20 +70,26 @@ object DailyChallengeGenerator {
     private const val RUN_TIME_CAP_SEC = 180
 
     /**
-     * Kademe odulleri her sablonda ayni: 120 / 260 / 520 = gunde en fazla 900.
+     * Kademe odulleri her sablonda ayni: 80 / 140 / 280 = gunde en fazla 500.
      *
-     * Once 200/400/800 (=1400) yapildi, ayni gun 900'e cekildi (2026-08-14,
-     * sahibi karari). Sebep: 1400, casual bir oyuncunun TUM gunluk butcesinin
-     * (~1000 coin) ustundeydi — gunluk gorev tek basina diger her seyi
-     * anlamsiz kiliyordu.
+     * Once 200/400/800 (=1400) yapildi, ayni gun 900'e cekildi (2026-08-14),
+     * **2026-08-16'da 500'e indirildi** (sahibi onayi; analiz
+     * `docs/ECONOMY_BALANCE_PROPOSAL.md`).
      *
-     * Kademeli yapinin amaci korundu: 3. kademe (520) tek bir kariyer
-     * kosusunun (~36 coin) 14 KATI odiyor; eski oranda bu 6 kattı. Yani
-     * beceriye bagli odulun goreli agirligi azalmadi, ARTTI — kisilan sey
-     * bedava/pasif taban gelirdi (reklam, skor coini, tekrar tekrar odenen
-     * yildiz coini).
+     * 900 neden fazlaydi: `docs/BALANCE.md` gunluk gorevi zaten "400-500 coin"
+     * diye belgeliyordu — kod bir noktada 900'e cikmis, belge guncellenmemisti.
+     * OLCULDU (`LevelCurveTest.olcum dokumu`): bir kariyer bolumunu ilk kez
+     * gecmek ortalama **100 coin** odiyor. 900'lik gunluk, dokuz bolumluk
+     * ilerlemeye bedeldi; oynamak yerine gunde bir kez girmek daha karliydi.
+     * 500'de bu oran bese iner.
+     *
+     * Kademeli yapinin amaci korundu: 3. kademe hala en buyuk tek odul.
+     *
+     * GOC RISKI YOK: `DAILY_TIER` anahtari kademe SAYISINI sakliyor, coin
+     * miktarini degil — odul her seferinde bu diziden yeniden hesaplaniyor.
+     * Yani mevcut oyuncunun kayitli ilerlemesi bozulmaz.
      */
-    private val TIER_REWARDS = intArrayOf(120, 260, 520)
+    private val TIER_REWARDS = intArrayOf(80, 140, 280)
 
     /** Ucu de ayni turden, artan hedefli bir gunluk gorev kurar. */
     private fun challenge(

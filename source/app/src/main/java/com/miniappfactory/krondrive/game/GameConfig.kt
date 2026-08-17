@@ -387,7 +387,24 @@ object GameConfig {
     // ---------------------------------------------------------------------
 
     const val COINS_PER_PICKUP = 1
-    const val SCORE_PER_BONUS_COIN = 120
+
+    /**
+     * Kac skor puani 1 bonus coin eder. **120 -> 70** (2026-08-16, sahibi
+     * onayi; ekonomi analizi `docs/ECONOMY_BALANCE_PROPOSAL.md`).
+     *
+     * Neden: oynanis geliri pasif geliri (gunluk gorev + odullu reklam)
+     * yakalayamiyordu. Bu carpan **oynayarak** kazanmanin tek olceklenen
+     * kalemi — toplanan coin ve yildiz coini tavanli, skor degil.
+     *
+     * OLCULDU (`LevelCurveTest.olcum dokumu`, 8 bolum, temkinli oynayis):
+     * ilk gecişte bolum basina ortalama **100 -> 118 coin** (+%18). Etki
+     * TEKRAR oynamada daha buyuk: yildiz coini yalnizca YENI yildiz icin
+     * odendiginden (bkz. GameEngine), tekrar kosusunun geliri neredeyse
+     * tamamen bu carpandan geliyor — orn. bolum 5 tekrari 51 -> 74 coin.
+     * Zaten en az odenen etkinlik tekrar oynamakti.
+     */
+    const val SCORE_PER_BONUS_COIN = 70
+
     const val COINS_PER_STAR = 25
     const val XP_PER_SCORE_POINT_DIVISOR = 10
     const val XP_PER_STAR = 20

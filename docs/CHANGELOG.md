@@ -1,5 +1,54 @@
 # Değişiklik günlüğü
 
+## 2026-08-16 (3) — Ekonomi: oynanış geliri ölçülüp yükseltildi
+
+`docs/ECONOMY_BALANCE_PROPOSAL.md`'deki öneri 1+2 uygulandı (sahibi onayı).
+Sahibi "önce ölç, sonra uygula" dedi; ölçüm `LevelCurveTest.olcum dokumu`
+ile yapıldı ve öneri **ölçülen sayılarla** teyit edildi.
+
+**Ölçüm (8 bölüm, temkinli oynayış, ilk geçiş).** Coin formülü kodda
+doğrulandı: `toplanan×1 + skor/SCORE_PER_BONUS_COIN + yeniYıldız×25`,
+10 saniyenin altındaki koşu hiç ödemiyor.
+
+| Bölüm | skor | toplanan | yıldız | Önce | Sonra |
+|---|---|---|---|---|---|
+| 1 | 1790 | 17 | 3 | 106 | 117 |
+| 2 | 2281 | 18 | 3 | 112 | 125 |
+| 3 | 1400 | 10 | 3 | 96 | 105 |
+| 4 | 3635 | 27 | 2 | 107 | 128 |
+| 5 | 3835 | 20 | 3 | 126 | 149 |
+| 6 | 4163 | 31 | 1 | 90 | 115 |
+| 7 | 4270 | 21 | 1 | 81 | 107 |
+| 8 | 2271 | 12 | 2 | 80 | 94 |
+| **ort.** | | | | **100** | **118** |
+
+**Değişen iki sabit:**
+
+1. `SCORE_PER_BONUS_COIN` **120 → 70** (`GameConfig.kt`). Bölüm başına ilk
+   geçiş ortalaması 100 → 118 coin (+%18). Etki **tekrar oynamada çok daha
+   büyük**: yıldız coini yalnızca YENİ yıldız için ödendiğinden tekrar
+   koşusunun geliri neredeyse tamamen bu çarpandan geliyor — örn. bölüm 5
+   tekrarı 51 → 74 coin (+%45). Zaten en az ödenen etkinlik tekrar oynamaktı.
+2. `TIER_REWARDS` **120/260/520 → 80/140/280** (`DailyChallengeGenerator.kt`),
+   yani günlük görev tavanı 900 → 500. `docs/BALANCE.md` günlük görevi zaten
+   "400–500 coin" diye belgeliyordu; kod bir noktada 900'e çıkmış, belge
+   güncellenmemişti. Ölçülen 100 coin/bölüm ile kıyas: 900'lük günlük dokuz
+   bölümlük ilerlemeye bedeldi, 500'de bu beşe iniyor.
+
+**Göç riski yok.** İkisi de kayıtlı veriye dokunmuyor: `DAILY_TIER` anahtarı
+kademe *sayısını* saklıyor, coin miktarını değil — ödül her seferinde diziden
+yeniden hesaplanıyor. `SCORE_PER_BONUS_COIN` zaten koşu sonunda uygulanıyor.
+
+**Yapılmadı:** öneri 3 (`XP_PER_CAR_LEVEL` 500 → 1250) sahibi tarafından
+kapsam dışı bırakıldı — tek seferlik XP migrasyonu gerektiriyor.
+
+**Kanıt.** 177 birim test / 0 hata. `assembleDebug` + `assembleRelease`
+başarılı.
+
+**Ölçülmedi:** gerçek oyuncu davranışı. Yukarıdaki tablo motorun deterministik
+simülasyonundan geliyor, gerçek oyuncudan değil; "temkinli" ve "riskli" iki
+yapay oynayış profili. Gelir etkisi ancak yayından sonra görülür.
+
 ## 2026-08-16 (2) — Geçiş reklamı sayacı kaçağı kapatıldı
 
 **Kusur:** geçiş reklamı sayacı yalnızca bölüm **tamamlandığında** artıyordu
