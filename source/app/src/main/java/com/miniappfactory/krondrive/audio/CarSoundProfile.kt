@@ -111,10 +111,26 @@ data class CarSoundProfile(
 object CarSoundProfiles {
 
     /**
-     * Referans: **Sehir**. Degerleri 2026-08-15 oncesindeki tek motor sesiyle
-     * ayni; yani eski oyuncu bu araci sectiginde sesin degismedigini duyar.
+     * **Sehir** ve bilinmeyen govdeler icin geri dusus — Beety'nin profilini
+     * PAYLASIR (ayni nesne, kopya degil).
+     *
+     * 2026-08-16'ya kadar burada CarSoundProfile'in ciplak varsayilanlari
+     * duruyordu: 2026-08-15 oncesindeki TEK motor sesi. Yani Sehir'e hic ses
+     * TASARLANMAMISTI, sadece eski varsayilan orada kalmisti. Sahibi duyup
+     * "standart araç sesi kotu" dedi ve karari verdi: Sehir, Beety ile AYNI
+     * sesi kullansin.
+     *
+     * NEDEN KOPYA DEGIL PAYLASIM: ayni sayilari iki profile yazmak
+     * `profiller birbirinden ayirt edilebilir` testini kirar — ve o test
+     * sahibinin baska bir istegini koruyor ("her birisi farkli olmali").
+     * Tek nesneyi iki kimlige baglayinca envanterde tek kayit kaliyor,
+     * kural da bozulmuyor.
+     *
+     * Ayni olmasi tutarli: iki govde mekanik olarak da neredeyse ayni
+     * (ikisi de 1.00 bandinda, tek fark Sehir'in 1.04 freni) ve ikisi de
+     * oyunun giris araclari. Fark gorselde, seste degil.
      */
-    val DEFAULT = CarSoundProfile(id = CarCatalog.SHAPE_HATCHBACK)
+    val DEFAULT: CarSoundProfile get() = BEETY
 
     /** Yaris Sedan — tiz ve cevik: yuksek devir, parlak filtre, az duzensizlik. */
     private val RACE_SEDAN = CarSoundProfile(
@@ -224,17 +240,28 @@ object CarSoundProfiles {
      */
     private val MUSCLE_67 = CarSoundProfile(
         id = CarCatalog.SHAPE_MUSCLE_67,
+        // 2026-08-16 — sahibi: "bir Amerikan arabasi, ABARTI EGZOZ SESLI
+        // olmali". Abarti dort kaldiracla yapildi, hicbiri frekansi
+        // DUSURMEDEN (0.76 sinir: altinda telefon hoparloru tasimiyor):
+        //  1. gain 1.22 -> 1.40: kataloğun acik ara en yuksegi.
+        //  2. cutoff 1.02 -> 1.34: filtre acildi. Kapali egzoz "hom" der,
+        //     acik egzoz HAVLAR — fark buradan geliyor.
+        //  3. tek sayili harmonikler artti (h3 0.64 -> 0.74, h5 0.36 -> 0.44):
+        //     V8 imzasi keskinlesti, ses daha "yirtik".
+        //  4. lope 0.34 -> 0.40 ve rate 0.25 -> 0.20: rolantideki
+        //     "pat… pat… pat" hem derinlesti hem yavasladi.
+        // grit de 0.24 -> 0.32; metalik purüz egzoz gurultusunun kendisi.
         freqMul = 0.76f,
         harmonic2 = 0.30f,
-        harmonic3 = 0.64f,
+        harmonic3 = 0.74f,
         harmonic4 = 0.10f,
-        harmonic5 = 0.36f,
-        grit = 0.24f,
+        harmonic5 = 0.44f,
+        grit = 0.32f,
         noiseAmount = 0.06f,
-        lopeDepth = 0.34f,
-        lopeRate = 0.25f,
-        gainMul = 1.22f,
-        cutoffMul = 1.02f,
+        lopeDepth = 0.40f,
+        lopeRate = 0.20f,
+        gainMul = 1.40f,
+        cutoffMul = 1.34f,
         nitroTone = 0.90f,
         hornBaseHz = 250f,
         hornInterval = 1.20f,
@@ -290,17 +317,23 @@ object CarSoundProfiles {
      */
     private val BEETY = CarSoundProfile(
         id = CarCatalog.SHAPE_BEETY,
-        freqMul = 0.78f,
+        // "PUF PUF" (sahibi secimi, 2026-08-16 — bes aday dinletildi).
+        // Karakteri tasiyan sey lopeRate: 0.50 -> 0.26. Lope YAVASLAYINCA
+        // genlik dalgalanmasi tek tek duyulur hale geliyor, yani motor
+        // "puf… puf… puf" diye vuruyor. Derinlik de 0.33'e cikti ama
+        // Boga 67'nin 0.34'unun ALTINDA kalmak zorunda (test).
+        freqMul = 0.82f,
         // CIFT sayililar baskin: boksor imzasi (test bunu zorunlu kiliyor).
-        harmonic2 = 0.46f,
-        harmonic3 = 0.13f,
-        harmonic4 = 0.27f,
-        harmonic5 = 0.06f,
-        grit = 0.26f,
-        noiseAmount = 0.08f,
-        lopeDepth = 0.32f,
-        gainMul = 0.93f,
-        cutoffMul = 0.70f,
+        harmonic2 = 0.52f,
+        harmonic3 = 0.11f,
+        harmonic4 = 0.31f,
+        harmonic5 = 0.05f,
+        grit = 0.30f,
+        noiseAmount = 0.088f,
+        lopeDepth = 0.33f,
+        lopeRate = 0.26f,
+        gainMul = 0.94f,
+        cutoffMul = 0.74f,
         nitroTone = 0.88f,
         hornBaseHz = 470f,
         hornInterval = 1.18f,
@@ -311,11 +344,25 @@ object CarSoundProfiles {
 
     /** Tum profiller — testler ve olasi bir ses ayari ekrani icin acik. */
     val all: List<CarSoundProfile> = listOf(
-        DEFAULT, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR,
-        BEETY
+        BEETY, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67, SUPERCAR
     )
 
-    private val byId: Map<String, CarSoundProfile> = all.associateBy { it.id }
+    /**
+     * BILEREK ses paylasan govdeler: `paylasan kimlik -> profil sahibi`.
+     *
+     * Kural sudur: hicbir govde ses profiline sessizce "genel sese duserek"
+     * ulasamaz — ya kendi profili olur, ya da BURADA acikca yazilir. Test bu
+     * listeyi okuyor, yani bir paylasim ancak niyetle eklenebilir; unutulan
+     * bir araç hala testi kirar.
+     */
+    val ALIASES: Map<String, String> = mapOf(
+        CarCatalog.SHAPE_HATCHBACK to CarCatalog.SHAPE_BEETY
+    )
+
+    private val byId: Map<String, CarSoundProfile> = buildMap {
+        all.forEach { put(it.id, it) }
+        ALIASES.forEach { (alias, owner) -> put(alias, getValue(owner)) }
+    }
 
     /**
      * Gövde id'sinden ses profili. Bilinmeyen, bos ya da null id

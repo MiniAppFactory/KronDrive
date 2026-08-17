@@ -76,7 +76,9 @@ class EngineVoiceTest {
     @Test
     fun `profil govde id'sinden secilir ve sesi degistirir`() {
         val voice = EngineVoice(sampleRate)
-        assertEquals(CarCatalog.SHAPE_HATCHBACK, voice.profile.id)
+        // Varsayilan artik Beety (baslangic araci); Sehir de ayni profili
+        // paylasiyor, bkz. CarSoundProfiles.ALIASES.
+        assertEquals(CarCatalog.SHAPE_BEETY, voice.profile.id)
 
         voice.setProfile(CarCatalog.SHAPE_MUSCLE_67)
         assertEquals(CarCatalog.SHAPE_MUSCLE_67, voice.profile.id)

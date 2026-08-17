@@ -19,17 +19,24 @@ class CarSoundProfilesTest {
 
     @Test
     fun `katalogdaki her govde bir ses profili bulur`() {
+        // Kural 2026-08-16'da NETLESTIRILDI: her govdenin kendi profili
+        // olmak zorunda DEGIL, ama sessizce genel sese dusmesi de yasak.
+        // Bir govde ancak [CarSoundProfiles.ALIASES] icinde ACIKCA yaziliysa
+        // baska bir govdenin sesini paylasabilir. Sahibi karari: Sehir,
+        // Beety ile ayni sesi kullaniyor.
         CarCatalog.shapes.forEach { shape ->
             val profile = CarSoundProfiles.forShape(shape.id)
+            val beklenen = CarSoundProfiles.ALIASES[shape.id] ?: shape.id
             assertEquals(
-                "${shape.id} icin ozel profil olmali, varsayilana dusmemeli",
-                shape.id,
+                "${shape.id} icin profil yok — ya kendi profilini yaz ya da " +
+                    "ALIASES icine acikca ekle",
+                beklenen,
                 profile.id
             )
         }
         assertEquals(
-            "profil sayisi gövde sayisiyla ayni olmali",
-            CarCatalog.shapes.size,
+            "profil sayisi = govde sayisi - bilerek paylasanlar",
+            CarCatalog.shapes.size - CarSoundProfiles.ALIASES.size,
             CarSoundProfiles.all.size
         )
     }
