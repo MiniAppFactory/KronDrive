@@ -536,8 +536,19 @@ object GameConfig {
      * bolumu tekrar tekrar deneyen yeni oyuncu — en cok reklam goren kesime
      * donusurdu ve erken hunide terk artardi. Ilk bolumler oyunun vitrini;
      * orada reklam gosterilmiyor.
+     *
+     * **4 -> 3 (2026-08-17, sahibi karari.)** Sahibi cihazda oynarken iki
+     * kez fark etti: 4. bolumde basarisiz olup menuye donerken reklam yok,
+     * 4'u bitirip 5'e gecerken de yok. Ikisi de kuralin dogru calismasiydi
+     * ama BIRLIKTE muafiyeti pratikte BES bolume cikariyordu — cunku reklam
+     * karari BITEN bolume bakar, gidilene degil. Yani 4 yazip 5 bolum
+     * muafiyet vermek, sayinin kendisini yaniltici kiliyordu.
+     *
+     * Sahibi siniri 3'e cekmeyi secti: ilk uc bolum reklamsiz, 4. bolumde
+     * takilan oyuncu artik reklam goruyor. Kabul edilen bedel, ucuncu
+     * maddenin koruma amacinin bir miktar zayiflamasi.
      */
-    const val INTERSTITIAL_FREE_LEVELS = 4
+    const val INTERSTITIAL_FREE_LEVELS = 3
 
     /**
      * KULLANILMIYOR (2026-08-14). Sonuc ekranindaki "TEKRAR" butonu kaldirildi:

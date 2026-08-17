@@ -18,7 +18,7 @@ cihaza dokunulmadı, hiçbir şey yayınlanmadı.**
 |---|---|---|
 | **Tamam** | 18 | A-1…A-8, B-2, C-2…C-5, D-1…D-4, D-6 |
 | **Eksik** | 8 (**2'si yayını durduran bloker**) | **B-1**, **D-5**, A-9, A-10, C-1, C-6, E-1, E-2 |
-| **Sahibinden bilgi/karar gerekli** | 5 | S-1…S-5 (S-6 kapandı) |
+| **Sahibinden bilgi/karar gerekli** | 6 | S-1…S-5, **S-7 (yayın engeli)** — S-6 kapandı |
 | Öneri (zorunlu değil) | 5 | Ö-1…Ö-5 |
 
 Bu denetimde `docs/` altında kapatılan eksikler: **kısa açıklama** (D-2, zorunlu
@@ -406,6 +406,7 @@ release build'de doğrulanması gerekenler:
 | **S-3** | **AdMob → Privacy & messaging → GDPR mesajı yayımlandı mı?** | Kod hazır (A-3) ama mesaj yayımlanmadıysa AEA/UK'de form hiç çıkmaz. Konsol erişimi yok, doğrulanamadı (C-6) |
 | **S-4** | **Dağıtım ülkeleri ve fiyat** | Console zorunlu alanı. Varsayılan öneri: **tüm ülkeler, ücretsiz**. Ücretsiz seçildikten sonra **ücretliye çevrilemez** |
 | **S-5** | **AdMob'da app-ads.txt doğrulaması tetiklendi mi?** | Kökteki dosya canlı (B-2) ama AdMob'un "doğrulandı" durumuna geçtiği kontrol edilemedi. AdMob → Apps → Kron Drive → App settings → app-ads.txt → *Check for updates* |
+| **S-7** | ⚠ **BAŞLANGIÇ COİNİ TEST DEĞERİNDE — AAB ÖNCESİ GERİ ALINMALI** | `PlayerProgress.STARTING_COINS` 2026-08-17'de **100 → 100.000** yapıldı; sahibi bütün araçları (en pahalısı 5.000) cihazda denemek istedi ve *"aab yaparken değiştiririz"* dedi. Bu değerle yayına çıkılırsa her araç, her boya ve bütün yükseltmeler (~51.000 coin) ilk saniyede alınabilir — oyunun ekonomisi tamamen anlamsızlaşır. Geri alma: `STARTING_COINS = STARTING_COINS_RELEASE` (100) |
 | ~~**S-6**~~ | ~~Keystore repo dışında yedeklendi mi?~~ **KAPANDI** | Proje sahibi 2026-08-16'da yedeklediğini bildirdi. **Sahibi beyanıdır, teknik olarak doğrulanmadı** — yedeğin yeri, kapsamı (`.jks` yanında `signing.properties` de dâhil mi) ve geri yüklenebilirliği kontrol edilmedi |
 
 ---

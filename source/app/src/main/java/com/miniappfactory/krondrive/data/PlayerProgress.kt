@@ -106,8 +106,26 @@ data class PlayerProgress(
         get() = (GameConfig.REWARDED_COIN_DAILY_LIMIT - rewardedCoinsToday).coerceAtLeast(0)
 
     companion object {
-        /** Ilk kurulumda verilen baslangic coini (ilk yukseltmeyi denemek icin). */
-        const val STARTING_COINS = 100
+        /**
+         * Ilk kurulumda verilen baslangic coini.
+         *
+         * ⚠⚠ GECICI TEST DEGERI — YAYINDAN ONCE 100'E GERI CEKILECEK. ⚠⚠
+         *
+         * Sahibi butun araclari (en pahalisi 5000 coin) cihazda denemek
+         * istedi ve 2026-08-17'de gecici olarak 100000 verildi. Sahibinin
+         * kendi sozu: *"aab yaparken degistiririz"*.
+         *
+         * BU DEGERLE YAYINA CIKILIRSA oyunun butun ekonomisi anlamsizlasir:
+         * her arac, her boya ve butun yukseltmeler (toplam ~51.000) ilk
+         * saniyede alinabilir hale gelir.
+         *
+         * Bir test bu degeri KILITLIYOR (PlayerProgressCarTest) — release
+         * hazirlanirken o test kirilarak hatirlatma yapar.
+         */
+        const val STARTING_COINS = 100_000
+
+        /** Yayina cikacak gercek deger; [STARTING_COINS] buna geri donmeli. */
+        const val STARTING_COINS_RELEASE = 100
 
         /**
          * XP -> arac seviyesi. Repository de bunu kullanir (seviye sarti olan

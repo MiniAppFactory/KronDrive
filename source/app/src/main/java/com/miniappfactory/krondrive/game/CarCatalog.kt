@@ -1284,12 +1284,23 @@ object CarCatalog {
         priceCoins = 3600,
         requiredCarLevel = 6,
         vehicleClass = VehicleClass.AGIR,
-        topSpeedMul = 0.94f,
+        // 2026-08-17, sahibi: *"tirin boostu cok yuksek, tir boostlanamaz ki"*.
+        // Hakli — 1.18 ile kataloğun en gucu boostuydu ve bu bir tirin
+        // fizigine aykiriydi.
+        //
+        // Ama boost onun TEK gucuydu; kaldirinca "her ucretli aracin en az
+        // bir gucu var" kurali kirildi. Guc SON HIZA tasindi (1.14, katalogun
+        // ikincisi): agir arac gec hizlanir ama bir kere hizlandi mi
+        // momentumu birakmaz. Fizigi de kimligi de bu.
+        //
+        // 1.14 rastgele degil: 1.12'de Super Araba onu DORT EKSENDE BIRDEN
+        // geciyordu (dominasyon testi kirmisti), 1.14 o esigin hemen ustu.
+        topSpeedMul = 1.14f,
         accelMul = 0.86f,
-        brakeMul = 0.92f,
-        boostMul = 1.18f,
-        traitTr = "Kataloğun en uzunu — boost'u en güçlü, kutusu en büyük",
-        traitEn = "Longest here — strongest boost, biggest hitbox",
+        brakeMul = 0.88f,
+        boostMul = 0.94f,
+        traitTr = "Geç hızlanır ama durmaz — kataloğun en büyük kutusu",
+        traitEn = "Slow to spin up but never stops — biggest hitbox here",
         parts = listOf(
             // Cekici tekerlekleri — kutunun SOL/SAG kenarina degiyor.
             CarPart.Box(CarPaint.TIRE, -24f, 16f, 6f, 20f, 2.4f, WHEEL_ROLL),
@@ -1337,12 +1348,22 @@ object CarCatalog {
         descriptionEn = "Open wheel, front and rear wing — built for the track",
         priceCoins = 5000,
         requiredCarLevel = 8,
+        // 2026-08-17, sahibi: *"boostu da + olmali, F1 sonucta reaksiyonu
+        // olan bi araba"*. Boost 0.90 -> 1.06.
+        //
+        // Freni -15'te BIRAKILDI (sahibi de oyle istedi): F1'in bedeli o.
+        // Boost da eksi olsaydi arac "en hizli ama iki eksende cezali"
+        // olurdu; simdi tek bedelli bir uzman.
+        //
+        // Dominasyon testi hala geciyor: Super Araba'yi hiz/ivme/boostta
+        // geciyor ama FRENDE geride (0.85 < 0.94), yani dort eksende birden
+        // gecmiyor.
         topSpeedMul = 1.18f,
         accelMul = 1.15f,
         brakeMul = 0.85f,
-        boostMul = 0.90f,
-        traitTr = "En hızlı ve en çevik — ama freni ve boost'u zayıf",
-        traitEn = "Fastest and sharpest — but weak brakes and boost",
+        boostMul = 1.06f,
+        traitTr = "En hızlı, en çevik, en güçlü boost — bedeli fren",
+        traitEn = "Fastest, sharpest, strongest boost — brakes are the price",
         parts = listOf(
             // On kanat: kutunun UST ve iki YAN kenarina birden degiyor.
             CarPart.Box(CarPaint.BODY, -20f, -2f, 40f, 5.4f, 1.2f, NOSE_FADE),

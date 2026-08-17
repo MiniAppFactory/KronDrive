@@ -138,11 +138,24 @@ class LevelCatalogTest {
 
     @Test
     fun `9 ve sonrasi bolumler ogrenme egrisi degisikliginden etkilenmedi`() {
-        // trafficDensity varsayilani 1.0, startSpeedKmh varsayilani null:
-        // mevcut 22 bolumun dengesi aynen duruyor.
+        // Yogunluk 9+ bolumlerde hala tam (1.0) — ogrenme egrisi yalnizca
+        // ilk sekiz bolumu yumusatti.
         LevelCatalog.levels.drop(8).forEach { level ->
             assertEquals("bolum ${level.id} yogunlugu", 1f, level.trafficDensity, 1e-4f)
-            assertNull("bolum ${level.id} baslangic hizi", level.startSpeedKmh)
+        }
+
+        // BASLANGIC HIZI ARTIK HER BOLUMDE 60 (2026-08-17, sahibi:
+        // "her level'in hizi 60'tan baslasin"). Bu test eskiden 9+ bolumlerin
+        // `startSpeedKmh == null` oldugunu donduruyordu; o kural sahibinin
+        // karariyla degisti. Yeni kural: hicbir bolum varsayilana DUSMEZ,
+        // hepsi acikca 60 yazar — boylece "bu bolum neden hizli basliyor"
+        // sorusu katalogda tek bakista cevaplanir.
+        LevelCatalog.levels.forEach { level ->
+            assertEquals(
+                "bolum ${level.id}: her bolum 60 km/h ile baslamali",
+                60,
+                level.startSpeedKmh
+            )
         }
     }
 
