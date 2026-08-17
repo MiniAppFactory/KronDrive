@@ -594,6 +594,33 @@ object GameConfig {
     /** Kosu baslamadan onceki geri sayim (prototipte 5 idi; 3 daha akici). */
     const val COUNTDOWN_SECONDS = 3
 
-    /** Bir kare icin islenecek en buyuk dt (prototip: 0.032). */
-    const val MAX_FRAME_DT = 0.032f
+    /**
+     * Bir kare icin islenecek en buyuk dt. **0.032 -> 0.050** (2026-08-17).
+     *
+     * Prototipteki deger 0.032'ydi ve prototip 60 FPS'te calisan bir tarayici
+     * oyunuydu — orada 32 ms, nominal karenin (16.7 ms) iki kati, yani genis
+     * bir pay. Bu cihazda (Samsung S8, API 24) oyun ~40 FPS, yani nominal
+     * kare **25 ms**: kirpma sinirina yalnizca 7 ms kaliyordu.
+     *
+     * Sonuc: bir kare 45 ms'ye takildiginda motor yalnizca 32 ms'lik hareket
+     * isliyor ve aradaki 13 ms KAYBOLUYOR. Dunya her janky karede gercek
+     * zamanin gerisine dusuyor ve bir daha yakalamiyor — nesneler ileri
+     * SICRAMAK yerine DURAKSIYOR.
+     *
+     * Sahibinin sikayeti tam olarak buydu: *"yoldaki arabalar hala takila
+     * takila gidiyor"*. En cok trafikte gorunmesi de tutarli: engeller yola
+     * gore yavas hareket ediyor (oyuncunun %45-58'i), yol deseni tekrarli
+     * oldugu icin jitter orada gizleniyor, tek tek araclar ise referans
+     * noktasi oluyor.
+     *
+     * 0.050 = 20 FPS tabani. Kirpmanin KORUMA amaci duruyor (uzun bir
+     * donmada oyuncu aracin icine isinlanmaz: 50 ms'de ~50 px, bir arac
+     * boyundan kisa) ama 40 FPS'teki jitter kaybi bitiyor.
+     *
+     * ⚠ HIPOTEZE DAYALI, HENUZ OLCULMEDI. Dogru cozum sabit adimli birikirici
+     * olurdu (`while (acc >= SABIT) step(SABIT)`) ama simulasyon maliyetini
+     * ~%50 artiriyor ve bu cihaz zaten zorlaniyor. Olcum geldiginde hangisinin
+     * gercekten fark yarattigina bakilacak.
+     */
+    const val MAX_FRAME_DT = 0.050f
 }
