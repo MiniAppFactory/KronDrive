@@ -23,7 +23,7 @@ object LevelCatalog {
         // ([LevelDef.trafficDensity]).
         //
         // Ogretme sirasi — her bolum TEK yeni sey ogretir:
-        //   1 serit degistirme (neredeyse bos yol)  4 perfect dodge
+        //   1 serit degistirme (neredeyse bos yol)  4 yogun trafikte skor
         //   2 trafik                                 5 tam trafik (ilk "normal")
         //   3 boost                                  6 combo (nefes bolumu)
         //   7 baski altinda combo                    8 mesafe + sure
@@ -36,13 +36,24 @@ object LevelCatalog {
         //
         // SIRA ONEMLI: yildizlar SIRALI kazanilir (bkz. LevelEvaluator) ve
         // bir sonraki bolum [GameConfig.MIN_STARS_TO_PASS] gorevle acilir
-        // (su an 2). Yani ilk IKI hedef makul olmali; PerfectDodge/Combo gibi
-        // beceri hedefleri UCUNCU siraya konur, boylece ustalik yildizi olur
-        // ve kimseyi tikamaz. Bu yorum 2026-08-16'da duzeltildi: "en az 1
-        // yildiz" yaziyordu ama kural 15 Agustos'ta degismisti ve yorum
-        // guncellenmemisti. Eski bolum
-        // 3 (`PerfectDodges(3)` ilk sirada) ve bolum 4 (`BoostDistance(500)`
-        // ilk sirada) tam olarak bu hatayi yapiyordu.
+        // (su an 2). Yani ilk IKI hedef makul olmali; beceri hedefleri
+        // UCUNCU siraya konur, boylece ustalik yildizi olur ve kimseyi
+        // tikamaz.
+        //
+        // PERFECT DODGE HEDEFLERI KALDIRILDI (2026-08-16, sahibi karari:
+        // "dodge hedeflerden kalksin, cok zorlastiriyor cunku"). Iki olcum
+        // bunu destekliyor:
+        //  - Otuz bolumun tamaminda temkinli oyun **tek bir dodge bile**
+        //    yapmiyor (LevelCurveTest, `tam olcum dokumu`). Yani dodge
+        //    hedefi olan her bolum temkinli oyuncu icin duvardi.
+        //  - Cihazda (40 FPS) dodge penceresi TEK KARE, ~25 ms; insan tepki
+        //    tabani ~250 ms (docs/REVIEW_GAMEPLAY.md). Mekanik bir ODUL
+        //    olarak duruyor (skor + combo verir) ama artik SART degil.
+        // Kaldirmadan once 30 bolumun 14'u ilerlemeyi tikiyordu.
+        //
+        // COMBO da yalnizca UCUNCU sirada ve en fazla
+        // [GameConfig.COMBO_MULTIPLIERS] doyum noktasi kadar (5) istenir —
+        // oyun combo 6/7/8'i odullendirmiyor, dolayisiyla istemesi de yanlis.
         // -----------------------------------------------------------------
 
         // 1 — SADECE SERIT DEGISTIRME. 25 s, 60 km/h, yogunluk 0.30:
@@ -87,8 +98,12 @@ object LevelCatalog {
                 Objective.ScoreAtLeast(1400)
             )
         ),
-        // 4 — PERFECT DODGE. Yogunluk 0.85; uc dodge, mekanigi taniyacak
-        // kadar, zorlamayacak kadar.
+        // 4 — YOGUN TRAFIK. Yogunluk 0.85; ilk kez "yol dolu" hissi.
+        //
+        // 2026-08-16'ya kadar bu bolum PERFECT DODGE bolumuydu ve ucuncu
+        // hedefi PerfectDodges(3) idi. Perfect dodge hedefleri KATALOGUN
+        // TAMAMINDAN kaldirildi (sahibi karari) — gerekce asagida, listenin
+        // basindaki nota bak.
         LevelDef(
             id = 4,
             goal = LevelGoal.SurviveTime(40),
@@ -97,7 +112,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.CompleteRun,
                 Objective.ScoreAtLeast(1800),
-                Objective.PerfectDodges(3)
+                Objective.PassVehicles(48)
             )
         ),
         // 5 — ILK "NORMAL" BOLUM: varsayilan 80 km/h, tam yogunluk. Buraya
@@ -158,7 +173,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.CompleteRun,
                 Objective.FinishUnderSeconds(36),
-                Objective.PerfectDodges(4)
+                Objective.CoinsAtLeast(22)
             )
         ),
         LevelDef(
@@ -166,7 +181,7 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(60),
             stars = listOf(
                 Objective.CoinsAtLeast(15),
-                Objective.PerfectDodges(5),
+                Objective.PassVehicles(60),
                 Objective.ScoreAtLeast(3300)
             )
         ),
@@ -183,9 +198,9 @@ object LevelCatalog {
             id = 11,
             goal = LevelGoal.SurviveTime(70),
             stars = listOf(
-                Objective.PerfectDodges(8),
-                Objective.ComboAtLeast(4),
-                Objective.ScoreAtLeast(3900)
+                Objective.PassVehicles(70),
+                Objective.ScoreAtLeast(3900),
+                Objective.ComboAtLeast(4)
             )
         ),
         LevelDef(
@@ -193,7 +208,7 @@ object LevelCatalog {
             goal = LevelGoal.ReachDistance(meters = 2400, timeLimitSec = 85),
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PerfectDodges(3),
+                Objective.CoinsAtLeast(18),
                 Objective.FinishUnderSeconds(55)
             )
         ),
@@ -210,9 +225,9 @@ object LevelCatalog {
             id = 14,
             goal = LevelGoal.SurviveTime(75),
             stars = listOf(
-                Objective.ComboAtLeast(5),
-                Objective.PerfectDodges(10),
-                Objective.ScoreAtLeast(4400)
+                Objective.PassVehicles(75),
+                Objective.ScoreAtLeast(4400),
+                Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
@@ -229,8 +244,8 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(75),
             stars = listOf(
                 Objective.PassVehicles(40),
-                Objective.PerfectDodges(8),
-                Objective.CoinsAtLeast(20)
+                Objective.ScoreAtLeast(5500),
+                Objective.CoinsAtLeast(48)
             )
         ),
         LevelDef(
@@ -238,8 +253,8 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(80),
             stars = listOf(
                 Objective.ScoreAtLeast(4800),
-                Objective.ComboAtLeast(5),
-                Objective.PerfectDodges(12)
+                Objective.PassVehicles(85),
+                Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
@@ -247,7 +262,7 @@ object LevelCatalog {
             goal = LevelGoal.ReachDistance(meters = 3200, timeLimitSec = 95),
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PerfectDodges(8),
+                Objective.CoinsAtLeast(26),
                 Objective.FinishUnderSeconds(66)
             )
         ),
@@ -264,9 +279,9 @@ object LevelCatalog {
             id = 20,
             goal = LevelGoal.SurviveTime(85),
             stars = listOf(
-                Objective.PerfectDodges(14),
-                Objective.ComboAtLeast(6),
-                Objective.CoinsAtLeast(24)
+                Objective.PassVehicles(90),
+                Objective.CoinsAtLeast(24),
+                Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
@@ -283,17 +298,17 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(85),
             stars = listOf(
                 Objective.ScoreAtLeast(5400),
-                Objective.PerfectDodges(12),
-                Objective.CoinsAtLeast(26)
+                Objective.PassVehicles(90),
+                Objective.CoinsAtLeast(54)
             )
         ),
         LevelDef(
             id = 23,
             goal = LevelGoal.SurviveTime(85),
             stars = listOf(
-                Objective.ComboAtLeast(6),
-                Objective.PerfectDodges(16),
-                Objective.ScoreAtLeast(5600)
+                Objective.PassVehicles(90),
+                Objective.ScoreAtLeast(5600),
+                Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
@@ -311,16 +326,16 @@ object LevelCatalog {
             stars = listOf(
                 Objective.BrakeTapsAtMost(1),
                 Objective.ScoreAtLeast(5800),
-                Objective.PerfectDodges(14)
+                Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
             id = 26,
             goal = LevelGoal.SurviveTime(90),
             stars = listOf(
-                Objective.PerfectDodges(18),
-                Objective.ComboAtLeast(7),
-                Objective.CoinsAtLeast(30)
+                Objective.PassVehicles(95),
+                Objective.CoinsAtLeast(30),
+                Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
@@ -337,17 +352,17 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(90),
             stars = listOf(
                 Objective.ScoreAtLeast(6200),
-                Objective.PerfectDodges(16),
-                Objective.CoinsAtLeast(32)
+                Objective.PassVehicles(95),
+                Objective.CoinsAtLeast(55)
             )
         ),
         LevelDef(
             id = 29,
             goal = LevelGoal.SurviveTime(90),
             stars = listOf(
-                Objective.ComboAtLeast(8),
-                Objective.PerfectDodges(20),
-                Objective.ScoreAtLeast(6600)
+                Objective.PassVehicles(95),
+                Objective.ScoreAtLeast(6600),
+                Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
@@ -355,7 +370,7 @@ object LevelCatalog {
             goal = LevelGoal.ReachDistance(meters = 5000, timeLimitSec = 120),
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PerfectDodges(15),
+                Objective.PassVehicles(105),
                 Objective.FinishUnderSeconds(88)
             )
         )

@@ -180,6 +180,64 @@ class LevelCurveTest {
         }
     }
 
+    /**
+     * KARIYERIN TAMAMI BITIRILEBILIR OLMALI (2026-08-16).
+     *
+     * Ustteki test yalnizca ilk 8 bolume bakiyordu, yani oyunun ucte ikisi
+     * hicbir zaman dogrulanmadi. Ag 30 bolume acilinca **14 bolumun**
+     * ilerlemeyi tikadigi goruldu: 9'dan sonrasi temkinli oyuncu icin
+     * bitirilemezdi. Sebep her seferinde ayniydi — PerfectDodge/Combo gibi
+     * bir beceri hedefi ilk iki sirada duruyordu ve temkinli oyun otuz
+     * bolumun HICBIRINDE tek bir dodge ya da combo yapmiyor.
+     *
+     * Bu test o durumun geri gelmesini engelliyor. Kirilirsa yeni bir bolum
+     * ya da yeni bir hedef degeri kariyeri kesmis demektir.
+     */
+    @Test
+    fun `otuz bolumun tamami temkinli oyunla gecilebilir`() {
+        LevelCatalog.levels.forEach { level ->
+            SEEDS.forEach { seed ->
+                val r = play(level, seed)
+                assertTrue(
+                    "bolum ${level.id} (tohum $seed) temkinli oyunla " +
+                        "${GameConfig.MIN_STARS_TO_PASS} yildiz vermedi, " +
+                        "kariyer burada kesiliyor: ${r.describe()}",
+                    r.stars >= GameConfig.MIN_STARS_TO_PASS
+                )
+            }
+        }
+    }
+
+    /**
+     * Beceri hedefleri (Combo) yalnizca UCUNCU sirada durabilir ve oyunun
+     * odullendirdigi tavani ([GameConfig.COMBO_MULTIPLIERS] doyum noktasi)
+     * asamaz. PerfectDodge hedefi katalogda HIC olmamali.
+     */
+    @Test
+    fun `beceri hedefleri yalnizca ustalik yildizinda ve odul tavaninin altinda`() {
+        val comboCap = GameConfig.COMBO_MULTIPLIERS.size
+        LevelCatalog.levels.forEach { level ->
+            level.stars.forEachIndexed { index, objective ->
+                assertTrue(
+                    "bolum ${level.id}: PerfectDodges hedefi kaldirildi, geri gelmemeli",
+                    objective !is Objective.PerfectDodges
+                )
+                if (objective is Objective.ComboAtLeast) {
+                    assertTrue(
+                        "bolum ${level.id}: combo hedefi ${index + 1}. sirada — " +
+                            "beceri hedefi yalnizca ustalik yildizinda (3. sira) olabilir",
+                        index == level.stars.lastIndex
+                    )
+                    assertTrue(
+                        "bolum ${level.id}: combo ${objective.combo} isteniyor ama oyun " +
+                            "combo $comboCap'ten sonrasini odullendirmiyor",
+                        objective.combo <= comboCap
+                    )
+                }
+            }
+        }
+    }
+
     @Test
     fun `ilk bes bolumde temkinli oyun iki yildizi da alir`() {
         // Ilk bes bolumun ilk IKI hedefi "katilim" seviyesinde; ucuncusu
@@ -243,6 +301,38 @@ class LevelCurveTest {
             val risky = play(level, SEEDS.first(), Style.RISKY)
             println("bolum ${level.id} TEMKINLI: ${safe.describe()}")
             println("bolum ${level.id} RISKLI  : ${risky.describe()}")
+        }
+    }
+
+    /**
+     * OTUZ BOLUMUN TAMAMI (2026-08-16).
+     *
+     * Bugune kadar olcum yalnizca ilk 8 bolumu oynatiyordu — yani oyunun
+     * ucte ikisi bir kez bile oynatilmamisti. Uc ayri inceleme (urun,
+     * oynanis, regresyon) 21/24/27/30. bolumlerin `FinishUnderSeconds`
+     * hedeflerinin yukseltmesiz araçla ulasilamaz GORUNDUGUNU soyledi ama
+     * hicbiri olcemedi, cunku ag oraya uzanmiyordu.
+     *
+     * Bu test bir sey DOGRULAMAZ (assert yok) — sayilari basar. Denge
+     * kararlarinin dayanagi bu ciktidir; tahminle hedef yazmak yerine
+     * buraya bakilir.
+     */
+    @Test
+    fun `tam olcum dokumu — otuz bolum`() {
+        println("bolum | yildiz | skor | gecis | coin | dodge | combo | boostM | mesafe | sure | tamam | kaza")
+        LevelCatalog.levels.forEach { level ->
+            // Ic tohum: tek tohumun sansi denge karari vermesin.
+            val runs = SEEDS.take(3).map { play(level, it, Style.SAFE) }
+            val stars = runs.map { it.stars }
+            val median = runs.sortedBy { it.stats.score }[runs.size / 2]
+            println(
+                "%2d | yildiz=%s (ort %.1f) | %s".format(
+                    level.id,
+                    stars.joinToString("/"),
+                    stars.average(),
+                    median.describe()
+                )
+            )
         }
     }
 
