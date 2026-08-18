@@ -442,7 +442,20 @@ class GameEngine(
             // ORANTILI kucultur. Gerekce ve reddedilen alternatif:
             // [LevelDef.speedRampScale]. Bunu "yalnizca rampaya uygula"
             // diye degistirme; olculup reddedildi.
-            baseSpeed + speedRamp * min(scoreCap, score / GameConfig.SCORE_SPEED_DIVISOR)
+            // Sonsuz modun zaman carpani YALNIZCA RAMPAYA uygulanir, tabana
+            // degil (2026-08-18, sahibi karari). Eskiden hazir hedefin
+            // TAMAMI carpiliyordu ve sonuc gosterge tavaninda (240) kirpiliyor,
+            // arac farki yok oluyordu: tam carpanda Beety 225, Sehir 233,
+            // Super Araba 240, Formula 240 — kariyerdeki %53'luk fark sonsuz
+            // modda %7'ye dusuyordu. Ayni gun acilan arac merdivenini sonsuz
+            // mod yiyordu.
+            //
+            // Carpan rampaya binince arac farki korunur: rampa zaten
+            // [UpgradeCatalog.scoreSpeedCap] uzerinden aracin carpanini
+            // tasiyor, yani iyi arac zamanla DAHA COK kazanir.
+            baseSpeed + speedRamp *
+                min(scoreCap, score / GameConfig.SCORE_SPEED_DIVISOR) *
+                endlessSpeedMultiplier()
         }
 
         // Parmak kalkinca kilit acilir.
@@ -456,9 +469,9 @@ class GameEngine(
             (boost > energyThreshold || freeBoostRemaining > 0f)
         if (wantsBoost) target += UpgradeCatalog.boostSpeedBonus(upgrades.boost)
         if (brakeDown) target -= UpgradeCatalog.brakePenalty(upgrades.brake, car)
-        // Sonsuz modun 30 saniyelik hiz rampasi da kilitliyken uygulanmaz;
-        // trafik yogunlugu rampasi ise devam eder (bkz. speedLocked).
-        if (!speedLocked) target *= endlessSpeedMultiplier()
+        // NOT: zaman carpani artik BURADA degil, yukarida rampanin uzerinde.
+        // Boost ve fren carpanin DISINDA kalir — aksi halde zamanla boost'un
+        // mutlak katkisi da siserdi.
         target = target.coerceAtLeast(GameConfig.MIN_SPEED)
 
         val rate = if (target > speed) {

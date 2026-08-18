@@ -257,6 +257,29 @@ object UpgradeCatalog {
             "${twoDecimals(GameConfig.BOOST_MAX / boostDrain(level, car))} s"
     }
 
+    /**
+     * Garajdaki ARAC KARTI icin somut aralik: "120 → 155 km/h".
+     *
+     * 2026-08-18'e kadar orada yuzde yaziyordu ("+18%"). Sahibi: *"arac
+     * tanitim garajinda hiz gibi ozellikler var ama rakamlarla yazmiyor,
+     * +/- seklinde"*. Yuzde iki seyi birden gizliyordu: aracin GERCEK hizini
+     * ve yukseltmelerle nereye gidebilecegini.
+     *
+     * Iki uc nokta [displayValue] ile hesaplanir (yani birim ve yuvarlama
+     * kurallari tek yerde kalir), sonra ortak birim bir kez yazilir:
+     * "120 → 155 km/h", "167 → 100 ms".
+     */
+    fun displayRange(type: UpgradeType, car: CarShapeDef): String {
+        val ilk = displayValue(type, 1, car)
+        val son = displayValue(type, MAX_LEVEL, car)
+        val birim = ilk.substringAfter(' ', "")
+        return if (birim.isNotEmpty() && son.endsWith(birim)) {
+            "${ilk.removeSuffix(" $birim")} → ${son.removeSuffix(" $birim")} $birim"
+        } else {
+            "$ilk → $son"
+        }
+    }
+
     fun title(type: UpgradeType, language: AppLanguage): String = when (type) {
         UpgradeType.SPEED -> language.pick(tr = "HIZ", en = "SPEED")
         UpgradeType.ACCELERATION -> language.pick(tr = "İVME", en = "ACCELERATION")

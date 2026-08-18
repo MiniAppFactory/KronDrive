@@ -1,5 +1,73 @@
 # Değişiklik günlüğü
 
+## 2026-08-19 — Sonsuz mod araç farkını yiyordu; garaj artık rakam yazıyor
+
+Sahibi *"Beety'nin top speed'i kaç"* diye sordu. Cevap tek sayı değildi ve
+aradaki fark sorunun kendisiydi:
+
+| Nerede | Beety yükseltmesiz | tam yükseltme |
+|---|---|---|
+| Garajda yazan | 120 | 155 |
+| Kariyer, bölüm 1 (rampaÖlçek 0,4) | **84** | — |
+| Sonsuz mod başı | 139 | 175 |
+| Sonsuz mod tam çarpanda | **225** | **240 (tavan)** |
+
+### Sonsuz mod, araç merdivenini yiyordu
+
+Zaman çarpanı (×1,6) hazır hedefin **tamamına** uygulanıyordu ve sonuç
+gösterge tavanında (240) kırpılıyordu:
+
+| Araç | Kariyer | Sonsuz, tam çarpanda |
+|---|---|---|
+| Beety | 120 | 225 |
+| Şehir | 124 | 233 |
+| Süper Araba | 168 | **240** |
+| Formula | 184 | **240** |
+
+Kariyerdeki %53'lük fark sonsuz modda **%7**'ye düşüyordu. Yani 18 Ağustos'ta
+açılan araç merdivenini sonsuz mod yiyordu.
+
+**Düzeltme:** çarpan artık yalnızca RAMPAYA uygulanıyor, tabana değil. Rampa
+zaten `scoreSpeedCap` üzerinden aracın çarpanını taşıdığı için iyi araç
+zamanla **daha çok** kazanıyor. Boost ve fren çarpanın dışında kaldı.
+
+Sonuç (Beety artık kırpılmıyor): 139 → **232**. Şehir 144 → 240.
+
+**⚠ ÜST YARI HÂLÂ KIRPILIYOR** ve bu açık bir madde:
+
+| Araç | sv | ham değer | gösterge |
+|---|---|---|---|
+| Süper Araba | 1 | 252 | 240 |
+| Süper Araba | 8 | **309** | 240 |
+| Formula | 1 | 279 | 240 |
+| Formula | 8 | **336** | 240 |
+
+Aritmetik acımasız: Formula tam yükseltmeli, sonsuz modun tabanıyla (80 km/h)
+**çarpan olmadan bile** 240'a oturuyor. Yani mevcut merdivenle 240'lık gösterge
+ve zaman çarpanı aynı anda var olamıyor. Seçenekler: gösterge tavanını
+yükseltmek (~290), sonsuz modun tabanını kariyerinkine (60) indirmek, ya da
+çarpanı küçültmek. **Sahibinin kararı bekleniyor.**
+
+### Garaj artık yüzde değil rakam yazıyor
+
+Sahibi: *"araç tanıtım garajında hız gibi özellikler var ama rakamlarla
+yazmıyor, +/- şeklinde"*. Yüzde iki şeyi birden gizliyordu: aracın gerçek
+hızını ve yükseltmelerle nereye gidebileceğini.
+
+Araç kartı artık somut aralık gösteriyor (cihazda doğrulandı):
+
+```
+HIZ    120 → 155 km/h        FREN   -28.4 → -47.4 km/h
+İVME   167 → 100 ms          BOOST  2.63 → 4.17 s
+```
+
+Uç noktalar `displayValue` ile hesaplanıyor, yani birim ve yuvarlama kuralları
+tek yerde kalıyor. Çubuğun rengi hâlâ referans araca göre farkı anlatıyor.
+
+**KANIT:** 219 birim test / 0 hata. `assembleDebug` + `assembleRelease`
+başarılı. Garaj ekran görüntüsüyle doğrulandı.
+
+
 ## 2026-08-18 (5) — Geçiş hedefleri ölçümden türetildi
 
 Sahibi: *"4. bölümde sürekli boosta bassan bile 29 araç geçmen imkânsız"* ve

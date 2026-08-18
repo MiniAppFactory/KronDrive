@@ -501,7 +501,7 @@ private fun CarCustomizeCard(
 
 /** Ozellik cubuklarinin etiket ve yuzde sutun genisligi (dort satir hizali dursun). */
 private val STAT_LABEL_WIDTH = 46.dp
-private val STAT_DELTA_WIDTH = 40.dp
+private val STAT_DELTA_WIDTH = 92.dp   // yuzde degil aralik yaziyor (2026-08-18)
 
 /**
  * Bir govdenin dort surus ozelligi + karakter cumlesi.
@@ -548,12 +548,12 @@ private fun CarStatPanel(shape: CarShapeDef, language: AppLanguage) {
                     }
                 )
                 Text(
-                    // Referans arac (Sehir) 0 gosterir: "bu eksende ortalama".
-                    text = when {
-                        delta > 0 -> "+$delta%"
-                        delta < 0 -> "$delta%"
-                        else -> "—"
-                    },
+                    // YUZDE DEGIL SOMUT ARALIK (2026-08-18). Sahibi: *"arac
+                    // tanitim garajinda hiz gibi ozellikler var ama rakamlarla
+                    // yazmiyor, +/- seklinde"*. Yuzde hem aracin gercek hizini
+                    // hem yukseltmelerle nereye gidecegini gizliyordu.
+                    // Cubugun RENGI hala farki anlatiyor (yesil/kirmizi).
+                    text = UpgradeCatalog.displayRange(type, shape),
                     modifier = Modifier.width(STAT_DELTA_WIDTH),
                     textAlign = TextAlign.End,
                     color = when {
@@ -561,7 +561,7 @@ private fun CarStatPanel(shape: CarShapeDef, language: AppLanguage) {
                         delta < 0 -> KronColors.Danger
                         else -> KronColors.TextMuted
                     },
-                    fontSize = 10.sp,
+                    fontSize = 8.sp,
                     fontWeight = FontWeight.Black
                 )
             }
@@ -572,10 +572,8 @@ private fun CarStatPanel(shape: CarShapeDef, language: AppLanguage) {
             // yaziyordu ama referans o gun Beety'ye gecti ve ekran eskidi.
             // Artik katalogdan okunuyor, bir daha yalan soyleyemez.
             text = language.pick(
-                tr = "Yüzdeler ${CarCatalog.defaultShape.nameTr} aracına göre; " +
-                    "yükseltmelerin üstüne eklenir",
-                en = "Percentages are vs. the ${CarCatalog.defaultShape.nameEn}; " +
-                    "applied on top of upgrades"
+                tr = "Yükseltmesiz → tam yükseltmeli değer; kariyer tabanına göre",
+                en = "Un-upgraded → fully upgraded; based on the career start speed"
             ),
             color = KronColors.TextMuted,
             fontSize = 9.sp
