@@ -6,7 +6,7 @@ Bir aracın yanından kıl payı geçmek Perfect Dodge sayılır. Peş peşe yap
 30 BÖLÜMLÜK KARİYER, 90 YILDIZ
 Her bölümün bir ana hedefi vardır: belirli süre hayatta kal ya da mesafeye ulaş. Üstüne üç ayrı yıldız görevi gelir — geçilen araç sayısı, skor eşiği, coin toplama, combo derecesi, boost'la alınan mesafe, frene hiç basmadan bitirme ya da süre rekoru. Toplam 90 yıldız.
 
-Üç görevden ikisi sonraki bölümü açmaya yeter; üçüncüsü ustalık isteyen oyuncu için orada durur. Her bölüm aynı hızla, 60 km/s ile başlar — kariyer boyunca artan şey trafik yoğunluğu ve bölümün senden istediğidir. Sonuncusu 120 saniyede 5.000 metre ister.
+Üç görevden ikisi sonraki bölümü açmaya yeter; üçüncüsü ustalık isteyen oyuncu için orada durur. Her bölüm aynı hızla, 60 km/s ile başlar — kariyer boyunca artan şey trafik yoğunluğu ve bölümün senden istediğidir. Sonuncusu 120 saniyede 3.800 metre ister.
 
 SONSUZ MOD
 Süre yok, hedef yok. Sadece sen ve giderek hızlanan trafik. Her 30 saniyede hız ve araç yoğunluğu artar. Kişisel rekorun kaydedilir; rekoruna 5 saniye kala oyun sana haber verir.

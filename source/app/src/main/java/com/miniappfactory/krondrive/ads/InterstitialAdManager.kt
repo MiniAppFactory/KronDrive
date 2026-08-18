@@ -14,7 +14,8 @@ import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
  * reklam hic yuklenemezse) [onProceed] cagrilir.
  *
  * KURAL: reklam akisi oyunu ASLA bloklamaz — no-fill, ag hatasi, gosterim
- * hatasi... hangi dal olursa olsun [onProceed] tam olarak bir kez calisir.
+ * hatasi, ONAY YOKLUGU... hangi dal olursa olsun [onProceed] tam olarak bir
+ * kez calisir.
  */
 object InterstitialAdManager {
 
@@ -25,6 +26,22 @@ object InterstitialAdManager {
                 proceeded = true
                 onProceed()
             }
+        }
+
+        // ONAY KAPISI — SON SAVUNMA HATTI (uyum denetimi, 2026-08-19).
+        //
+        // Cagiran taraf zaten [AdConsentGate] ile kontrol ediyor; buradaki
+        // kontrol o kontrolun yerine gecmez, ONUN UNUTULMASINA karsi durur.
+        // Acigin cikis sebebi tam olarak buydu: gecis reklaminin cagrildigi
+        // dort ayri yol vardi ve hicbiri onaya bakmiyordu. Kontrol istegin
+        // ciktigi TEK noktada da durursa, yarin eklenecek besinci yol da
+        // otomatik olarak kapali dogar.
+        //
+        // Onay yoksa BEKLEMEDEN devam: oyuncu icin fark, reklamin hic
+        // acilmamasidir — takilma yok.
+        if (!ConsentManager.canRequestAds(context)) {
+            proceedOnce()
+            return
         }
 
         InterstitialAd.load(

@@ -13,6 +13,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.miniappfactory.krondrive.ads.AdConsentGate
+import com.miniappfactory.krondrive.ads.ConsentManager
 import com.miniappfactory.krondrive.ads.RewardedAdManager
 import com.miniappfactory.krondrive.game.RunMode
 import com.miniappfactory.krondrive.ui.KronViewModel
@@ -45,7 +47,8 @@ private object Routes {
 @Composable
 fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
     val navController = rememberNavController()
-    val activity = LocalContext.current as? Activity
+    val context = LocalContext.current
+    val activity = context as? Activity
     val progress by viewModel.playerProgress.collectAsStateWithLifecycle()
     val progressLoaded by viewModel.progressLoaded.collectAsStateWithLifecycle()
 
@@ -106,7 +109,28 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 adInFlight = coinAdInFlight,
                 adFailed = coinAdFailed,
                 onWatchAdForCoins = {
-                    if (activity != null && !coinAdInFlight) {
+                    // Onay kapisi burada da gecerli (2026-08-19): garaj
+                    // odullu reklami da onaya bakmadan yukleniyordu.
+                    //
+                    // ⚠ EKSIK KALAN: onay yokken "İZLE" butonu hala
+                    // gorunuyor ve basilinca "Reklam yüklenemedi" diyor.
+                    // Dogrusu butonun HIC cikmamasi — bunun icin
+                    // `GarageScreen`e bir `rewardedOfferAllowed` parametresi
+                    // gerekiyor ve o dosya bu gorevin kapsami disinda
+                    // (paralel ajan calisiyor). Politika acigi kapali:
+                    // onaysiz reklam ISTEGI cikmiyor.
+                    val offerAllowed = AdConsentGate.shouldOfferRewarded(
+                        adsAllowed = AdConsentGate.adsAllowed(
+                            consentLatched = adsConsentResolved,
+                            sdkCanRequestAds = ConsentManager.canRequestAds(context)
+                        ),
+                        activityAvailable = activity != null
+                    )
+                    if (!offerAllowed) {
+                        // Sessiz kalmiyoruz: buton bir sey yapmiyor gibi
+                        // gorunmesin (docs/REVIEW_UX.md §4).
+                        coinAdFailed = true
+                    } else if (activity != null && !coinAdInFlight) {
                         coinAdInFlight = true
                         coinAdFailed = false
                         RewardedAdManager.loadAndShow(
@@ -168,6 +192,11 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 mode = mode,
                 levelId = levelArg.takeIf { it > 0 },
                 viewModel = viewModel,
+                // Oyun ekraninda BANNER YOK ama gecis ve odullu reklam VAR.
+                // Bayrak buraya 2026-08-19'a kadar hic verilmiyordu: diger
+                // bes ekran onu yalnizca banner icin aliyordu, oyun ekrani
+                // ise reklamlarini onaya hic bakmadan gosteriyordu.
+                adsConsentResolved = adsConsentResolved,
                 onExit = { navController.popBackStack() },
                 onPlayLevel = { nextLevel ->
                     // Sonraki bolum, mevcut oyun ekraninin YERINE gelir.

@@ -6,7 +6,7 @@ Slipping past a car by inches counts as a Perfect Dodge. Chain them and your mul
 30-LEVEL CAREER, 90 STARS
 Every level has one main goal: survive for a set time or reach a distance. On top of that sit three separate star objectives — cars passed, a score threshold, coins collected, a combo rank, distance covered on boost, finishing without touching the brake, or beating a time. Ninety stars in total.
 
-Two of the three objectives are enough to open the next level; the third one is there for players who want to master it. Every level starts you at the same 60 km/h — what rises across the career is traffic density and what the level asks of you. The last one wants 5,000 metres in 120 seconds.
+Two of the three objectives are enough to open the next level; the third one is there for players who want to master it. Every level starts you at the same 60 km/h — what rises across the career is traffic density and what the level asks of you. The last one wants 3,800 metres in 120 seconds.
 
 ENDLESS MODE
 No timer, no target. Just you and traffic that keeps getting faster. Speed and vehicle density step up every 30 seconds. Your personal best is saved, and the game tells you when you finish within 5 seconds of your record.

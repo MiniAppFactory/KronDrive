@@ -58,6 +58,32 @@ class DailyChallengeReachabilityTest {
 
     private enum class Style { SAFE, RISKY }
 
+    /**
+     * Otopilotun "eli". Stil NE yapmak istedigini, bu iki alan da onu NE KADAR
+     * IYI yapabildigini soyler.
+     *
+     * Neden gerekti (2026-08-19 olcumu): [Style.SAFE] otopilot 180 saniyelik
+     * kosuda bes tohumun BESINDE hic kaza yapmiyor. Bu "temkinli oyuncu" degil,
+     * her karede piksel okuyan MAKINE. Kademeleri onun tavanina gore ayarlamak,
+     * kaldirilan `combo` sablonunun aynadaki hali olurdu: bu sefer 3. kademe
+     * herkese kapanirdi. Insan oyuncuyu modellemek icin iki bozma yeterli:
+     *
+     * @param reactionFrames Karar iki karar arasinda DONDURULUR. 1 = her kare
+     *   (makine). 60 Hz'de 8 kare ~ 130 ms, 12 kare ~ 200 ms: olculmus insan
+     *   gorsel-motor tepki suresi araligi.
+     * @param dangerPx Onunde bu kadar bosluk kalmadan tehlikeyi FARK ETMEZ.
+     *   Kucuk deger = gec goren oyuncu.
+     */
+    private data class Pilot(
+        val style: Style,
+        val reactionFrames: Int = 1,
+        val dangerPx: Float = DANGER_AHEAD_PX
+    ) {
+        override fun toString(): String =
+            if (reactionFrames == 1 && dangerPx == DANGER_AHEAD_PX) style.name
+            else "${style.name}(tepki=${reactionFrames}k, gorus=${dangerPx.toInt()}px)"
+    }
+
     private fun engineFor(level: LevelDef, seed: Int): GameEngine {
         // ANTRENMAN MODU KAPALI: `sideLanesOnly = true` iken orta serit bos
         // kalir, otopilot hic carpmaz ve "bu hedef ulasilabilir" sonucu
@@ -75,11 +101,21 @@ class DailyChallengeReachabilityTest {
         return e
     }
 
-    private fun GameEngine.autopilot(style: Style, maxFrames: Int = 30_000): RunResult? {
+    private fun GameEngine.autopilot(
+        pilot: Pilot,
+        maxFrames: Int = 30_000,
+        onStep: (GameEngine) -> Unit = {}
+    ): RunResult? {
+        val style = pilot.style
         var guard = 0
         while (phase == RunPhase.COUNTDOWN && guard++ < 1000) step(dt)
 
         val dodgeCeiling = GameConfig.perfectDodgeMaxDx(laneWidth)
+        // Iki karar arasinda TASINAN niyet. Insan da her karede yeniden karar
+        // vermez; bir kez "sola geciyorum" der ve o karari uygular.
+        var heldLane = playerLane
+        var heldBoost = false
+        var sinceDecision = Int.MAX_VALUE
         guard = 0
         while (phase == RunPhase.RUNNING && guard++ < maxFrames) {
             // Bir seritteki en yakin tehdide olan dikey mesafe; gecilmis
@@ -104,7 +140,7 @@ class DailyChallengeReachabilityTest {
 
             var desired = when {
                 // 1) Kendi seridim tehlikeliyse en genis nefes alanina gec.
-                myGap < DANGER_AHEAD_PX ->
+                myGap < pilot.dangerPx ->
                     neighbours
                         .filter { it == playerLane || enterable(it) }
                         .maxWithOrNull(
@@ -118,7 +154,7 @@ class DailyChallengeReachabilityTest {
                             c.y < playerY + 30f &&
                             c.lane in neighbours &&
                             enterable(c.lane) &&
-                            gapAhead(c.lane) > DANGER_AHEAD_PX
+                            gapAhead(c.lane) > pilot.dangerPx
                     }
                     .minByOrNull { abs(it.y - playerY) }
                     ?.lane
@@ -139,12 +175,26 @@ class DailyChallengeReachabilityTest {
                 }
             }
 
-            if (desired < playerLane) steerLeft() else if (desired > playerLane) steerRight()
+            // TEPKI SURESI: karar yalnizca [Pilot.reactionFrames] karede bir
+            // TAZELENIR; aradaki karelerde bir onceki niyet uygulanir. Yukarida
+            // hesaplanan `desired` bilerek atilir — hesabi her karede yapmak
+            // ucuz, onemli olan ona gore DAVRANMAMAK.
+            if (sinceDecision >= pilot.reactionFrames) {
+                heldLane = desired
+                heldBoost = myGap > BOOST_SAFE_PX && boost > GameConfig.BOOST_REENGAGE_MIN * 2f
+                sinceDecision = 0
+            }
+            sinceDecision++
+
+            if (heldLane < playerLane) steerLeft() else if (heldLane > playerLane) steerRight()
             // Boost: yol acikken bas, frene hic basma.
-            setBoost(myGap > BOOST_SAFE_PX && boost > GameConfig.BOOST_REENGAGE_MIN * 2f)
+            setBoost(heldBoost)
             step(dt)
+            onStep(this)
         }
-        if (phase == RunPhase.CRASHED) finish(completed = false)
+        // `lastResult == null` demek kosu [maxFrames] ile KESILDI demek (yarim
+        // kosu olcumu). Kaza gibi bitirilir; istatistikler o ana kadarkidir.
+        if (phase == RunPhase.CRASHED || lastResult == null) finish(completed = false)
         return lastResult
     }
 
@@ -152,10 +202,13 @@ class DailyChallengeReachabilityTest {
      * Kosu sonucu. Ayni (bolum, tohum, stil) uclusu deterministik oldugu icin
      * sonuc onbellege alinir — testler ayni kosuyu tekrar tekrar oynatmasin.
      */
-    private fun play(level: LevelDef, seed: Int, style: Style = Style.SAFE): RunResult =
-        RUN_CACHE.getOrPut(Triple(level, seed, style)) {
-            requireNotNull(engineFor(level, seed).autopilot(style)) { "gunluk kosu sonuc uretmedi" }
+    private fun play(level: LevelDef, seed: Int, pilot: Pilot): RunResult =
+        RUN_CACHE.getOrPut(Triple(level, seed, pilot)) {
+            requireNotNull(engineFor(level, seed).autopilot(pilot)) { "gunluk kosu sonuc uretmedi" }
         }
+
+    private fun play(level: LevelDef, seed: Int, style: Style = Style.SAFE): RunResult =
+        play(level, seed, Pilot(style))
 
     /**
      * TAVAN olcumu icin kademeleri ulasilamaz degerlerle degistirir.
@@ -304,6 +357,69 @@ class DailyChallengeReachabilityTest {
     }
 
     /**
+     * UST KADEME BEDAVA OLMAMALI (2026-08-19).
+     *
+     * "1. kademe alinabilsin" bekcisinin SIMETRIGI. O bekci gunun sifirlanmasini
+     * yasakliyor; bu bekci gunun BEDAVA olmasini yasakliyor. Ikisi birlikte
+     * kademelere bir koridor ciziyor — tek basina biri, dengeyi karsi ucdan
+     * bozmaya izin veriyordu ve nitekim bozulmustu: 2026-08-19 olcumunde alti
+     * sablonun altisi da temkinli otopilotla 3/3 veriyordu.
+     *
+     * Kriter: kosunun YARISINDA (90 sn) kaza eden oyuncu 3. kademeyi ALMAMALI.
+     * 3. kademe "kosuyu bitir" demek; yarida birakana verilirse aspirasyonel
+     * olmaktan cikar.
+     *
+     * Olcum [openEnded] tanimi uzerinde yapilir: gercek kademelerle kosulsa
+     * motor ust kademe tutunca kosuyu bitirir ve olcum kendi olctugu seye
+     * bagimli hale gelirdi.
+     */
+    @Test
+    fun `ucuncu kademe yarim kosuyla alinamaz`() {
+        val open = templates().first().openEnded()
+        val halfRunFrames = (90 / dt).toInt()
+        SEEDS.forEach { seed ->
+            val half = requireNotNull(
+                engineFor(open, seed).autopilot(Pilot(Style.SAFE), maxFrames = halfRunFrames)
+            )
+            templates().forEach { challenge ->
+                val reached = LevelEvaluator.tiersReached(challenge.toLevelDef().stars, half.stats)
+                assertTrue(
+                    "gunluk sablon '${challenge.id}' (tohum $seed): 90 sn'de biten kosu " +
+                        "$reached kademe aldi — 3. kademe kosuyu BITIRMEYI istemeli. " +
+                        "Hedefler=${challenge.tiers.map { it.objective.targetValue }}, " +
+                        "yarim kosu=${half.describe()}",
+                    reached < 3
+                )
+            }
+        }
+    }
+
+    /**
+     * ...ama 3. kademe IMKANSIZ da olmamali: kazasiz tamamlanan bir kosu
+     * ucunu de vermeli.
+     *
+     * Ustteki bekciyle birlikte koridorun iki ucu da baglanmis olur. Bu test
+     * kirilirsa kademeler fazla yukseltilmis demektir — `dodge`/`combo`
+     * hatasinin ust kademedeki hali.
+     */
+    @Test
+    fun `ucuncu kademe kazasiz tam kosuyla alinabilir`() {
+        templates().forEach { challenge ->
+            SEEDS.forEach { seed ->
+                val reached = tiersOf(challenge, seed, Style.SAFE)
+                assertTrue(
+                    "gunluk sablon '${challenge.id}' (tohum $seed): kazasiz 180 sn'lik kosu " +
+                        "yalnizca $reached kademe aldi — 3. kademe aspirasyonel olmali ama " +
+                        "ULASILABILIR kalmali. " +
+                        "Hedefler=${challenge.tiers.map { it.objective.targetValue }}, " +
+                        "kosu=${play(challenge.toLevelDef(), seed, Style.SAFE).describe()}",
+                    reached == 3
+                )
+            }
+        }
+    }
+
+    /**
      * Olcum dokumu — assert yok, sayilari basar. Denge degistirirken tavanin
      * nereden geldigini gormek icin.
      *
@@ -326,6 +442,57 @@ class DailyChallengeReachabilityTest {
                 "   ${challenge.id.padEnd(9)} hedefler=${challenge.tiers.map { it.objective.targetValue }} " +
                     "TEMKINLI=${SEEDS.map { tiersOf(challenge, it, Style.SAFE) }} " +
                     "RISKLI=${SEEDS.map { tiersOf(challenge, it, Style.RISKY) }}"
+            )
+        }
+    }
+
+    @Test
+    fun `olcum dokumu — tepki suresi taramasi`() {
+        val open = templates().first().openEnded()
+        println("--- tepki suresi / gorus alani taramasi (SAFE stil, bes tohum ortalamasi)")
+        listOf(1, 4, 6, 8, 10, 12, 14, 16, 20).forEach { frames ->
+            listOf(DANGER_AHEAD_PX, 340f, 260f).forEach { danger ->
+                val p = Pilot(Style.SAFE, frames, danger)
+                val runs = SEEDS.map { play(open, it, p) }
+                fun avg(f: (RunResult) -> Number) = runs.map { f(it).toDouble() }.average()
+                println(
+                    "   tepki=%2dk(%3dms) gorus=%3d | sure=%5.1f skor=%7.0f gecis=%5.1f coin=%5.1f boostM=%6.0f mesafe=%6.0f kaza=%d/5".format(
+                        frames, (frames * 16), danger.toInt(),
+                        avg { it.stats.timeSurvivedSec }, avg { it.stats.score },
+                        avg { it.stats.vehiclesPassed }, avg { it.stats.coinsCollected },
+                        avg { it.stats.boostDistanceMeters }, avg { it.stats.distanceMeters },
+                        runs.count { it.stats.crashed }
+                    )
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `olcum dokumu — hayatta kalinan saniye basina kazanim`() {
+        val open = templates().first().openEnded()
+        val checkpoints = listOf(20, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180)
+        println("--- kosunun ILERLEYISI (SAFE, bes tohum ortalamasi)")
+        println("   sn  | skor   gecis  coin  boostM  mesafe")
+        val rows = checkpoints.associateWith { ArrayList<com.miniappfactory.krondrive.game.RunStats>() }
+        SEEDS.forEach { seed ->
+            val remaining = checkpoints.toMutableList()
+            engineFor(open, seed).autopilot(Pilot(Style.SAFE)) { e ->
+                while (remaining.isNotEmpty() && e.currentStats().timeSurvivedSec >= remaining.first()) {
+                    rows.getValue(remaining.removeAt(0)).add(e.currentStats())
+                }
+            }
+        }
+        checkpoints.forEach { sec ->
+            val r = rows.getValue(sec)
+            if (r.isEmpty()) return@forEach
+            fun avg(f: (com.miniappfactory.krondrive.game.RunStats) -> Number) =
+                r.map { f(it).toDouble() }.average()
+            println(
+                "   %3d | %6.0f %5.1f %6.1f %6.0f %7.0f".format(
+                    sec, avg { it.score }, avg { it.vehiclesPassed }, avg { it.coinsCollected },
+                    avg { it.boostDistanceMeters }, avg { it.distanceMeters }
+                )
             )
         }
     }
@@ -353,7 +520,7 @@ class DailyChallengeReachabilityTest {
         val SEEDS = listOf(1, 7, 42, 1234, 90210)
 
         /** (bolum, tohum, stil) -> sonuc. Kosular deterministik, tekrar oynatma. */
-        val RUN_CACHE = HashMap<Triple<LevelDef, Int, Style>, RunResult>()
+        val RUN_CACHE = HashMap<Triple<LevelDef, Int, Pilot>, RunResult>()
 
         /**
          * Uretilen TUM sablonlar. Generator listesi private; gorevler gun

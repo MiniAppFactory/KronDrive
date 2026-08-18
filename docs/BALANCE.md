@@ -434,7 +434,7 @@ tıkanıyordu (`LevelCatalog.kt:154-160`, `:173-176`).
 | Tip | Bölümler | Hedef biçimi |
 |---|---|---|
 | Hayatta kal | 9, 11, 13, 14, 16, 17, 19, 20, 22, 23, 25, 26, 28, 29 | `SurviveTime` 60 → 90 s |
-| Mesafe + süre | 8, 10, 12, 15, 18, 21, 24, 27, 30 | `ReachDistance` 1200 → 5000 m |
+| Mesafe + süre | 8, 10, 12, 15, 18, 21, 24, 27, 30 | `ReachDistance` 900 → 3800 m |
 | Fren disiplini | 13, 19, 25 | `BrakeTapsAtMost` 0–1 |
 
 Hepsinde başlangıç hızı **60**, hepsinde rampa **1.00** (varsayılan).

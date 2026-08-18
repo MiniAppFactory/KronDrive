@@ -27,6 +27,22 @@ object RewardedAdManager {
         onFailure: () -> Unit,
         onAdClosed: () -> Unit = {}
     ) {
+        // ONAY KAPISI — SON SAVUNMA HATTI (uyum denetimi, 2026-08-19).
+        //
+        // Asil kapi cagiran taraftadir: onay yokken odullu reklam BUTONU hic
+        // cikmamali (bkz. [AdConsentGate.shouldOfferRewarded]) — cunku buton
+        // gorunup odul verememek sessiz basarisizliktir. Buradaki kontrol o
+        // kapinin unutuldugu/atlandigi durumda istegin yine de cikmamasini
+        // garantiler.
+        //
+        // [onFailure] + [onAdClosed] ANINDA cagriliyor: cagiran taraftaki
+        // "yukleniyor…" durumu asili kalmasin, oyun beklemesin.
+        if (!ConsentManager.canRequestAds(context)) {
+            onFailure()
+            onAdClosed()
+            return
+        }
+
         RewardedAd.load(
             context,
             AdIds.rewardedAdUnitId(),

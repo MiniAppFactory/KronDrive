@@ -109,6 +109,66 @@ object DailyChallengeGenerator {
         )
     }
 
+    /**
+     * KADEMELER "HAYATTA KALINAN SANIYE" CINSINDEN AYARLANDI (2026-08-19).
+     *
+     * ## Bulunan sorun
+     *
+     * Olcum (`DailyChallengeReachabilityTest`, 180 sn, bes tohum, temkinli
+     * otopilot): ALTI sablonun ALTISINDA da 3/3 kademe aliniyordu, hem de
+     * genis payla — gecis 135/90, coin 105/38, skor 14.8k/8k, boost 3430/1400,
+     * mesafe 7740/4200, sure 180/140. Yani "3. kademe aspirasyonel olsun"
+     * niyeti kalmamisti: gunluk 500 coin her gun garantiydi.
+     *
+     * ## Asil bulgu: bu metriklerin BESI beceri degil, SURE olcuyor
+     *
+     * Otopilot bilerek bozuldu (tepki suresi 16 ms -> 320 ms, gorus alani
+     * 420 px -> 260 px). Sonuc: bes tohumun besinde HALA sifir kaza, hala
+     * 180 sn, ve `gecis` degeri 135.0'te CIVILI kaldi. Mesafe %1,5, skor %5
+     * bandinda oynadi. Yani daha kotu bir surucu bu sayilari neredeyse hic
+     * dusurmuyor — tek dusuren sey ERKEN KAZA.
+     *
+     * Bu yuzden kademe ayarlamak "bari yukselt" isi degil: her hedef,
+     * "kosunun kacinci saniyesine kadar dayanmak gerekir" sorusunun kilik
+     * degistirmis hali. Olculen ilerleyis (SAFE, bes tohum ortalamasi,
+     * `olcum dokumu — hayatta kalinan saniye basina kazanim`):
+     *
+     * ```
+     *  sn |  skor  gecis  coin  boostM  mesafe
+     *  30 |  2283   21.0   16.4    571    1183
+     *  60 |  4777   44.0   33.6   1137    2494
+     *  90 |  7289   67.0   51.4   1705    3804
+     * 120 |  9846   90.0   70.2   2295    5121
+     * 150 | 12374  112.0   88.6   2872    6433
+     * 180 | 14828  135.0  104.8   3430    7740
+     * ```
+     *
+     * Ilk ~20 sn disinda tablo neredeyse DOGRUSAL, yani her sablon bu tablodan
+     * cevrilebiliyor.
+     *
+     * ## Secilen capalar
+     *
+     * - **1. kademe ~30 sn** — garanti. Erken kaza eden oyuncu bile alir.
+     *   Bugunku degerlerin altina INILMEDI; yalnizca 30 sn'nin cok altinda
+     *   kalanlar (boost 350 = 19 sn, coin 10 = 20 sn) yukari cekildi.
+     * - **2. kademe ~90-95 sn** — kosunun yarisindan biraz fazlasi, "biraz caba".
+     * - **3. kademe ~155-165 sn** — kosuyu KAZASIZ bitirmeyi gerektirir.
+     *
+     * 3. kademe icin 180 sn (tavan) bilerek secilmedi: tavana esitlemek tek bir
+     * coin'lik oynamada kademeyi kaybettirir. ~%10 pay birakildi; pay her
+     * metrigin OLCULEN oynakligina gore verildi (gecis %0, mesafe %1,5,
+     * skor %5, boost ve coin %12 — bu ikisinde pay en genis).
+     *
+     * ## Ne IDDIA EDILMIYOR
+     *
+     * Otopilot bozulmus haliyle bile hic kaza yapmadi, yani INSANIN kaza
+     * sikligi bu olcumle bilinmiyor. "3. kademeyi insan her gun alamaz"
+     * beklentisi, gercek oyuncunun bizim modelleyemedigimiz sebeplerle
+     * (dikkat dagilmasi, parmak kaymasi) kaza yapmasina dayaniyor — OLCULMEDI.
+     * Telemetri gelirse ilk bakilacak sey bu olmali. Ters yone kacilmadigi
+     * icin risk sinirli: 1. kademe hala 30 sn, yani `dodge`/`combo`'da olan
+     * "gun tamamen kapandi" hatasi tekrarlanmiyor.
+     */
     private val TEMPLATES: List<DailyChallenge> = listOf(
         // "dodge" gorevi KALDIRILDI (2026-08-17), yerine boost mesafesi.
         //
@@ -122,17 +182,17 @@ object DailyChallengeGenerator {
         challenge(
             id = "boost",
             objectives = listOf(
-                Objective.BoostDistance(350),
-                Objective.BoostDistance(800),
-                Objective.BoostDistance(1400)
+                Objective.BoostDistance(570),   // ~30 sn
+                Objective.BoostDistance(1700),  // ~90 sn
+                Objective.BoostDistance(3000)   // ~158 sn (olculen taban 3410, %12 pay)
             )
         ),
         challenge(
             id = "distance",
             objectives = listOf(
-                Objective.DistanceAtLeast(1200),
-                Objective.DistanceAtLeast(2600),
-                Objective.DistanceAtLeast(4200)
+                Objective.DistanceAtLeast(1200),  // ~30 sn (degismedi)
+                Objective.DistanceAtLeast(4000),  // ~94 sn
+                Objective.DistanceAtLeast(7000)   // ~163 sn (olculen taban 7726)
             )
         ),
         // "combo" gorevi KALDIRILDI (2026-08-19) — `dodge` ile AYNI GEREKCE.
@@ -187,33 +247,33 @@ object DailyChallengeGenerator {
         challenge(
             id = "score",
             objectives = listOf(
-                Objective.ScoreAtLeast(2000),
-                Objective.ScoreAtLeast(4500),
-                Objective.ScoreAtLeast(8000)
+                Objective.ScoreAtLeast(2300),   // ~30 sn
+                Objective.ScoreAtLeast(7500),   // ~92 sn
+                Objective.ScoreAtLeast(13000)   // ~158 sn (olculen taban 14747)
             )
         ),
         challenge(
             id = "survive",
             objectives = listOf(
-                Objective.SurviveSeconds(45),
-                Objective.SurviveSeconds(90),
-                Objective.SurviveSeconds(140)
+                Objective.SurviveSeconds(45),   // degismedi: zaten olculmus guvenli taban
+                Objective.SurviveSeconds(95),
+                Objective.SurviveSeconds(160)   // 180 sn tavana 20 sn pay
             )
         ),
         challenge(
             id = "coins",
             objectives = listOf(
-                Objective.CoinsAtLeast(10),
-                Objective.CoinsAtLeast(22),
-                Objective.CoinsAtLeast(38)
+                Objective.CoinsAtLeast(16),     // ~30 sn
+                Objective.CoinsAtLeast(50),     // ~88 sn
+                Objective.CoinsAtLeast(85)      // ~145 sn; coin en oynak metrik, pay en genis
             )
         ),
         challenge(
             id = "pass",
             objectives = listOf(
-                Objective.PassVehicles(25),
-                Objective.PassVehicles(55),
-                Objective.PassVehicles(90)
+                Objective.PassVehicles(25),     // ~37 sn (degismedi)
+                Objective.PassVehicles(70),     // ~95 sn
+                Objective.PassVehicles(120)     // ~160 sn; gecis sayisi hic oynamiyor (135.0 sabit)
             )
         )
     )

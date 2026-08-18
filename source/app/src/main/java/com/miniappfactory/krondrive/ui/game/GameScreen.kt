@@ -78,6 +78,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.miniappfactory.krondrive.ads.AdConsentGate
+import com.miniappfactory.krondrive.ads.ConsentManager
 import com.miniappfactory.krondrive.ads.InterstitialAdManager
 import com.miniappfactory.krondrive.ads.RewardedAdManager
 import com.miniappfactory.krondrive.audio.EngineSoundManager
@@ -157,6 +159,16 @@ fun GameScreen(
     mode: RunMode,
     levelId: Int?,
     viewModel: KronViewModel,
+    /**
+     * UMP onay akisi cozuldu mu (`MainActivity`'deki mandal).
+     *
+     * ⚠ Bu ekran 2026-08-19'a kadar bu parametreyi HIC ALMIYORDU. Bayrak
+     * diger bes ekrana yalnizca BANNER icin gidiyordu; burada banner yok,
+     * ama gecis ve odullu reklam VAR ve ikisi de onaya bakmadan calisiyordu.
+     * Onayi reddeden AEA/UK kullanicisi banner gormeyip tam ekran reklam
+     * goruyordu (bkz. [AdConsentGate] KDoc'u).
+     */
+    adsConsentResolved: Boolean,
     onExit: () -> Unit,
     onPlayLevel: (Int) -> Unit,
     /** Ayni modu bastan baslatir (sonsuz modun "TEKRAR DENE"si). */
@@ -168,6 +180,25 @@ fun GameScreen(
     val language = progress.language
     val context = LocalContext.current
     val activity = context as? Activity
+
+    /**
+     * BU EKRANDAKI TUM REKLAMLARIN KAPISI (2026-08-19).
+     *
+     * Mandal tek basina yeterli degil: oyuncu Ayarlar > "Gizlilik
+     * secenekleri"nden onayini geri cekmis olabilir ve mandal geri
+     * alinmiyor. O yuzden SDK'ya da soruluyor (bkz. [AdConsentGate]).
+     *
+     * [remember] anahtari mandal: SDK sorgusu her yeniden bestelemede degil,
+     * ekrana her girildiginde (ve mandal degistiginde) bir kez yapiliyor.
+     * Kosu sirasinda onay durumu degisemez — degistirmenin tek yolu Ayarlar
+     * ekrani ve oraya ancak oyundan cikarak gidilir.
+     */
+    val adsAllowed = remember(adsConsentResolved, context) {
+        AdConsentGate.adsAllowed(
+            consentLatched = adsConsentResolved,
+            sdkCanRequestAds = ConsentManager.canRequestAds(context)
+        )
+    }
     val density = LocalDensity.current.density
     val textMeasurer = rememberTextMeasurer()
     val haptics = LocalHapticFeedback.current
@@ -596,7 +627,7 @@ fun GameScreen(
         engine.lastResult?.let { publishResult(it) }
         // Duraklatmadan cikmak da bir kosu sonudur: reklamsiz cikis yolu
         // birakilmiyor (sahibi karari, 2026-08-14).
-        withOptionalInterstitial(viewModel, mode, levelId, activity) { onExit() }
+        withOptionalInterstitial(viewModel, mode, levelId, activity, adsAllowed) { onExit() }
     }
 
     /**
@@ -636,7 +667,13 @@ fun GameScreen(
      * tusu, tekrar gir. Artik geri tusu de butonla AYNI yoldan gidiyor.
      */
     val exitFromResult = {
-        withOptionalInterstitial(viewModel, mode, result?.levelId ?: levelId, activity) {
+        withOptionalInterstitial(
+            viewModel = viewModel,
+            mode = mode,
+            levelId = result?.levelId ?: levelId,
+            activity = activity,
+            adsAllowed = adsAllowed
+        ) {
             onExit()
         }
     }
@@ -805,7 +842,12 @@ fun GameScreen(
         if (showCrashDialog && result == null) {
             CrashOverlay(
                 language = language,
-                canRevive = engine.canRevive(),
+                // Onay yoksa "REKLAM İZLE → DEVAM" teklifi HIC CIKMAZ:
+                // gosterilemeyecek bir reklam karsiliginda devam vaat etmek,
+                // butona basildiginda hicbir sey olmamasi demekti. Perde
+                // yalnizca "SONUÇLARI GÖR" ile kalir — akis bloklanmaz.
+                canRevive = engine.canRevive() &&
+                    AdConsentGate.shouldOfferRewarded(adsAllowed, activity != null),
                 adInFlight = adInFlight,
                 adFailed = adFailed,
                 onWatchAd = {
@@ -860,6 +902,13 @@ fun GameScreen(
                 coinsDoubled = coinsDoubled,
                 bonusCoins = bonusCoins,
                 bonusLimitReached = bonusLimitReached,
+                // Onay yoksa "REKLAM İZLE → +N COIN" butonu HIC CIKMAZ.
+                // Sonuc ekraninin geri kalani (skor, yildizlar, SONRAKİ
+                // BÖLÜM, TEKRAR DENE, ANA MENÜ) aynen calisir.
+                rewardedOfferAllowed = AdConsentGate.shouldOfferRewarded(
+                    adsAllowed = adsAllowed,
+                    activityAvailable = activity != null
+                ),
                 adInFlight = adInFlight,
                 adFailed = adFailed,
                 onDoubleCoins = {
@@ -893,7 +942,13 @@ fun GameScreen(
                 onNext = {
                     // Esik BITEN bolume gore: 4. bolumu bitirip 5'e gecerken
                     // reklam cikmaz, cikaran kosu hala reklamsiz bolgedeydi.
-                    withOptionalInterstitial(viewModel, mode, runResult.levelId, activity) {
+                    withOptionalInterstitial(
+                        viewModel = viewModel,
+                        mode = mode,
+                        levelId = runResult.levelId,
+                        activity = activity,
+                        adsAllowed = adsAllowed
+                    ) {
                         nextLevelId?.let(onPlayLevel)
                     }
                 },
@@ -916,7 +971,16 @@ fun GameScreen(
                 // iken "YUKLENIYOR…" yazip devre disi kaliyor.
                 onRetry = {
                     if (!adInFlight) {
-                        if (activity != null && viewModel.consumeRetryInterstitial()) {
+                        // ⚠ SIRA ONEMLI — onay kontrolu `&&`'in SOLUNDA.
+                        //
+                        // `consumeRetryInterstitial()` bir sayaci TUKETIR.
+                        // Onay kontrolu sagda olsaydi, onayi reddeden
+                        // oyuncunun her "TEKRAR DENE"si gosterilmeyen bir
+                        // reklam icin sayaci yakardi; oyuncu onayi sonradan
+                        // verdiginde reklam sirasi kaymis olurdu.
+                        val showAd = adsAllowed && activity != null &&
+                            viewModel.consumeRetryInterstitial()
+                        if (showAd && activity != null) {
                             adInFlight = true
                             viewModel.onInterstitialShown(mode)
                             InterstitialAdManager.loadAndShow(activity, activity) {
@@ -931,7 +995,13 @@ fun GameScreen(
                 onHome = {
                     if (!adInFlight) {
                         adInFlight = true
-                        withOptionalInterstitial(viewModel, mode, runResult.levelId, activity) {
+                        withOptionalInterstitial(
+                            viewModel = viewModel,
+                            mode = mode,
+                            levelId = runResult.levelId,
+                            activity = activity,
+                            adsAllowed = adsAllowed
+                        ) {
                             adInFlight = false
                             onExit()
                         }
@@ -946,17 +1016,32 @@ fun GameScreen(
  * Kosudan cikarken gecis reklami. [GameConfig.INTERSTITIAL_AFTER_EVERY_RUN]
  * acikken her cikista gosterilir; kapaliysa eski N-sayac esigine duser.
  * Reklam yuklenemezse akis beklemeden devam eder — reklam oyunu asla bloklamaz.
+ *
+ * [adsAllowed] false ise (UMP onayi yok/reddedildi) reklam ATLANIR ve
+ * [proceed] ANINDA calisir: oyuncu icin fark yalnizca reklamin gorunmemesidir,
+ * hicbir yerde bekleme yok.
  */
 private fun withOptionalInterstitial(
     viewModel: KronViewModel,
     mode: RunMode,
     levelId: Int?,
     activity: Activity?,
+    adsAllowed: Boolean,
     proceed: () -> Unit
 ) {
-    val shouldShow = GameConfig.INTERSTITIAL_AFTER_EVERY_RUN ||
-        viewModel.shouldShowInterstitial(mode, levelId)
-    if (activity != null && shouldShow) {
+    // ⚠ SIRA ONEMLI: sıklık kurali ancak onay VARSA sorulur.
+    //
+    // `shouldShowInterstitial` salt okuma, ama asagidaki
+    // `onInterstitialShown` sayaci SIFIRLAR. Onay kontrolu sonda olsaydi,
+    // onaysiz kullanicida gosterilmeyen bir reklam icin sayac yanar ve
+    // oyuncu onayi sonradan verdiginde reklamlar kaymis olurdu.
+    val shouldShow = AdConsentGate.shouldShowInterstitial(
+        adsAllowed = adsAllowed,
+        activityAvailable = activity != null,
+        frequencyAllows = GameConfig.INTERSTITIAL_AFTER_EVERY_RUN ||
+            viewModel.shouldShowInterstitial(mode, levelId)
+    )
+    if (shouldShow && activity != null) {
         viewModel.onInterstitialShown(mode)
         InterstitialAdManager.loadAndShow(activity, activity) { proceed() }
     } else {
@@ -2263,6 +2348,11 @@ private fun RunResultOverlay(
     bonusCoins: Int,
     /** Odullu reklamin gunluk siniri dolduysa buton yerine aciklama gosterilir. */
     bonusLimitReached: Boolean,
+    /**
+     * UMP onayi odullu reklam TEKLIF etmeye izin veriyor mu. False ise coin
+     * ikiye katlama butonu hic cizilmez (bkz. cagri yeri).
+     */
+    rewardedOfferAllowed: Boolean,
     adInFlight: Boolean,
     /** Reklam yuklenemediyse butonun altinda tek cumlelik aciklama cikar. */
     adFailed: Boolean,
@@ -2449,6 +2539,15 @@ private fun RunResultOverlay(
                             color = KronColors.BlueBright,
                             fontSize = 13.sp
                         )
+
+                        // ONAY YOKSA HICBIR SEY CIZILMEZ (2026-08-19).
+                        //
+                        // Ne buton ne de aciklama: "reklam izleyemezsin"
+                        // demenin oyuncuya bir faydasi yok, tek etkisi
+                        // kazanamayacagi bir odulu ona hatirlatmak olurdu.
+                        // Sessizce kayboluyor — sonuc ekrani onaysiz
+                        // kullanicida sadece reklam teklifi eksik calisir.
+                        !rewardedOfferAllowed -> Unit
 
                         bonusLimitReached -> Text(
                             text = language.pick(
