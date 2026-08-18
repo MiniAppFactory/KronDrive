@@ -48,7 +48,16 @@ class LevelCurveTest {
         return e
     }
 
-    private fun GameEngine.autopilot(style: Style, maxFrames: Int = 30_000): RunResult? {
+    private fun GameEngine.autopilot(
+        style: Style,
+        maxFrames: Int = 30_000,
+        /**
+         * Her RUNNING karesinde, [step] CAGRILMADAN once cagrilir. Denge
+         * olcumleri (ornegin serit doluluk dokumu) motoru kendi kopyasini
+         * yazmadan ornekleyebilsin diye var; null ise hicbir maliyeti yok.
+         */
+        sample: ((GameEngine) -> Unit)? = null
+    ): RunResult? {
         var guard = 0
         while (phase == RunPhase.COUNTDOWN && guard++ < 1000) step(dt)
 
@@ -70,6 +79,27 @@ class LevelCurveTest {
                     o.y < playerY + GameConfig.CAR_HEIGHT_PX
             }
 
+            // ICINDEN GECILEBILIR MI — YERLESILEBILIR MI DEGIL (2026-08-19).
+            //
+            // [enterable] bir seride YERLESMENIN kosulu: 240 px ilerideki bir
+            // arac orada KALMAYI riskli yapar. Ama seridin icinden gecerken
+            // (uc seritli yolda bir uctan otekine giderken) arac yalnizca
+            // ~0.2 s o seritte kalir; onemli olan tek sey o an dikey
+            // ortusme olmamasi.
+            //
+            // Ayrimin somut sebebi: bolum 11'de olculdu (tohum 1234) —
+            // oyuncu en solda, orta seritte hizasinda bir arac, ve {0,1}
+            // seritlerini kapatan bir cift yaklasiyor. Yanindaki arac
+            // gectiginde cift artik 240 px'in icindeydi, yani [enterable]
+            // ORTA SERIDI HIC ACMIYORDU ve otopilot yerinde durup carpiyordu.
+            // Oysa 215 px onundeki bir aracin altindan gecip saga devam etmek
+            // tamamen guvenli — carpisma dikey ortusme ister.
+            fun passable(lane: Int): Boolean = obstacles.none { o ->
+                o.lane == lane &&
+                    o.y > playerY - TRANSIT_CLEAR_PX &&
+                    o.y < playerY + GameConfig.CAR_HEIGHT_PX
+            }
+
             val myGap = gapAhead(playerLane)
 
             // Serit degistirme her zaman TEK serit: iki serit birden atlarken
@@ -78,13 +108,34 @@ class LevelCurveTest {
                 .filter { it in 0 until GameConfig.LANE_COUNT }
 
             var desired = when {
-                // 1) Kendi seridim tehlikeliyse en genis nefes alanina gec.
-                myGap < DANGER_AHEAD_PX ->
-                    neighbours
-                        .filter { it == playerLane || enterable(it) }
+                // 1) Kendi seridim tehlikeliyse en genis nefes alanina dogru
+                //    TEK ADIM at.
+                //
+                //    Hedef TUM seritler arasindan secilir, yalnizca komsular
+                //    arasindan degil (2026-08-19). Eskiden komsuluk yeterliydi
+                //    cunku her dogus tek bir seridi kapatiyordu: en fazla bir
+                //    serit kacmak gerekiyordu. Cift dogus
+                //    ([GameConfig.doubleSpawnChance]) iki seridi ayni anda
+                //    kapatabiliyor; en soldayken duvar {0,1} ise tek acik
+                //    serit IKI adim otede kalir ve komsulukla sinirli
+                //    otopilot yerinde durup carpar. Bu bir denge sorunu
+                //    degil, OTOPILOTUN GORME SINIRIYDI — insan oyuncu iki kez
+                //    kaydirir.
+                myGap < DANGER_AHEAD_PX -> {
+                    val best = (0 until GameConfig.LANE_COUNT)
                         .maxWithOrNull(
                             compareBy<Int> { gapAhead(it) }.thenBy { abs(it - playerLane) * -1 }
                         ) ?: playerLane
+                    val step = when {
+                        best < playerLane -> playerLane - 1
+                        best > playerLane -> playerLane + 1
+                        else -> playerLane
+                    }
+                    // Hedef seride YERLESILIYORSA tam pay, ARADAN
+                    // GECILIYORSA yalnizca dikey ortusme aranir.
+                    val ok = if (step == best) enterable(step) else passable(step)
+                    if (step == playerLane || ok) step else playerLane
+                }
 
                 // 2) Guvendeysem yakindaki bir coine yonel (yan serit yeterli).
                 else -> coins
@@ -121,14 +172,20 @@ class LevelCurveTest {
             // Boost: yol acikken bas, frene hic basma.
             setBoost(myGap > BOOST_SAFE_PX && boost > GameConfig.BOOST_REENGAGE_MIN * 2f)
 
+            sample?.invoke(this)
             step(dt)
         }
         if (phase == RunPhase.CRASHED) finish(completed = false)
         return lastResult
     }
 
-    private fun play(level: LevelDef, seed: Int, style: Style = Style.SAFE): RunResult =
-        requireNotNull(engineFor(level, seed).autopilot(style)) {
+    private fun play(
+        level: LevelDef,
+        seed: Int,
+        style: Style = Style.SAFE,
+        sample: ((GameEngine) -> Unit)? = null
+    ): RunResult =
+        requireNotNull(engineFor(level, seed).autopilot(style, sample = sample)) {
             "bolum ${level.id} sonuc uretmedi"
         }
 
@@ -459,10 +516,92 @@ class LevelCurveTest {
         }
     }
 
+    // -----------------------------------------------------------------
+    // TRAFIK DESENI OLCUMU (2026-08-19)
+    // -----------------------------------------------------------------
+
+    /**
+     * Oyuncunun ONUNDEKI tepki penceresinde ([OCCUPANCY_WINDOW_PX]) kac
+     * seridin kapali oldugu. 0 = yol tamamen acik, 3 = cikis yok.
+     *
+     * Pencere neden ekranin tamami degil: ekranin en ustundeki bir arac
+     * oyuncuyu ~4 saniye sonra ilgilendirir, yani "zorluk" degildir. Karar
+     * penceresi otopilotun tehlike esigiyle ([DANGER_AHEAD_PX]) ayni
+     * tutuldu ki olculen sey oyuncunun GERCEKTEN manevra yapmak zorunda
+     * oldugu an olsun.
+     */
+    private fun GameEngine.lanesBlockedAhead(): Int =
+        (0 until GameConfig.LANE_COUNT).count { lane ->
+            obstacles.any { o ->
+                o.lane == lane &&
+                    o.y < playerY + GameConfig.CAR_HEIGHT_PX &&
+                    playerY - o.y <= OCCUPANCY_WINDOW_PX
+            }
+        }
+
+    /** Bir bolumun serit doluluk histogrami: [0..3] kapali serit orani (%). */
+    private fun occupancy(level: LevelDef): FloatArray {
+        val hist = LongArray(GameConfig.LANE_COUNT + 1)
+        SEEDS.forEach { seed ->
+            play(level, seed) { e -> hist[e.lanesBlockedAhead()]++ }
+        }
+        val total = hist.sum().coerceAtLeast(1L).toFloat()
+        return FloatArray(hist.size) { hist[it] * 100f / total }
+    }
+
+    /**
+     * OLCUM — assert yok, sayilari basar.
+     *
+     * Bu dokum 2026-08-19'da su bulguyla dogdu: bolum 10, 20 ve 30 SATIR
+     * SATIR ayni sayilari veriyordu. Sebep [LevelDef.trafficDensity]'nin
+     * 7. bolumden sonra hep 1.0 olmasi ve doguslarin serit secimini
+     * BAGIMSIZ rastgele yapmasiydi — yogunluk doyunca desen de sabitleniyor,
+     * geriye yalnizca hedef rakamlarinin buyumesi kaliyordu.
+     */
+    @Test
+    fun `serit doluluk dokumu`() {
+        println("bolum | 0 dolu | 1 dolu | 2 dolu | 3 dolu | tikanik(>=2)")
+        LevelCatalog.levels.forEach { level ->
+            val o = occupancy(level)
+            println(
+                "%2d | %5.1f%% | %5.1f%% | %5.1f%% | %5.1f%% | %5.1f%%".format(
+                    level.id, o[0], o[1], o[2], o[3], o[2] + o[3]
+                )
+            )
+        }
+    }
+
+    /**
+     * GEC BOLUMLER BIRBIRINDEN FARKLI OLMALI.
+     *
+     * Bolum 10/20/30 desen olarak BIREBIR ayniydi (olculdu 2026-08-19).
+     * Bu test o durumun geri gelmesini engelliyor: tikanma orani
+     * (>=2 serit kapali) bolumle birlikte gercekten yukselmeli.
+     */
+    @Test
+    fun `gec bolumlerde trafik deseni yogunlasir`() {
+        val blocked = listOf(10, 20, 30).map { id ->
+            val o = occupancy(LevelCatalog.level(id)!!)
+            id to (o[2] + o[3])
+        }
+        val text = blocked.joinToString(", ") { "bolum ${it.first}=%.1f%%".format(it.second) }
+        assertTrue(
+            "bolum 20 bolum 10'dan daha tikanik olmali — $text",
+            blocked[1].second > blocked[0].second + 2f
+        )
+        assertTrue(
+            "bolum 30 bolum 20'den daha tikanik olmali — $text",
+            blocked[2].second > blocked[1].second + 2f
+        )
+    }
+
     private companion object {
         /** Yaygin bir telefon: 360 x 800 dp. Uzun ekran = uzun yaklasma mesafesi. */
         const val VIEW_WIDTH = 360f
         const val VIEW_HEIGHT = 800f
+
+        /** Serit doluluk olcumunun karar penceresi (bkz. lanesBlockedAhead). */
+        const val OCCUPANCY_WINDOW_PX = 420f
 
         /** Otopilotun tehlikeli saydigi dikey mesafe. */
         const val DANGER_AHEAD_PX = 420f
@@ -471,6 +610,13 @@ class LevelCurveTest {
 
         /** Yan seride kayarken "omuz hizasi" sayilan dikey pencere. */
         const val SIDE_SWIPE_PX = 240f
+
+        /**
+         * ARADAN GECERKEN aranan bosluk. Bir arac boyunun ~1.5 kati; en
+         * hizli yaklasmada bile serit degistirme suresinden (~0.19 s, bkz.
+         * [GameConfig.LANE_LERP_RATE]) uzun bir pay birakir.
+         */
+        const val TRANSIT_CLEAR_PX = 95f
 
         /** Yanasma manevrasinin gecerli oldugu dikey pencere (carpisma kutusu boyu). */
         const val GRAZE_WINDOW_PX = 52f

@@ -28,6 +28,33 @@ katalog **67–77 coin/km-h** bandındayken tır **200**.
 (büyüklük) sadece dezavantaj olarak var. Dört sürüş ekseninde de kötü olan bir
 araç, tanımı gereği bu eksenlerle dengelenemez.
 
+**Sonradan gelen ölçüm (2026-08-19, bağımsız).** Tez doğrulandı ve
+sayısallaştırıldı. BINEK trafiğe karşı Minkowski tehlike alanı:
+
+| Sınıf | Kutu (dp) | Tehlike alanı | Orana |
+|---|---|---|---|
+| MOTOSİKLET | 15,49 × 41,54 | 4.148 dp² | **0,69×** |
+| BINEK | 28,16 × 53,50 | 6.027 dp² | 1,00× |
+| AĞIR (tır) | 33,79 × 142,21 | 12.124 dp² | **2,01×** |
+
+Yani **ölçü sınıfı 2,9× yayılım üretiyor** — kataloğun en geniş hız
+yayılımından (1,00 → 2,08) bile geniş, ve fiyatta karşılığı **sıfır**.
+
+İki ek bulgu:
+- **Asıl dezavantaj enine değil boyuna.** Tırın eni +%20, boyu **+%166**.
+  Otopilot şerit penceresini binek boyuna göre hesaplarken tır 40 koşuda 40
+  kaza yapıyor; gerçek kutu boyuna göre hesaplayınca 320 saniye hiç
+  çarpmıyor. Yani tır **imkânsız değil, işaretsiz** — oyun oyuncuya
+  dorsesinin arkasında olduğunu hiçbir yerde söylemiyor.
+- **Eşit hayatta kalmada tır 29.806 skor** üretiyor; 1.500 coinlik Kuş SLX
+  29.544. Yani 3.600 coine 1.500 coinlik performans satılıyor.
+
+**Kendi hatamın düzeltmesi.** Yukarıda "fiyatı 1.500'e indirince dominasyon
+testi kırıldı" yazmıştım — **yanlış teşhis**. O test `priceCoins`'e hiç
+bakmıyor; kırılmasının sebebi aynı anda boost'u 1,20'den 0,94'e geri
+almamdı. Fiyat değişikliği yalnızca iki liste-sırası testini kırar, ikisi de
+tek satırlık.
+
 **Ne yapılmalı (sahibinin kararı).** Üç yol:
 1. **Mekanik ver.** Tır çarpışmada yavaşlamasın / trafiği itsin. Kimliğini
    gerçek yapar, ama yeni oynanış kodu demek.

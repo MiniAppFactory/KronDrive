@@ -254,10 +254,27 @@ data class LevelDef(
      *
      * Varsayilan 1.0 — mevcut bolumlerin hicbiri etkilenmez.
      */
-    val trafficDensity: Float = 1f
+    val trafficDensity: Float = 1f,
+    /**
+     * Bu bolumde CIFT DOGUS olasiligi: bir dogusta iki seridin ayni anda
+     * kapanma sansi. null = bolum numarasindan turet
+     * ([GameConfig.doubleSpawnChance]) — normal hal budur.
+     *
+     * Acik deger yalnizca TEK bir bolumu rampadan ayirmak gerektiginde
+     * yazilir (orn. bir nefes bolumu). Rampanin kendisi burada degil
+     * [GameConfig]'te ayarlanir.
+     */
+    val doubleSpawnChance: Float? = null
 ) {
+    /** Motorun kullandigi olasilik: acik deger varsa o, yoksa rampadan. */
+    val effectiveDoubleSpawnChance: Float
+        get() = doubleSpawnChance ?: GameConfig.doubleSpawnChance(id)
+
     init {
         require(stars.isNotEmpty()) { "Level $id: en az bir hedef olmali" }
+        require(doubleSpawnChance == null || doubleSpawnChance in 0f..1f) {
+            "Level $id: doubleSpawnChance 0..1 araliginda olmali"
+        }
         require(!awardsStars || stars.size == 3) {
             "Level $id: yildiz veren bolumlerde tam olarak 3 hedef olmali"
         }

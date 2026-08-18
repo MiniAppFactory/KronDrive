@@ -331,6 +331,99 @@ object GameConfig {
     const val OBSTACLE_SPAWN_INTERVAL_SEC = 1.30f
     const val COIN_SPAWN_INTERVAL_SEC = 1.05f
 
+    // ---------------------------------------------------------------------
+    // TRAFIK DESENI — CIFT DOGUS (2026-08-19)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Bir dogus aninda IKINCI bir aracin da (baska bir seride, ayni
+     * yukseklikte, AYNI kendi hiziyla) dogma olasiligi.
+     *
+     * ## Neden eklendi
+     *
+     * Olculdu (LevelCurveTest, `serit doluluk dokumu`, 2026-08-19): bolum
+     * 10, 20 ve 30 oynanis olarak BIREBIR ayniydi. Sebep iki katmanliydi:
+     *
+     *  1. [LevelDef.trafficDensity] 7. bolumden sonra hep 1.0 — yani
+     *     yogunluk ekseni DOYMUS durumda, artacak yeri yok.
+     *  2. [GameEngine.spawnObstacle] her araci BAGIMSIZ rastgele bir seride
+     *     doguruyordu. Bagimsiz secimler DESEN uretmez, yalnizca gurultu
+     *     uretir; iki arac ayni anda ayni tepki penceresine ancak sansla
+     *     duserdi.
+     *
+     * Sonuc: son yirmi bolumde tepki penceresinde >=2 seridin kapali olma
+     * orani %4-6 arasinda sabitti — ustelik ARTMIYOR, hafifce DUSUYORDU
+     * (bolum 10 %9.3 -> bolum 30 %4.0), cunku gec bolumlerde hiz yuksek
+     * oldugu icin araclar pencereden daha cabuk cikiyor. Zorluk artisinin
+     * tamami hedef rakamlarindan geliyordu, yoldan degil.
+     *
+     * ## Neden CIFT DOGUS (ve neden daha fazla yogunluk degil)
+     *
+     * Yogunlugu artirmak (dogus araligini kisaltmak) reddedildi: aralik
+     * [WORLD_SPEED_SCALE] ile birlikte turetilmis bir deger ve tek basina
+     * degistirilemez (bkz. [OBSTACLE_SPAWN_INTERVAL_SEC] notu) — ustelik
+     * "daha cok arac" oyuncuya YENI bir karar sormaz, ayni karari daha sik
+     * sorar.
+     *
+     * Cift dogus SORUYU degistirir: tek arac "yanindan gec" der, iki kapali
+     * serit "TEK acik seride gec" der. Yani reaksiyon degil YER SECIMI
+     * problemi olur. Ikisi bilerek AYNI [randomTrafficSpeed] degerini
+     * paylasir; ayri hizlarda cift, yolda kayarak dagilir ve duvar olarak
+     * OKUNMAZ — desenin tamami "iki serit ayni anda kapali" gorunmesine
+     * bagli.
+     *
+     * ## Rampa
+     *
+     * Ilk sekiz bolum ogrenme egrisi ve tamami olculmus/testlerle sabitlenmis
+     * durumda — oraya dokunulmuyor, deger 0. Desen 9. bolumde ACILIYOR (ilk
+     * "ogretme sonrasi" bolum, oyuncuya yeni bir sey soylemek icin dogru
+     * yer) ve 30'a kadar dogrusal buyuyor.
+     *
+     * ⚠ RNG AKISI: olasilik 0 iken [GameEngine.spawnObstacle] fazladan TEK
+     * BIR deger bile cekmez. Yani bolum 1-8, gunluk gorev ([DAILY_LEVEL_ID]
+     * = -1) ve sonsuz mod bit bazinda ESKI trafik dizisini uretmeye devam
+     * eder; o bolumlerin olculmus denge sayilari gecerli kalir.
+     */
+    const val DOUBLE_SPAWN_FIRST_LEVEL = 9
+    const val DOUBLE_SPAWN_LAST_LEVEL = 30
+
+    /** 9. bolumde desen bu olasilikla ACILIR (gorunur olsun diye 0 degil). */
+    const val DOUBLE_SPAWN_CHANCE_START = 0.08f
+
+    /**
+     * 30. bolumdeki olasilik. Ust sinir keyfi degil: cift dogusun her biri
+     * tepki penceresini ~1 dogus araligi boyunca isgal ediyor, yani bu deger
+     * kabaca "karelerin %35'inde iki serit kapali" demek. Daha yukarisi
+     * ucuncu seridin de kapanma olasiligini hizla buyutur ve kacisi olmayan
+     * duvarlar uretmeye baslar (bkz. [DOUBLE_SPAWN_FREE_LANE_GUARD_PX]).
+     */
+    const val DOUBLE_SPAWN_CHANCE_END = 0.35f
+
+    /**
+     * GUVENLIK KURALI: cift dogus, ucuncu (acik kalacak) seritte bu mesafe
+     * icinde zaten bir arac varsa YAPILMAZ — o durumda uc serit birden
+     * kapanir ve manevrayla kacilamaz, yalnizca frenle kacilabilirdi.
+     * Fren her bolumde secenek degil: bolum 13/19/25'in hedefi
+     * [Objective.BrakeTapsAtMost] (19'da SIFIR fren).
+     *
+     * Mesafe dogus noktasindan olculur: burada "yeni cift ile ayni yukseklik
+     * kusaginda" demek. Bir arac boyunun (~61 px) uc kati alindi — daha
+     * dari, ciftin altindan cikan araci kacirir.
+     */
+    const val DOUBLE_SPAWN_FREE_LANE_GUARD_PX = 190f
+
+    /**
+     * Bir kariyer bolumunun cift dogus olasiligi. Bolum disi modlar
+     * ([RunMode.ENDLESS], gunluk gorev) buraya hic ugramaz.
+     */
+    fun doubleSpawnChance(levelId: Int): Float {
+        if (levelId < DOUBLE_SPAWN_FIRST_LEVEL) return 0f
+        val span = (DOUBLE_SPAWN_LAST_LEVEL - DOUBLE_SPAWN_FIRST_LEVEL).toFloat()
+        val t = ((levelId - DOUBLE_SPAWN_FIRST_LEVEL) / span).coerceIn(0f, 1f)
+        return DOUBLE_SPAWN_CHANCE_START +
+            (DOUBLE_SPAWN_CHANCE_END - DOUBLE_SPAWN_CHANCE_START) * t
+    }
+
     /**
      * Trafik araclarinin KENDI ileri hizi — kosunun taban hizinin orani.
      *

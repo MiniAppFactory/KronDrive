@@ -225,13 +225,21 @@ object LevelCatalog {
                 Objective.ComboAtLeast(4)
             )
         ),
+        // 12 — coin hedefi 18 -> 15 (2026-08-19, OLCUMLE).
+        //
+        // Cift dogus deseni ([GameConfig.doubleSpawnChance]) 9. bolumden
+        // itibaren yolu desenli hale getirdi; iki serit ayni anda kapaninca
+        // oyuncu coin PESINDE KOSAMAZ, acik seride mecbur kalir. Olculdu
+        // (LevelCurveTest, TAVAN dokumu): bu bolumun coin tavani 18'e indi,
+        // yani hedef tam tavana esitti — ucuncu yildiz pratikte kazanilamaz
+        // olurdu. Zorluk artik yoldan geliyor, sayactan degil.
         LevelDef(
             id = 12,
             goal = LevelGoal.ReachDistance(meters = 1800, timeLimitSec = 85),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.CoinsAtLeast(18),
+                Objective.CoinsAtLeast(15),
                 Objective.FinishUnderSeconds(55)
             )
         ),
@@ -272,7 +280,9 @@ object LevelCatalog {
             stars = listOf(
                 Objective.PassVehicles(36),
                 Objective.ScoreAtLeast(4100),
-                Objective.CoinsAtLeast(25)
+                // 25 -> 24: tavan 29, esik tavanin %85'i (2026-08-19, bolum
+                // 12 ile ayni gerekce — cift dogus coin toplamayi kisitliyor).
+                Objective.CoinsAtLeast(24)
             )
         ),
         LevelDef(
@@ -291,7 +301,8 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.CoinsAtLeast(26),
+                // 26 -> 24: tavan 29 (2026-08-19, bolum 12 ile ayni gerekce).
+                Objective.CoinsAtLeast(24),
                 Objective.FinishUnderSeconds(66)
             )
         ),

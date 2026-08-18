@@ -582,22 +582,73 @@ class GameEngine(
         } else {
             random.nextInt(GameConfig.LANE_COUNT)
         }
-        obstacles.add(
-            Obstacle(
-                lane = lane,
-                x = laneCenter(lane),
-                // Dogma yuksekligi SINIFA gore: sabit -150 binek icin
-                // dogruydu ama AGIR 161.6 px uzun, yani tir orada dogsa
-                // arkasi ekranin ICINDE belirirdi (2026-08-16).
-                y = GameConfig.obstacleSpawnY(CarCatalog.trafficShape.vehicleClass),
-                colorIndex = random.nextInt(OBSTACLE_COLORS.size),
-                ownSpeed = randomTrafficSpeed(),
-                // Trafigin kutusu KENDI govdesinden gelir. Bugun tek bir
-                // trafik govdesi var ve o BINEK; birden fazla govde/sinif
-                // dogmaya baslarsa degisecek tek yer burasidir.
-                vehicleClass = CarCatalog.trafficShape.vehicleClass
-            )
+        val first = addTraffic(lane)
+
+        // ---- DESEN: CIFT DOGUS (bkz. GameConfig.doubleSpawnChance) ----
+        //
+        // ⚠ RNG AKISI: olasilik 0 iken asagida TEK BIR deger bile cekilmez.
+        // Bolum 1-8, gunluk gorev ve sonsuz mod bu yuzden bit bazinda eski
+        // trafik dizisini uretmeye devam eder.
+        val doubleChance = level?.effectiveDoubleSpawnChance ?: 0f
+        if (doubleChance <= 0f) return
+        if (random.nextFloat() >= doubleChance) return
+
+        val partner = pickPartnerLane(lane)
+        // GUVENLIK: ucuncu serit de doluysa cift dogus IPTAL. Uc serit birden
+        // kapanirsa manevrayla kacis kalmaz; geriye yalnizca fren kalir ve
+        // fren bazi bolumlerde hedefle yasakli (BrakeTapsAtMost).
+        //
+        // Iptal edilse bile partner seridi CEKILDI — akis dala gore
+        // degismesin diye (yukaridaki antrenman modu blogundaki ayni kural).
+        val freeLane = (0 until GameConfig.LANE_COUNT).first { it != lane && it != partner }
+        val freeLaneBusy = obstacles.any { o ->
+            o.lane == freeLane &&
+                abs(o.y - first.y) < GameConfig.DOUBLE_SPAWN_FREE_LANE_GUARD_PX
+        }
+        if (freeLaneBusy) return
+
+        // Ikisi AYNI kendi hizini paylasir: farkli hizlarda cift yolda kayarak
+        // dagilir ve "iki serit ayni anda kapali" olarak OKUNMAZ.
+        addTraffic(partner, ownSpeed = first.ownSpeed)
+    }
+
+    /**
+     * Cift dogusun ikinci seridi. [lane] disindaki seritler arasindan secilir.
+     *
+     * Antrenman modunda orta serit HEP bos kalmali (modun tek amaci o), o
+     * yuzden esi hep karsi yan serittir — ama cekilen deger yine de tuketilir
+     * ki RNG akisi dala gore degismesin.
+     */
+    private fun pickPartnerLane(lane: Int): Int {
+        val pick = random.nextInt(GameConfig.LANE_COUNT - 1)
+        if (sideLanesOnly) return if (lane == 0) GameConfig.LANE_COUNT - 1 else 0
+        return if (pick >= lane) pick + 1 else pick
+    }
+
+    /**
+     * Bir trafik aracini sahneye koyar ve dondurur.
+     *
+     * [ownSpeed] null ise kendi hizi cekilir ([randomTrafficSpeed]); cift
+     * dogusun ikinci araci esinin hizini AYNEN alir, yani orada yeni bir
+     * deger cekilmez.
+     */
+    private fun addTraffic(lane: Int, ownSpeed: Float? = null): Obstacle {
+        val o = Obstacle(
+            lane = lane,
+            x = laneCenter(lane),
+            // Dogma yuksekligi SINIFA gore: sabit -150 binek icin
+            // dogruydu ama AGIR 161.6 px uzun, yani tir orada dogsa
+            // arkasi ekranin ICINDE belirirdi (2026-08-16).
+            y = GameConfig.obstacleSpawnY(CarCatalog.trafficShape.vehicleClass),
+            colorIndex = random.nextInt(OBSTACLE_COLORS.size),
+            ownSpeed = ownSpeed ?: randomTrafficSpeed(),
+            // Trafigin kutusu KENDI govdesinden gelir. Bugun tek bir
+            // trafik govdesi var ve o BINEK; birden fazla govde/sinif
+            // dogmaya baslarsa degisecek tek yer burasidir.
+            vehicleClass = CarCatalog.trafficShape.vehicleClass
         )
+        obstacles.add(o)
+        return o
     }
 
     /**
