@@ -192,7 +192,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.CompleteRun,
                 Objective.FinishUnderSeconds(36),
-                Objective.CoinsAtLeast(22)
+                Objective.CoinsAtLeast(9)
             )
         ),
         LevelDef(
@@ -272,7 +272,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.PassVehicles(36),
                 Objective.ScoreAtLeast(4100),
-                Objective.CoinsAtLeast(48)
+                Objective.CoinsAtLeast(25)
             )
         ),
         LevelDef(
@@ -332,7 +332,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.ScoreAtLeast(4000),
                 Objective.PassVehicles(45),
-                Objective.CoinsAtLeast(54)
+                Objective.CoinsAtLeast(30)
             )
         ),
         LevelDef(
@@ -392,7 +392,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.ScoreAtLeast(4600),
                 Objective.PassVehicles(52),
-                Objective.CoinsAtLeast(55)
+                Objective.CoinsAtLeast(32)
             )
         ),
         LevelDef(

@@ -32,7 +32,15 @@ class LevelCurveTest {
     private enum class Style { SAFE, RISKY }
 
     private fun engineFor(level: LevelDef, seed: Int): GameEngine {
-        val e = GameEngine(mode = RunMode.CAREER, level = level, random = Random(seed))
+        // ANTRENMAN MODU KAPALI olcum yapiyoruz — acik kalirsa orta serit bos
+        // olur, otopilot hic carpmaz ve "bu hedef ulasilabilir" sonucu YALAN
+        // olur (bkz. GameEngine.sideLanesOnly).
+        val e = GameEngine(
+            mode = RunMode.CAREER,
+            level = level,
+            random = Random(seed),
+            sideLanesOnly = false
+        )
         // DIKKAT: `apply { setViewport(viewWidth, viewHeight) }` yazma —
         // isimler GameEngine'in KENDI viewWidth/viewHeight alanlarina (0f)
         // baglanir ve setViewport sessizce hicbir sey yapmaz.
@@ -132,6 +140,44 @@ class LevelCurveTest {
             "tamam=${stats.completed} kaza=${stats.crashed}"
 
     // -----------------------------------------------------------------
+
+    /**
+     * Her [Objective.CoinsAtLeast] hedefi de ulasilabilir olmali.
+     *
+     * `PassVehicles` icin yazilan bekci (asagida) 2026-08-19'da eklendi ve
+     * ayni gun ayni hatanin COIN hedeflerinde de durdugu olculdu:
+     *
+     *     bolum  8: hedef 22, gercek tavan 15  -> IMKANSIZ
+     *     bolum 16: hedef 48, gercek tavan 44  -> IMKANSIZ
+     *     bolum 22: hedef 54, gercek tavan 51  -> IMKANSIZ
+     *     bolum 28: hedef 55, gercek tavan 55  -> pay yok
+     *
+     * Ilerleme tikanmiyordu ([GameConfig.MIN_STARS_TO_PASS] = 2) ama o
+     * bolumlerde ucuncu yildiz KAZANILAMAZ durumdaydi — oyuncu ugrasip
+     * nedenini ogrenemezdi. Tur bazinda ayri test yaziliyor cunku her hedef
+     * turunun tavani farkli bir mekanizmadan geliyor.
+     */
+    @Test
+    fun `her coin hedefi ulasilabilir`() {
+        LevelCatalog.levels.forEach { level ->
+            val hedef = level.stars
+                .filterIsInstance<Objective.CoinsAtLeast>()
+                .firstOrNull()?.coins ?: return@forEach
+            val acikUclu = level.copy(
+                stars = listOf(
+                    Objective.PassVehicles(99_999),
+                    Objective.ScoreAtLeast(9_999_999),
+                    Objective.CoinsAtLeast(99_999)
+                )
+            )
+            val tavan = SEEDS.minOf { play(acikUclu, it).stats.coinsCollected }
+            assertTrue(
+                "bolum ${level.id}: coin hedefi $hedef ama gercek tavan $tavan — " +
+                    "hedef tavanin %85'ini asmamali",
+                hedef <= tavan * 0.85f
+            )
+        }
+    }
 
     /**
      * Her [Objective.PassVehicles] hedefi GERCEKTEN ulasilabilir olmali.

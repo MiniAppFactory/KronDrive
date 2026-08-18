@@ -29,6 +29,19 @@ class GameEngine(
      */
     private val previousStars: Int = 0,
     /**
+     * Trafik yalnizca dis seritlerde mi dogsun (antrenman modu).
+     *
+     * Varsayilani [GameConfig.TRAINING_MODE_SIDE_LANES_ONLY] ama PARAMETRE,
+     * cunku `const val` okumak DENGE OLCUMLERINI SESSIZCE GECERSIZ KILIYORDU:
+     * antrenman modu acikken orta serit hep bos oluyor, otopilot hic
+     * carpmiyor ve `LevelCurveTest` "bu hedef ulasilabilir" diyor — oysa
+     * gercek oyunda ulasilamayabilir. 2026-08-19'da iki ayri olcum bagimsiz
+     * olarak bu tuzaga dustu.
+     *
+     * Denge olcen her test bunu ACIKCA `false` gecmeli.
+     */
+    private val sideLanesOnly: Boolean = GameConfig.TRAINING_MODE_SIDE_LANES_ONLY,
+    /**
      * Oyuncunun garajda sectigi govde sekli ve boyasi.
      *
      * 2026-08-15'e kadar simulasyona HIC dokunmuyordu (araclar tamamen
@@ -560,7 +573,7 @@ class GameEngine(
         // kalir. RNG akisi BOZULMUYOR — her iki dalda da `random`dan tam bir
         // deger cekiliyor, yani ayni tohum ayni trafik dizisini uretmeye
         // devam ediyor ve testler karsilastirilabilir kaliyor.
-        val lane = if (GameConfig.TRAINING_MODE_SIDE_LANES_ONLY) {
+        val lane = if (sideLanesOnly) {
             if (random.nextInt(GameConfig.LANE_COUNT) < GameConfig.LANE_COUNT / 2) {
                 0
             } else {

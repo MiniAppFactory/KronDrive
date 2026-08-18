@@ -167,8 +167,17 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
 
             // Haftalik gorevler her modda ilerler (oyuncu ne oynarsa oynasin).
             repository.incrementMissionProgress(MissionType.DRIVE_DISTANCE, stats.distanceMeters)
+            // Boost mesafesi AYRI besleniyor (2026-08-19). Oncesinde hic
+            // beslenmiyordu: `boostDistanceMeters` motorda hesaplaniyor ama
+            // hicbir goreve gitmiyordu, "Boost'la git" gorevi ise toplam
+            // mesafeden ilerliyordu.
+            repository.incrementMissionProgress(
+                MissionType.BOOST_DISTANCE,
+                stats.boostDistanceMeters
+            )
             repository.incrementMissionProgress(MissionType.PASS_VEHICLES, stats.vehiclesPassed)
-            repository.incrementMissionProgress(MissionType.PERFECT_DODGES, stats.perfectDodges)
+            // PERFECT_DODGES artirilmiyor: o turde gorev 2026-08-17'de
+            // kaldirildi, cagri olu kalmisti.
             repository.incrementMissionProgress(MissionType.BIG_COMBOS, stats.bigCombos)
 
             when (result.mode) {

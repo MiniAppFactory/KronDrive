@@ -1,5 +1,98 @@
 # Değişiklik günlüğü
 
+## 2026-08-19 (3) — Otonom oturum: kritik geri tuşu hatası + ölçüm hijyeni
+
+Altı ajanla paralel çalışıldı. Ajan raporları kanıt sayılmadı; her iddia
+yeniden ölçüldü ve **iki ajan iddiası ölçümde tutmadı** (aşağıda).
+
+### ⚠ KRİTİK — çarpışma perdesinde geri tuşu koşuyu siliyordu
+
+`GameScreen.kt` — bugün eklediğim `BackHandler` dalı, çarpışma perdesi
+(DEVAM ET / VAZGEÇ) açıkken `exitFromResult()` çağırıyordu. O fonksiyon
+`engine.finish()` ve `publishResult()` çağırmıyor.
+
+Sonuç: çarpışma perdesinde geri tuşuna basan oyuncunun **coin'i, XP'si, görev
+ilerlemesi ve sonsuz mod rekoru sessizce siliniyordu**. Üstelik reklam sayacı
+da artmadığı için, kapatmak için yazdığım "bedava reset kaçağı" bu yoldan
+**açık kalıyordu**.
+
+2026-08-16'da bir kez düzeltilmiş hatanın aynısı — hem de aynı gün yazdığım
+`quitRun` belgesi bunun olmayacağını iddia ederken. Ders: "geri tuşu" tek bir
+şey değil; her perdenin kendi doğru çıkışı var ve hepsi sonucu **kaydetmeli**.
+
+### Ölçüm hijyeni: antrenman modu bütün denge ölçümlerini geçersiz kılıyordu
+
+`TRAINING_MODE_SIDE_LANES_ONLY` bir `const val` olduğu için testler onu
+kapatamıyordu: orta şerit hep boş, otopilot hiç çarpmıyor, `LevelCurveTest`
+"bu hedef ulaşılabilir" diyor. **İki ayrı ajan bağımsız olarak bu tuzağa
+düştü.**
+
+`GameEngine`'e `sideLanesOnly` parametresi eklendi. `LevelCurveTest` artık
+açıkça `false` geçiyor. Mevcut geçiş hedefleri antrenman modu kapalıyken de
+geçiyor, yani dünkü iş sağlam.
+
+### Sonsuz mod araç merdivenini yiyordu
+
+`SPEEDOMETER_MAX_KMH` **240 → 280**, `ENDLESS_SPEED_MAX_MULTIPLIER`
+**1.60 → 1.20**. Fizik değişmedi, kırpma kalktı. Önce Süper Araba sv8 ham 309,
+Formula sv8 ham 336 iken ikisi de ekranda 240 görünüyordu — kariyerdeki %53'lük
+araç farkı sonsuz modda %7'ye düşüyordu.
+
+Üç kalıcı değişmez: hiçbir araç kırpılmıyor, gösterge boşa yüksek değil,
+sonsuz modda araç farkı ≥%30.
+
+### Coin hedefleri — `PassVehicles` ile aynı hata sınıfı
+
+| bölüm | hedef | gerçek tavan | |
+|---|---|---|---|
+| 8 | 22 | 15 | **İMKANSIZ** |
+| 16 | 48 | 44 | **İMKANSIZ** |
+| 22 | 54 | 51 | **İMKANSIZ** |
+| 28 | 55 | 55 | paysız |
+
+Yeni: 9 / 25 / 30 / 32. İlerleme tıkanmıyordu (`MIN_STARS_TO_PASS` = 2) ama o
+bölümlerde **üçüncü yıldız kazanılamıyordu**. Kalıcı bekçi eklendi.
+
+### "Boost'la git" görevi boost'u hiç saymıyordu
+
+Görev `MissionType.DRIVE_DISTANCE` kullanıyordu. İki kusur: başlık yalan
+söylüyordu (boost'a hiç dokunmayan tamamlıyordu) ve `drive_distance` göreviyle
+**aynı sayacı** paylaştığı için ikisi hep birlikte doluyordu — iki görev değil,
+tek görev iki kez ödüyordu (haftada +200 coin ve sandık).
+
+`MissionType.BOOST_DISTANCE` eklendi. Ölçüldü: 180 sn'lik günlük koşuda
+3.442 m boost, yani haftalık 9.000'lik kademe ~3 koşu — beceri kapısı değil.
+Ölü `PERFECT_DODGES` çağrısı kaldırıldı. Bekçi: iki görev aynı sayacı
+paylaşamaz.
+
+### Seyirci deseni artık her kare yeniden kurulmuyor
+
+CROWD temasında kare başına ~440 blok × 5 native `Path` çağrısı = **~2.200 JNI
+çağrısı** vardı. Desen 168 birimde tekrar ettiği için bir kez kurulup
+kaydırılıyor (ispat kodda).
+
+**Dürüstlük notu:** kare süresini **değiştirmedi** (p50 28 → 28 ms). Performans
+kazancı diye sayılmıyor.
+
+### 35 yeni test (5 dosya)
+
+Kayıt göçü, satın alma yolu, motor yaşam döngüsü, günlük ödeme, reklam
+ekonomisi. En değerlisi: **en hızlı araç tek karede çarpışma penceresini
+atlayabilir mi** — `MAX_FRAME_DT` 0.050 ve araç çarpanı 2.08 ayrı ayrı güvenli
+ama çarpımları tam olarak o pencere; şu an %57'si kullanılıyor.
+
+**KANIT:** 263 birim test / 0 hata. `assembleRelease` başarılı. Cihaz
+kullanılmadı (S8 FD ekibinde).
+
+### Doğrulanmayan iki ajan iddiası
+
+- *"Yol hiç tıkanmıyor (%0,00)"* — kendi ölçümümde bölüm 5+ için **%5,0**.
+- *"Günlük `PassVehicles(90)` ulaşılamaz (70)"* — kendi ölçümümde tavan **135**.
+
+İkisinin **ortak** bulgusu ise doğrulandı: bölüm 10, 20 ve 30 mekanik olarak
+birebir aynı — zorluk artışının tamamı hedef rakamlarından geliyor.
+
+
 ## 2026-08-19 (2) — Antrenman modu, seviye atlama bedeli, "Lv 4" sorusu
 
 ### Antrenman modu (⚠ GEÇİCİ — AAB'den önce silinecek)

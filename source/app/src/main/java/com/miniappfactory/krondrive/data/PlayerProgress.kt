@@ -145,7 +145,31 @@ data class PlayerProgress(
 }
 
 /** Haftalik gorev turleri. */
-enum class MissionType { COMPLETE_LEVELS, DRIVE_DISTANCE, PASS_VEHICLES, PERFECT_DODGES, BIG_COMBOS }
+enum class MissionType {
+    COMPLETE_LEVELS,
+    DRIVE_DISTANCE,
+
+    /**
+     * BOOST ile katedilen mesafe. 2026-08-19'da eklendi.
+     *
+     * Oncesinde "Boost'la {count} m Git" gorevi [DRIVE_DISTANCE] kullaniyordu,
+     * yani BASLIK boost diyor ama sayac toplam mesafeyi sayiyordu. Iki ayri
+     * kusur uretiyordu: (1) gorev yalan soyluyordu — boost'a hic dokunmayan
+     * oyuncu onu tamamliyordu, (2) `drive_distance` goreviyle AYNI sayaci
+     * paylastigi icin ikisi hep birlikte doluyordu; yani iki gorev degil, tek
+     * gorev iki kez odeme yapiyordu (haftada +200 coin ve sandik).
+     *
+     * Boost mesafesi bir BECERI KAPISI DEGIL — dugmeyi basili tutmak yeter.
+     * Bu yuzden kaldirilan "perfect dodge" gorevinin sorununu geri getirmiyor.
+     * Olculdu (2026-08-19): 180 saniyelik gunluk kosuda 3.442 m boost, yani
+     * haftalik 9.000'lik son kademe ~3 kosu.
+     */
+    BOOST_DISTANCE,
+
+    PASS_VEHICLES,
+    PERFECT_DODGES,
+    BIG_COMBOS
+}
 
 /** Bir gorevin kademesi: hedefe ulasinca odul talep edilebilir. */
 data class MissionTier(val target: Int, val rewardCoins: Int)

@@ -309,27 +309,17 @@ private fun DrawScope.drawSideBackgrounds(engine: GameEngine) {
             // birim adim (3 birim bosluk), dikeyde 5 birim yukseklik / 42
             // birim adim. Ust uste binme olmadigi icin cizim SIRASI da fark
             // etmiyor — renkler zaten opak.
+            // DESEN HER KARE YENIDEN INSA EDILMIYOR — bir kez kurulup
+            // kaydiriliyor (2026-08-19). Gerekce ve dogrulugu icin
+            // [CrowdCache]'in belgesine bak.
             val crowdShift = engine.roadOffset * 0.35f
-            val paths = ScenePaths.crowd
-            for (p in paths) p.rewind()
-            var y = -42f + crowdShift % 42f
-            while (y < h + 42f) {
-                val rowKey = y - crowdShift
-                var x = 3f
-                while (x < leftW - 14f) {
-                    paths[crowdColorIndex(x, rowKey)].addBlockRect(x, y, 3f, 5f)
-                    x += 6f
+            CrowdCache.ensure(w, h, leftW, rightX)
+            translate(top = crowdShift % CROWD_PERIOD - CROWD_PERIOD) {
+                val paths = CrowdCache.paths
+                for (i in paths.indices) {
+                    val p = paths[i]
+                    if (!p.isEmpty) drawPath(p, CROWD_COLORS[i])
                 }
-                x = rightX + 14f
-                while (x < w - 3f) {
-                    paths[crowdColorIndex(x, rowKey)].addBlockRect(x, y + 9f, 3f, 5f)
-                    x += 6f
-                }
-                y += 42f
-            }
-            for (i in paths.indices) {
-                val p = paths[i]
-                if (!p.isEmpty) drawPath(p, CROWD_COLORS[i])
             }
 
             // Bayraklar: once TUM direkler, sonra TUM bezler.
@@ -1103,5 +1093,84 @@ class CrashImpact {
             (if (fatal) SHAKE_AMPLITUDE_DP else SHAKE_AMPLITUDE_DP_SAVED) * fade * fade
         shakeX = amplitude * sin(elapsed * SHAKE_FREQ_X * TWO_PI + SHAKE_PHASE_X)
         shakeY = amplitude * sin(elapsed * SHAKE_FREQ_Y * TWO_PI + SHAKE_PHASE_Y)
+    }
+}
+
+/**
+ * Seyirci deseninin TEKRAR PERIYODU (dunya birimi).
+ *
+ * Satirlar 42 birim arayla; bir satirin renk indeksi
+ * `(x + rowKey / 6).roundToInt().mod(4)` ve `rowKey` satir basina 42 arttigi
+ * icin indeks satir basina **7** kayiyor. `mod 4` altinda 7 ≡ 3, dort satirda
+ * toplam kayma 28 ≡ 0 → desen **4 satirda = 168 birimde** birebir tekrar eder.
+ */
+private const val CROWD_PERIOD = 168f
+
+/**
+ * Seyirci bloklarinin onbellegi.
+ *
+ * ## Neden
+ *
+ * Eski kod deseni HER KARE bastan kuruyordu. 1080x2220 / density 3 ekranda
+ * bu, kare basina ~440 blok ve blok basina 5 native `Path` cagrisi demek:
+ * **~2.200 JNI cagrisi**. Olculen `sideBg = 2,73 ms`'in neredeyse tamami
+ * piksel degil YOL INSASIYDI ve UI thread'de yaniyordu (2026-08-19 analizi).
+ *
+ * Ikinci ve gizli maliyet: `Path.rewind()` Skia'da yolun generation ID'sini
+ * sifirliyor. Skia'nin GPU yol onbellekleri o ID ile anahtarlandigi icin her
+ * kare garantili cache miss oluyordu.
+ *
+ * ## Neden dogru — cevirinin desene etkisi yok
+ *
+ * Desen [CROWD_PERIOD] birimde tekrar ettigi icin, deseni DUNYA uzayinda bir
+ * kez kurup her karede `crowdShift % CROWD_PERIOD` kadar kaydirmak birebir
+ * ayni pikseli uretir. Ispat: onbellekte j'inci satirin rengi `(x + 7j).mod(4)`;
+ * ekranda o satirin gercek dunya indeksi `k = j - 4(m+1)` (m = tam periyot
+ * sayisi), yani gercek renk `(x + 7k).mod(4) = (x + 7j - 28(m+1)).mod(4)`.
+ * `28 ≡ 0 (mod 4)` oldugu icin iki ifade **esit**. Kayma ne olursa olsun
+ * renkler kaymaz.
+ *
+ * Bu, 2026-08-16'da duzeltilen "seyirci titriyor" hatasinin tam tersi yonde
+ * ayni meseledir: renk EKRAN y'sine degil DUNYA y'sine bagli kalmali. Burada
+ * da oyle kaliyor.
+ *
+ * ## Gecersiz kilma
+ *
+ * Onbellek viewport'a bagli (genislik, yukseklik, yol kenarlari). Dordunden
+ * biri degisirse desen yeniden kurulur; aksi halde ekran donduruldugunde ya da
+ * yol genisligi degistiginde eski desen kalirdi.
+ */
+private object CrowdCache {
+    val paths = Array(CROWD_COLORS_SIZE) { Path() }
+
+    private var w = Float.NaN
+    private var h = Float.NaN
+    private var leftW = Float.NaN
+    private var rightX = Float.NaN
+
+    fun ensure(w: Float, h: Float, leftW: Float, rightX: Float) {
+        if (w == this.w && h == this.h && leftW == this.leftW && rightX == this.rightX) return
+        this.w = w; this.h = h; this.leftW = leftW; this.rightX = rightX
+
+        for (p in paths) p.rewind()
+        // Ekran yuksekligi + bir tam periyot kadar satir gerekiyor: cizim
+        // `-CROWD_PERIOD` ile basliyor ve kayma [0, CROWD_PERIOD) araliginda.
+        var j = 0
+        while (42f * j <= h + 2f * CROWD_PERIOD) {
+            val y = 42f * j
+            // rowKey = 42*j; crowdColorIndex bunu kendi icinde /6 ediyor.
+            val rowKey = y
+            var x = 3f
+            while (x < leftW - 14f) {
+                paths[crowdColorIndex(x, rowKey)].addBlockRect(x, y, 3f, 5f)
+                x += 6f
+            }
+            x = rightX + 14f
+            while (x < w - 3f) {
+                paths[crowdColorIndex(x, rowKey)].addBlockRect(x, y + 9f, 3f, 5f)
+                x += 6f
+            }
+            j++
+        }
     }
 }

@@ -647,7 +647,29 @@ fun GameScreen(
     ) {
         when {
             paused -> quitRun()
-            result != null || showCrashDialog -> exitFromResult()
+
+            // CARPISMA PERDESI (DEVAM ET / VAZGEC) ACIKKEN geri tusu, VAZGEC
+            // butonuyla AYNI seyi yapar: kosuyu bitirir ve sonucu yayimlar.
+            //
+            // 2026-08-19'da burada agir bir hata bulundu: bu dal `result`
+            // dalina birlestirilmisti ve dogrudan `exitFromResult()`
+            // cagiriyordu. O fonksiyon `engine.finish()` ya da
+            // `publishResult()` CAGIRMIYOR — yani carpisma perdesinde geri
+            // tusuna basan oyuncunun coin'i, XP'si, gorev ilerlemesi ve
+            // sonsuz mod rekoru SESSIZCE SILINIYORDU. Ustelik reklam sayaci
+            // da artmadigi icin "bedava reset" kacagi tam da kapatildigi
+            // sanilirken bu yoldan acik kaliyordu.
+            //
+            // Bu, 2026-08-16'da bir kez duzeltilmis hatanin ta kendisi;
+            // ayni gun yazilan [quitRun] belgesi bunun olmayacagini iddia
+            // ediyordu. Ders: "geri tusu" tek bir sey degil — her perdenin
+            // kendi dogru cikisi var ve hepsi sonucu KAYDETMELI.
+            showCrashDialog -> {
+                engine.finish(completed = false)
+                engine.lastResult?.let { publishResult(it) }
+            }
+
+            result != null -> exitFromResult()
             else -> onPauseTap()
         }
     }

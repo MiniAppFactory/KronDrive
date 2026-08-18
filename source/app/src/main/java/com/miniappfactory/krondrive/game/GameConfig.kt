@@ -426,7 +426,28 @@ object GameConfig {
     const val SPEEDOMETER_SPAN = 5.7f
     const val SPEEDOMETER_RANGE_KMH = 180f
     const val SPEEDOMETER_MIN_KMH = 60f
-    const val SPEEDOMETER_MAX_KMH = 240f
+    /**
+     * Gostergenin tavani. 2026-08-19: **240 → 280.**
+     *
+     * Bu bir "arabalar daha hizli olsun" karari DEGIL — fizige hic
+     * dokunmuyor, yalnizca KIRPMAYI kaldiriyor. 18 Ağustos'ta arac yayilimi
+     * acilinca (carpanlar 0.97-1.18 → 1.00-2.08) sonsuz modda ust araclar
+     * gostergeye sigmaz oldu ve hepsi 240'ta yapisti:
+     *
+     *     Super Araba sv8 ham 309 → ekranda 240
+     *     Formula     sv8 ham 336 → ekranda 240
+     *
+     * Yani kariyerde %53 olan arac farki sonsuz modda %7'ye dusuyordu:
+     * merdiven vardi ama GORUNMUYORDU. Kirpma, tam da duzeltilmek istenen
+     * seyi gizliyordu.
+     *
+     * 280 keyfi degil: [ENDLESS_SPEED_MAX_MULTIPLIER] ile birlikte secildi,
+     * en hizli kombinasyon (Formula, tam yukseltme, tam zaman carpani) 272'ye
+     * oturuyor — yani tavanin altinda pay var. Ikisi BIRLIKTE degistirilmeli;
+     * `GameEngineTest`'teki "hicbir arac gostergeyi kirpmiyor" testi bunu
+     * kilitliyor.
+     */
+    const val SPEEDOMETER_MAX_KMH = 280f
 
     /**
      * Metre donusumu, hiz gostergesiyle TUTARLI olacak sekilde secildi:
@@ -455,7 +476,25 @@ object GameConfig {
 
     /** Her 30 saniyede hiz carpani bu kadar artar (30sn -> +%10, 60sn -> +%20 ...). */
     const val ENDLESS_SPEED_STEP = 0.10f
-    const val ENDLESS_SPEED_MAX_MULTIPLIER = 1.60f
+    /**
+     * Sonsuz modun zaman carpani tavani. 2026-08-19: **1.60 → 1.20.**
+     *
+     * Carpan artik yalnizca RAMPAYA uygulaniyor ve rampa aracin carpanini
+     * tasidigi icin iyi arac zamanla daha cok kazaniyor — yani 1.60 ile
+     * ust araclar gostergeyi patlatiyordu (Formula sv8 ham 336).
+     *
+     * 1.20'de sonsuz modun hiz araligi:
+     *     Beety   sv1 151 → sv8 194
+     *     Formula sv1 229 → sv8 272
+     * Hicbiri [SPEEDOMETER_MAX_KMH] = 280'i asmiyor, merdiven bastan sona
+     * gorunuyor.
+     *
+     * Zorluk kaybi endisesi: hiz ekseninde escalation azaldi ama
+     * [ENDLESS_TRAFFIC_STEP] (yogunluk rampasi, tavan 1.50) dokunulmadan
+     * duruyor — sonsuz mod zamanla yine zorlasiyor, sadece bunu artik
+     * "her sey hizlanir" yerine "yol kalabaliklasir" ile yapiyor.
+     */
+    const val ENDLESS_SPEED_MAX_MULTIPLIER = 1.20f
     const val ENDLESS_STEP_SECONDS = 30f
 
     /** Trafik yogunlugu de artar (spawn araligi bu carpana bolunur). */

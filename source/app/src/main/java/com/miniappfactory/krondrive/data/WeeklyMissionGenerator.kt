@@ -48,13 +48,20 @@ object WeeklyMissionGenerator {
         // ulasilamazdi ve haftalik sandigi (haftalik gelirin ~%43'u) ona
         // tamamen kapatiyordu.
         //
-        // Yerine mesafe: her oynayis bicimiyle ilerler, beceri kapisi yok.
+        // Yerine BOOST MESAFESI: beceri kapisi degil (dugmeyi basili tutmak
+        // yeter) ama yine de oyuncuyu boost'u kullanmaya iter.
+        //
+        // 2026-08-19 duzeltmesi: burasi [MissionType.DRIVE_DISTANCE] yaziyordu,
+        // yani baslik "Boost'la" diyor ama sayac TOPLAM mesafeyi sayiyordu.
+        // Boost'a hic dokunmayan oyuncu gorevi tamamliyordu ve `drive_distance`
+        // goreviyle ayni sayaci paylastiklari icin ikisi hep birlikte doluyordu
+        // — tek gorev iki kez odeme yapiyordu.
         WeeklyMissionDef(
             id = "boost_distance",
             titleTr = "Boost'la {count} m Git",
             titleEn = "Travel {count} m on Boost",
             tiers = listOf(MissionTier(2000, 40), MissionTier(5000, 60), MissionTier(9000, 100)),
-            type = MissionType.DRIVE_DISTANCE
+            type = MissionType.BOOST_DISTANCE
         ),
         WeeklyMissionDef(
             id = "big_combos",
