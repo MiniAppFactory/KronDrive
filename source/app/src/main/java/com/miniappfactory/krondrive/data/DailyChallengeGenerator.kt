@@ -135,18 +135,55 @@ object DailyChallengeGenerator {
                 Objective.DistanceAtLeast(4200)
             )
         ),
-        challenge(
-            id = "combo",
-            objectives = listOf(
-                // Ucuncu kademe 7 -> 5: [GameConfig.COMBO_MULTIPLIERS]
-                // combo 5'te DOYUYOR, yani oyun 7'yi odullendirmiyor.
-                // Kendi odullendirmedigi sayiyi istemek ayni gun kariyer
-                // bolumlerinde de duzeltilmisti (2026-08-17).
-                Objective.ComboAtLeast(2),
-                Objective.ComboAtLeast(3),
-                Objective.ComboAtLeast(5)
-            )
-        ),
+        // "combo" gorevi KALDIRILDI (2026-08-19) — `dodge` ile AYNI GEREKCE.
+        //
+        // Combo yalnizca [GameEngine.registerPerfectDodge] icinde artiyor,
+        // yani `ComboAtLeast(n)` = "[GameConfig.COMBO_WINDOW_SEC] (6 sn)
+        // icinde n mukemmel dodge zinciri". Dodge'dan STRIKT olarak daha zor:
+        // dodge tek bir yakin gecis, combo(2) o gecisten IKISINI zincire
+        // dizmek. Dodge 2026-08-17'de tam bu yuzden kaldirilmisti; combo
+        // gozden kacmisti.
+        //
+        // OLCUM (`DailyChallengeReachabilityTest`, temkinli otopilot,
+        // 180 sn, bes tohum): bes tohumun besinde `bestCombo = 0`. Yani
+        // 1. KADEME BILE alinmiyordu ve o gun gelen oyuncu 500 coin'in
+        // sifirini aliyordu. Ayni kosuda diger alti sablonun HEPSI 3/3
+        // veriyor (tavanlar: skor ~14.7k, gecis 135, coin 103, boost 3410 m,
+        // mesafe 7726 m, sure 180 sn).
+        //
+        // ⚠ "INSAN DA YAPAMAZ" DEMIYORUZ. Olcum otopilot verisi; risk alan
+        // otopilot ayni bolumde bestCombo 10'a cikti ve 3/3 kademeyi ucte
+        // uc tohumda aldi. Yani combo insan eliyle ulasilabilir. Sorun
+        // ZORLUK degil, YAPI: gunluk gorev HEPSI-YA-HICBIRI ve tek metrik
+        // uzerine kurulu, dolayisiyla bu sablon gunun tamamini TEK bir
+        // istege bagli mekanige bagliyordu.
+        //
+        // DEGERLENDIRILEN VE REDDEDILEN SECENEKLER:
+        //
+        // 1) "Comboyu yalnizca 3. kademeye tasi" (kariyer kurali: beceri
+        //    hedefi sadece ustalik yildizinda). UYGULANAMADI: gunluk
+        //    kademelerin `targetValue`'lari ARTAN olmak zorunda
+        //    (`DailyChallengeGeneratorTest.kademeler artan hedefli...`).
+        //    Combo degerleri 2-5 arasinda, sayan hedefler ise 25/4500 gibi —
+        //    [PassVehicles(25), ScoreAtLeast(4500), ComboAtLeast(3)] o
+        //    degismezi kirar. Kademeler bilerek TEK METRIK: kart "biraz daha
+        //    dayan" diye okunuyor, metrik degistiren bir kademe o okumayi
+        //    bozar.
+        // 2) "Kademeleri dusur". ISE YARAMAZ: en dusuk anlamli deger
+        //    `ComboAtLeast(1)` = tek bir perfect dodge, yani 2026-08-17'de
+        //    kaldirilan `dodge` hedefinin ta kendisi; temkinli oyun otuz
+        //    kariyer bolumunde ve bu 180 sn'lik kosuda tek dodge yapmiyor.
+        //
+        // Mekanik hicbir yerde zayiflamadi: combo hala skoru x3'e kadar
+        // katliyor, ON kariyer bolumunde ustalik yildizi
+        // ([LevelCatalog] 6/7/11/14/17/20/23/25/26/29) ve haftalik gorevlerde
+        // `bigCombos` sayaci olarak duruyor. Yalnizca gunun TEK KAPISI
+        // olmaktan cikti.
+        //
+        // Yerine yeni sablon KONULMADI: gunluk sablonlar tek metrikli olmak
+        // zorunda ve yukari sayan metriklerin geri kalani (dodge, combo)
+        // beceri hedefi. Alti sablon kaliyor — `forDay` hash tabanli oldugu
+        // icin sayinin 7 olmasinin bir onemi yok.
         challenge(
             id = "score",
             objectives = listOf(

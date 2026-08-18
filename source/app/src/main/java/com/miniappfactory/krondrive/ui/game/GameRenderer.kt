@@ -730,8 +730,13 @@ private fun DrawScope.drawObstacleCar(
         // carpaniyla kucultuluyor ki carpisma kutusu (GameConfig'te ayni
         // carpandan turetiliyor) gorselle birebir ortussun.
         scale(GameConfig.CAR_ART_SCALE, GameConfig.CAR_ART_SCALE, pivot = Offset.Zero) {
-            drawCarShadowIfVector(CarCatalog.trafficStyle(bodyArgb), sprites)
-            drawCarBody(CarCatalog.trafficStyle(bodyArgb), sprites)
+            // Stil TEK cagriyla alinir. Iki ayri cagri ayni sonucu veriyordu
+            // ama [CarCatalog.trafficStyle] bir `HashMap<Long, …>` uzerinde
+            // `getOrPut` yaptigi icin her cagri bir `Long` kutulamasi
+            // demekti — kare basina arac sayisinin iki kati cop.
+            val style = CarCatalog.trafficStyle(bodyArgb)
+            drawCarShadowIfVector(style, sprites)
+            drawCarBody(style, sprites)
         }
     }
 }

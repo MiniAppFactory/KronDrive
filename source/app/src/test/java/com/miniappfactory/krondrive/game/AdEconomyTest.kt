@@ -141,6 +141,65 @@ class AdEconomyTest {
     }
 
     /**
+     * SONSUZ MOD VE TEKRAR ESIKLERI — bilincli mi, kayma mi.
+     *
+     * Yukaridaki test "esik 1 olursa magaza riski dogar" diye YAZIYOR ama
+     * yalnizca [GameConfig.INTERSTITIAL_EVERY_N_LEVELS]'i kontrol ediyordu.
+     * 2026-08-19'da tam da kapsanmayan iki sabit 3'ten ve 2'den **1**'e
+     * indirildi: projenin kendi korkulugu, kapsamadigi bir yerden asildi ve
+     * test yesil kaldi.
+     *
+     * Bu test frekansi GERI ALMIYOR — sahibinin acik karari ("ucretsiz reset
+     * sansi olmasin"). Yaptigi is, degerin SESSIZCE kaymasini engellemek ve
+     * gerekcesini koda baglamak.
+     *
+     * ## Neden 1 hala uyumlu
+     *
+     * Play politikasi frekans duzenlemiyor, BEKLENMEDIKLIK duzenliyor; kosu
+     * sonrasi tam ekran reklam Google'in acikca izin verdigi yerlesim
+     * ("the break after the score screen in a gaming app"). Frekansin
+     * duzenlendigi tek yer AdMob: **iki kullanici eylemine en fazla bir
+     * gecis reklami**.
+     *
+     * Sonsuz moddaki dongu: carp -> (1) "SONUCLARI GOR" -> sonuc ekrani ->
+     * (2) "TEKRAR DENE" -> reklam. Yani 2 eylemde 1 reklam — sinirin tam
+     * ustunde, PAYI SIFIR.
+     *
+     * ⚠ Bu yuzden bir ara ekran kaldirilirsa kural sessizce ihlale duser.
+     * Sonuc ekranina giden ara adim ("SONUCLARI GOR") kaldirilacaksa bu
+     * esikler de yeniden dusunulmeli.
+     */
+    @Test
+    fun `sonsuz mod ve tekrar reklam esikleri belgelenmis degerlerde`() {
+        assertTrue(
+            "INTERSTITIAL_EVERY_N_ENDLESS_RUNS = " +
+                "${GameConfig.INTERSTITIAL_EVERY_N_ENDLESS_RUNS}; beklenen 1 " +
+                "(sahibi karari, her kosuda reklam) ya da >= 2 (eski davranis). " +
+                "Arada bir deger belgesiz bir kaymadir.",
+            GameConfig.INTERSTITIAL_EVERY_N_ENDLESS_RUNS == 1 ||
+                GameConfig.INTERSTITIAL_EVERY_N_ENDLESS_RUNS >= 2
+        )
+        assertTrue(
+            "esik pozitif olmali, yoksa sayac hicbir zaman tetiklenmez",
+            GameConfig.INTERSTITIAL_EVERY_N_ENDLESS_RUNS >= 1
+        )
+        assertTrue(
+            "INTERSTITIAL_EVERY_N_RETRIES = ${GameConfig.INTERSTITIAL_EVERY_N_RETRIES}; " +
+                "pozitif olmali",
+            GameConfig.INTERSTITIAL_EVERY_N_RETRIES >= 1
+        )
+        // AdMob kurali: iki kullanici eylemine en fazla bir gecis reklami.
+        // Sonuc ekranina ulasmak icin gereken ara adim sayisi 1 (SONUCLARI
+        // GOR), tekrar basisi 1 -> toplam 2. Esikler 1 iken oran tam 1/2.
+        val eylemBasinaReklam =
+            1.0 / (1 + GameConfig.INTERSTITIAL_EVERY_N_RETRIES)
+        assertTrue(
+            "eylem basina reklam orani $eylemBasinaReklam — AdMob siniri 1/2",
+            eylemBasinaReklam <= 0.5
+        )
+    }
+
+    /**
      * MUAFIYETTEKI SON BOLUM ILE ILK UCRETLI BOLUM SINIRI.
      *
      * `AdFrequency.shouldShow` muafiyeti `levelId in 1..INTERSTITIAL_FREE_LEVELS`

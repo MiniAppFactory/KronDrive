@@ -73,6 +73,21 @@ private fun shifted(color: Color, shift: Float): Color = when {
  */
 private val brushCache = HashMap<Pair<Long, CarPart>, Brush>()
 
+/**
+ * Sprite tinti onbellegi — [brushCache] ile ayni gerekcede.
+ *
+ * [ColorFilter.tint] her cagrida yeni bir Compose nesnesi VE yeni bir native
+ * `PorterDuffColorFilter` kuruyordu; sahnede oyuncu + ~8 trafik araci var, yani
+ * kare basina ~9 tahsis. Palet SONLU: [com.miniappfactory.krondrive.game.GameEngine.OBSTACLE_COLORS]
+ * (4 renk) + garajdan secilebilen oyuncu boyalari. Sinirsiz buyumez, o yuzden
+ * tahliye politikasi yok; cizim tek is parcaciginda (main) yurudugu icin
+ * senkronizasyon da gerekmiyor.
+ */
+private val tintCache = HashMap<Long, ColorFilter>()
+
+private fun tintFor(argb: Long): ColorFilter =
+    tintCache.getOrPut(argb) { ColorFilter.tint(Color(argb), BlendMode.Modulate) }
+
 private fun brushFor(argb: Long, part: CarPart, gradient: CarGradient): Brush =
     brushCache.getOrPut(argb to part) {
         val base = Color(argb)
@@ -210,7 +225,9 @@ private fun DrawScope.drawCarSprite(style: CarStyle, sprite: CarSprite) {
         image = sprite.body,
         dstOffset = offset,
         dstSize = size,
-        colorFilter = ColorFilter.tint(Color(style.color.bodyArgb), BlendMode.Modulate)
+        // Tint ONBELLEKTEN: bkz. [tintCache]. Renk basina tek nesne, tek native
+        // filtre — kare basina yeniden kurulmuyor.
+        colorFilter = tintFor(style.color.bodyArgb)
     )
     drawImage(image = sprite.detail, dstOffset = offset, dstSize = size)
 }
@@ -242,72 +259,109 @@ fun DrawScope.drawCarBoostFlame(style: CarStyle, phase: Float = 0f) {
     val flicker = 1f + 0.13f * sin(phase * 17f) + 0.07f * sin(phase * 27.3f)
     val wobble = 1f + 0.09f * sin(phase * 21f + 1.7f)
 
-    // 1) Halo: yumusak kenari veren radyal sonum.
-    val haloCenter = Offset(0f, root + CarCatalog.FLAME_HALO_RADIUS * 0.42f)
-    val outer = Color(CarCatalog.FLAME_OUTER_ARGB)
-    drawCircle(
-        brush = Brush.radialGradient(
-            colorStops = arrayOf(
-                0f to outer.copy(alpha = 0.30f),
-                0.45f to outer.copy(alpha = 0.13f),
-                1f to outer.copy(alpha = 0f)
-            ),
-            center = haloCenter,
-            radius = CarCatalog.FLAME_HALO_RADIUS
-        ),
-        radius = CarCatalog.FLAME_HALO_RADIUS,
-        center = haloCenter
-    )
+    // Butun alev KOK NOKTASINA tasinir. Kok govdeden govdeye degistigi icin
+    // (artBottom) eskiden halo merkezi de her cagrida farkliydi ve gradyan
+    // yeniden kurulmak zorundaydi. Cevirmeden sonra halo ile plumalar sabit
+    // sayilarla ifade edilebiliyor, boylece fircalar birer kez kuruluyor.
+    translate(0f, root) {
+        // 1) Halo: yumusak kenari veren radyal sonum.
+        drawCircle(
+            brush = FLAME_HALO_BRUSH,
+            radius = CarCatalog.FLAME_HALO_RADIUS,
+            center = FLAME_HALO_CENTER
+        )
 
-    // 2-4) Plumalar: kok genis ve opak, uc sivri ve saydam.
-    plume(
-        root, CarCatalog.FLAME_OUTER_HALF_WIDTH * wobble,
-        CarCatalog.FLAME_OUTER_LENGTH * flicker, outer, 0.84f
+        // 2-4) Plumalar: kok genis ve opak, uc sivri ve saydam.
+        plume(
+            CarCatalog.FLAME_OUTER_HALF_WIDTH * wobble,
+            CarCatalog.FLAME_OUTER_LENGTH * flicker,
+            FLAME_OUTER_BRUSH
+        )
+        val innerLength = CarCatalog.FLAME_INNER_LENGTH * (1f + 0.10f * sin(phase * 23f + 0.6f))
+        plume(
+            CarCatalog.FLAME_INNER_HALF_WIDTH * wobble, innerLength,
+            FLAME_INNER_BRUSH
+        )
+        plume(
+            CarCatalog.FLAME_INNER_HALF_WIDTH * wobble * 0.52f, innerLength * 0.62f,
+            FLAME_CORE_BRUSH
+        )
+    }
+}
+
+/**
+ * Pluma yolu NORMALIZE uzayda: kok `y = 0`, uc `y = 1`, yarim genislik `1`.
+ *
+ * Eskiden her cagrida yeni bir [Path] kuruluyordu (kare basina 3 native path
+ * nesnesi + 12 segment cagrisi) cunku kok/genislik/uzunluk her karede
+ * titresiyor. Sekil aslinda hep AYNI — degisen yalnizca olcek. Bu yuzden yol
+ * bir kez kuruluyor, [plume] icindeki `scale` istenen olcuye goturuyor.
+ * Noktalar birebir eski formulun (`-halfWidth`, `root + length * 0.55f` ...)
+ * `halfWidth = 1, length = 1, root = 0` halidir, yani geometri degismedi.
+ */
+private val PLUME_PATH = Path().apply {
+    moveTo(-1f, 0f)
+    // Kenarlar duz degil hafif ic bukey: sivri uc daha organik okunuyor.
+    quadraticTo(-0.72f, 0.55f, 0f, 1f)
+    quadraticTo(0.72f, 0.55f, 1f, 0f)
+    close()
+}
+
+/**
+ * Kokten uca saydamlasan pluma gradyani, normalize uzayda (`0` kok, `1` uc).
+ *
+ * Duraklar ve alfa egrisi eskisiyle BIREBIR ayni; tek fark `startY/endY`nin
+ * mutlak `root..tip` yerine `0..1` olmasi. Gradyan cizim anindaki donusum
+ * matrisiyle birlikte olceklendigi icin ekranda ayni yere dusuyor.
+ */
+private fun plumeBrush(argb: Long, alpha: Float): Brush {
+    val color = Color(argb)
+    return Brush.verticalGradient(
+        colorStops = arrayOf(
+            0f to color.copy(alpha = alpha),
+            0.45f to color.copy(alpha = alpha * 0.55f),
+            1f to color.copy(alpha = 0f)
+        ),
+        startY = 0f,
+        endY = 1f
     )
-    val innerLength = CarCatalog.FLAME_INNER_LENGTH * (1f + 0.10f * sin(phase * 23f + 0.6f))
-    plume(
-        root, CarCatalog.FLAME_INNER_HALF_WIDTH * wobble, innerLength,
-        Color(CarCatalog.FLAME_INNER_ARGB), 0.92f
-    )
-    plume(
-        root, CarCatalog.FLAME_INNER_HALF_WIDTH * wobble * 0.52f, innerLength * 0.62f,
-        Color(CarCatalog.FLAME_CORE_ARGB), 0.98f
+}
+
+// Uc pluma, uc SABIT (renk, alfa) cifti — onbellege gerek yok, dogrudan
+// birer alan. [Brush] shader'ini kendi icinde tuttugu icin ayni ORNEGI
+// yeniden kullanmak native shader'in da yeniden uretilmesini engelliyor.
+private val FLAME_OUTER_BRUSH = plumeBrush(CarCatalog.FLAME_OUTER_ARGB, 0.84f)
+private val FLAME_INNER_BRUSH = plumeBrush(CarCatalog.FLAME_INNER_ARGB, 0.92f)
+private val FLAME_CORE_BRUSH = plumeBrush(CarCatalog.FLAME_CORE_ARGB, 0.98f)
+
+/** Halo merkezi — kok noktasina cevrilmis uzayda sabit. */
+private val FLAME_HALO_CENTER = Offset(0f, CarCatalog.FLAME_HALO_RADIUS * 0.42f)
+
+private val FLAME_HALO_BRUSH = Color(CarCatalog.FLAME_OUTER_ARGB).let { outer ->
+    Brush.radialGradient(
+        colorStops = arrayOf(
+            0f to outer.copy(alpha = 0.30f),
+            0.45f to outer.copy(alpha = 0.13f),
+            1f to outer.copy(alpha = 0f)
+        ),
+        center = FLAME_HALO_CENTER,
+        radius = CarCatalog.FLAME_HALO_RADIUS
     )
 }
 
 /**
- * Tek bir alev plumasi. Uca dogru daralan bir yol cizilir ve uzerine kokten
- * uca saydamlasan bir dikey gradyan uygulanir; ikisi birlikte "kenari sonen
- * alev" hissini veriyor.
+ * Tek bir alev plumasi. Normalize [PLUME_PATH] istenen yarim genislik ve
+ * uzunluga olceklenir; gradyan da ayni donusumden gectigi icin kokten uca
+ * sonumlenme aynen korunur.
+ *
+ * Olcek NON-UNIFORM (x ve y farkli) ama sorun degil: yol yalnizca dolduruluyor,
+ * kontur yok — dolayisiyla cizgi kalinligi bozulmuyor.
  */
-private fun DrawScope.plume(
-    root: Float,
-    halfWidth: Float,
-    length: Float,
-    color: Color,
-    alpha: Float
-) {
+private fun DrawScope.plume(halfWidth: Float, length: Float, brush: Brush) {
     if (length <= 0f || halfWidth <= 0f) return
-    val tip = root + length
-    val path = Path().apply {
-        moveTo(-halfWidth, root)
-        // Kenarlar duz degil hafif ic bukey: sivri uc daha organik okunuyor.
-        quadraticTo(-halfWidth * 0.72f, root + length * 0.55f, 0f, tip)
-        quadraticTo(halfWidth * 0.72f, root + length * 0.55f, halfWidth, root)
-        close()
+    scale(halfWidth, length, pivot = Offset.Zero) {
+        drawPath(path = PLUME_PATH, brush = brush)
     }
-    drawPath(
-        path = path,
-        brush = Brush.verticalGradient(
-            colorStops = arrayOf(
-                0f to color.copy(alpha = alpha),
-                0.45f to color.copy(alpha = alpha * 0.55f),
-                1f to color.copy(alpha = 0f)
-            ),
-            startY = root,
-            endY = tip
-        )
-    )
 }
 
 /**

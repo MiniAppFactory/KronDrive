@@ -901,17 +901,40 @@ fun GameScreen(
                 // Kariyerde tekrar bolum haritasindan girilir, gunluk gorev
                 // gunde bir kez oynanir — o yuzden yalnizca ENDLESS.
                 canRetry = mode == RunMode.ENDLESS,
+                // ⚠ [adInFlight] KILIDI ZORUNLU — kazara tiklama riski.
+                //
+                // Gecis reklami ONCEDEN YUKLENMIYOR: butona basildigi anda
+                // `load()` basliyor ve 0,5-3 saniye hicbir sey olmuyor. Kilit
+                // olmadan oyuncu ayni noktaya TEKRAR basiyor, ikinci basis
+                // ikinci bir `load()` daha baslatiyor ve reklam tam o anda
+                // parmagin altinda aciliyor. AdMob bunu adiyla yasakliyor
+                // ("repeated interstitials / accidental clicks") ve otomatik
+                // "Confirmed Click" uygulamasini tetikliyor.
+                //
+                // Ayni kilit odullu reklam butonlarinda zaten vardi; bu iki
+                // yol 2026-08-19'da eklenirken atlanmisti. Buton [adInFlight]
+                // iken "YUKLENIYOR…" yazip devre disi kaliyor.
                 onRetry = {
-                    if (activity != null && viewModel.consumeRetryInterstitial()) {
-                        viewModel.onInterstitialShown(mode)
-                        InterstitialAdManager.loadAndShow(activity, activity) { onRetry() }
-                    } else {
-                        onRetry()
+                    if (!adInFlight) {
+                        if (activity != null && viewModel.consumeRetryInterstitial()) {
+                            adInFlight = true
+                            viewModel.onInterstitialShown(mode)
+                            InterstitialAdManager.loadAndShow(activity, activity) {
+                                adInFlight = false
+                                onRetry()
+                            }
+                        } else {
+                            onRetry()
+                        }
                     }
                 },
                 onHome = {
-                    withOptionalInterstitial(viewModel, mode, runResult.levelId, activity) {
-                        onExit()
+                    if (!adInFlight) {
+                        adInFlight = true
+                        withOptionalInterstitial(viewModel, mode, runResult.levelId, activity) {
+                            adInFlight = false
+                            onExit()
+                        }
                     }
                 }
             )
@@ -2491,15 +2514,28 @@ private fun RunResultOverlay(
                 // girilir, gunluk gorev gunde bir kez oynanir.
                 if (canRetry) {
                     PrimaryButton(
-                        text = language.pick(tr = "TEKRAR DENE", en = "TRY AGAIN"),
+                        // Reklam yuklenirken buton KILITLI ve etiketi degisir:
+                        // sessiz bekleme, oyuncuyu tekrar basmaya iter ve
+                        // reklam parmagin altinda acilir (bkz. cagri yeri).
+                        text = if (adInFlight) {
+                            language.pick(tr = "YÜKLENİYOR…", en = "LOADING…")
+                        } else {
+                            language.pick(tr = "TEKRAR DENE", en = "TRY AGAIN")
+                        },
                         modifier = Modifier.fillMaxWidth(),
+                        enabled = !adInFlight,
                         onClick = onRetry
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                 }
                 SecondaryButton(
-                    text = language.pick(tr = "ANA MENÜ", en = "HOME"),
+                    text = if (adInFlight) {
+                        language.pick(tr = "YÜKLENİYOR…", en = "LOADING…")
+                    } else {
+                        language.pick(tr = "ANA MENÜ", en = "HOME")
+                    },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = !adInFlight,
                     onClick = onHome
                 )
             }

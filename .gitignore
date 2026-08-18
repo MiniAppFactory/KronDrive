@@ -40,3 +40,6 @@ desktop.ini
 
 # Ajanlarin urettigi gecici ses/gorsel onizlemeleri (repoya girmez).
 build-artifacts/
+
+# Ajan worktree'leri — gecici, commit edilmez
+.claude/worktrees/

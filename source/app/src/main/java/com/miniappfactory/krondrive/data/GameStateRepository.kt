@@ -263,6 +263,16 @@ class GameStateRepository(private val context: Context) {
 
     /** Yeterli coin varsa harcar ve true doner. */
     suspend fun spendCoins(amount: Int): Boolean {
+        // NEGATIF/SIFIR TUTAR REDDEDILIR (2026-08-19).
+        //
+        // Guard yoktu ve kardesi [addCoins]'de vardi. `spendCoins(-100)`
+        // cagrisi `current >= -100` kontrolunden gecip `current - (-100)`
+        // yaziyordu: yani HARCAMA fonksiyonu coin EKLIYOR ve `true`
+        // donuyordu. Bugun cagirani yok, yani su an ulasilamaz — ama bir
+        // sonraki kullanan icin hazir bir tuzak, ve "harcadim" diyen bir
+        // fonksiyonun para basmasi sessizce olur.
+        if (amount <= 0) return false
+
         var success = false
         context.gameDataStore.edit { prefs ->
             val current = prefs[Keys.COINS] ?: PlayerProgress.STARTING_COINS
@@ -382,6 +392,14 @@ class GameStateRepository(private val context: Context) {
     }
 
     suspend fun addBooster(type: BoosterType, count: Int = 1) {
+        // Negatif sayi reddedilir (2026-08-19). Kardes fonksiyonlarin
+        // ([addCoins], [addXp], [incrementMissionProgress]) hepsinde bu guard
+        // vardi, burada yoktu: `addBooster(type, -5)` booster sayisini
+        // NEGATIFE dusururdu ve sahip olunmayan booster kullanilabilir hale
+        // gelirdi. Bugun yalnizca +1 ile cagriliyor, yani ulasilamaz — ayni
+        // aileden `spendCoins` tuzagiyla birlikte kapatildi.
+        if (count <= 0) return
+
         context.gameDataStore.edit { prefs ->
             val boosters = decodeBoosterMap(prefs[Keys.OWNED_BOOSTERS]).toMutableMap()
             boosters[type] = (boosters[type] ?: 0) + count
@@ -685,68 +703,24 @@ class GameStateRepository(private val context: Context) {
             return "${calendar.get(Calendar.YEAR)}-W${calendar.get(Calendar.WEEK_OF_YEAR)}"
         }
 
-        private fun encodeIntMap(map: Map<Int, Int>): String =
-            map.entries.joinToString(",") { "${it.key}:${it.value}" }
-
-        private fun decodeIntMap(raw: String?): Map<Int, Int> {
-            if (raw.isNullOrBlank()) return emptyMap()
-            return raw.split(",").mapNotNull { entry ->
-                val parts = entry.split(":")
-                if (parts.size == 2) {
-                    parts[0].toIntOrNull()?.let { k -> parts[1].toIntOrNull()?.let { v -> k to v } }
-                } else {
-                    null
-                }
-            }.toMap()
-        }
-
-        private fun encodeBoosterMap(map: Map<BoosterType, Int>): String =
-            map.entries.filter { it.value > 0 }.joinToString(",") { "${it.key.name}:${it.value}" }
-
-        private fun decodeBoosterMap(raw: String?): Map<BoosterType, Int> {
-            if (raw.isNullOrBlank()) return emptyMap()
-            return raw.split(",").mapNotNull { entry ->
-                val parts = entry.split(":")
-                if (parts.size == 2) {
-                    val type = runCatching { BoosterType.valueOf(parts[0]) }.getOrNull()
-                    val count = parts[1].toIntOrNull()
-                    if (type != null && count != null) type to count else null
-                } else {
-                    null
-                }
-            }.toMap()
-        }
-
-        private fun encodeStringIntMap(map: Map<String, Int>): String =
-            map.entries.joinToString(",") { "${it.key}:${it.value}" }
-
-        private fun decodeStringIntMap(raw: String?): Map<String, Int> {
-            if (raw.isNullOrBlank()) return emptyMap()
-            return raw.split(",").mapNotNull { entry ->
-                val parts = entry.split(":")
-                if (parts.size == 2) parts[1].toIntOrNull()?.let { v -> parts[0] to v } else null
-            }.toMap()
-        }
-
-        private fun decodeStringSet(raw: String?): Set<String> {
-            if (raw.isNullOrBlank()) return emptySet()
-            return raw.split(",").filter { it.isNotBlank() }.toSet()
-        }
-
-        private fun encodeStringMap(map: Map<String, String>): String =
-            map.entries.joinToString(",") { "${it.key}:${it.value}" }
-
-        private fun decodeStringMap(raw: String?): Map<String, String> {
-            if (raw.isNullOrBlank()) return emptyMap()
-            return raw.split(",").mapNotNull { entry ->
-                val parts = entry.split(":")
-                if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) {
-                    parts[0] to parts[1]
-                } else {
-                    null
-                }
-            }.toMap()
-        }
+        // KODLAMA MANTIGI [SaveCodec]'e TASINDI (2026-08-19).
+        //
+        // Buradaki fonksiyonlar `private` oldugu ve iceren sinif `Context`
+        // istedigi icin JVM testinden erisilemiyorlardi — yani oyunun kalici
+        // verisini yazip okuyan kod tamamen test disindaydi. Govdeler saf
+        // Kotlin bir nesneye tasindi; buradakiler yalnizca yonlendirme, cagri
+        // yerleri degismedi.
+        private fun encodeIntMap(map: Map<Int, Int>) = SaveCodec.encodeIntMap(map)
+        private fun decodeIntMap(raw: String?) = SaveCodec.decodeIntMap(raw)
+        private fun encodeBoosterMap(map: Map<BoosterType, Int>) =
+            SaveCodec.encodeBoosterMap(map)
+        private fun decodeBoosterMap(raw: String?) = SaveCodec.decodeBoosterMap(raw)
+        private fun encodeStringIntMap(map: Map<String, Int>) =
+            SaveCodec.encodeStringIntMap(map)
+        private fun decodeStringIntMap(raw: String?) = SaveCodec.decodeStringIntMap(raw)
+        private fun decodeStringSet(raw: String?) = SaveCodec.decodeStringSet(raw)
+        private fun encodeStringMap(map: Map<String, String>) = SaveCodec.encodeStringMap(map)
+        private fun decodeStringMap(raw: String?) = SaveCodec.decodeStringMap(raw)
 
         /**
          * Secili gövdenin boyasi. Oncelik sirasi:
