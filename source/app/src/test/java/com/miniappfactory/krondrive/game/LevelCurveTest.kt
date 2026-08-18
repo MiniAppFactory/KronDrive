@@ -133,6 +133,83 @@ class LevelCurveTest {
 
     // -----------------------------------------------------------------
 
+    /**
+     * Her [Objective.PassVehicles] hedefi GERCEKTEN ulasilabilir olmali.
+     *
+     * NEDEN AYRI BIR TEST: diger testler "uc hedeften ikisi tutsun" diye
+     * bakiyor, yani TEK BIR hedefin imkansiz olmasi fark edilmeden geciyordu.
+     * Sahibi 2026-08-18'de oynarken buldu: *"4. bolumde surekli boosta bassan
+     * bile 29 arac gecmen imkansiz"* ve *"3. bolum 6, 4. bolum 29, 5. bolum 18
+     * — sacma olmus"*. Ikisi de dogruydu.
+     *
+     * Kok sebep: ayni gun dunya %40 yavaslatilinca hedefler koru korune x0.6
+     * ile olceklenmisti. Olcum degil aritmetikti; oysa gecilen arac sayisi
+     * hiza dogrusal bagli degil (bolumun suresi, trafik yogunlugu ve aracin
+     * kendi hizi da giriyor). Hedefler artik OLCUMDEN turuyor.
+     *
+     * ## Tavan neden hedefler KAPATILARAK olculur
+     *
+     * [GameEngine.checkGoalReached] kariyerde TUM hedefler tutunca kosuyu
+     * bitiriyor. Yani hedefi dusurmek kosuyu KISALTIYOR ve olculen gecis
+     * sayisi da dusuyor — olcum kendi olctugu seye bagimli. Ilk denemede tam
+     * bu tuzaga dusuldu: hedef 36 iken 36, 27 iken 27, 20 iken 24 olculdu.
+     *
+     * Bu yuzden tavan, hedefleri ULASILAMAZ degerlerle degistirerek olculur:
+     * kosu o zaman bolumun kendi hedefiyle (sure/mesafe) biter ve gercek
+     * tavani verir.
+     *
+     * Esik: hedef, tavanin **%80'ini gecmemeli**. Otopilot vasat bir oyuncu;
+     * insan daha iyisini yapar, yani bu pay cimri degil.
+     */
+    @Test
+    fun `her gecis hedefi ulasilabilir`() {
+        LevelCatalog.levels.forEach { level ->
+            val hedef = level.stars
+                .filterIsInstance<Objective.PassVehicles>()
+                .firstOrNull()?.count ?: return@forEach
+            val acikUclu = level.copy(
+                stars = listOf(
+                    Objective.PassVehicles(99_999),
+                    Objective.ScoreAtLeast(9_999_999),
+                    Objective.CoinsAtLeast(99_999)
+                )
+            )
+            val tavan = SEEDS.minOf { play(acikUclu, it).stats.vehiclesPassed }
+            assertTrue(
+                "bolum ${level.id}: gecis hedefi $hedef ama gercek tavan $tavan — " +
+                    "hedef tavanin %80'ini asmamali",
+                hedef <= tavan * 0.80f
+            )
+        }
+    }
+
+    /**
+     * Gecis hedefleri bir ZORLUK EGRISI olusturmali: bolum ilerledikce hedef
+     * genel olarak yukselmeli. Sahibi *"3. bolum 6, 4. bolum 29, 5. bolum 18
+     * — sacma olmus"* dedi; o siçrayip dusen dizi bir egri degildi.
+     *
+     * Kucuk dususlere izin var (bir bolum gercekten daha kisa olabilir —
+     * orn. 10. bolum mesafe hedefli ve komsularindan kisa), ama bir hedef
+     * bir onceki bolumun hedefinin %85'inin altina inemez.
+     */
+    @Test
+    fun `gecis hedefleri yukselen bir egri olusturur`() {
+        var onceki = 0
+        var oncekiId = 0
+        LevelCatalog.levels.forEach { level ->
+            val hedef = level.stars
+                .filterIsInstance<Objective.PassVehicles>()
+                .firstOrNull()?.count ?: return@forEach
+            assertTrue(
+                "bolum ${level.id} hedefi $hedef, bolum $oncekiId hedefi $onceki — " +
+                    "egri geriye gidiyor",
+                hedef >= onceki * 0.85f
+            )
+            onceki = hedef
+            oncekiId = level.id
+        }
+    }
+
     @Test
     fun `bolum 1 kaybedilmesi neredeyse imkansiz bir tanitim bolumudur`() {
         val level = LevelCatalog.levels[0]

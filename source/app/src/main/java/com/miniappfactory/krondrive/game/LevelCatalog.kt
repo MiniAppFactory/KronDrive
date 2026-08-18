@@ -92,7 +92,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.CompleteRun,
                 Objective.CoinsAtLeast(6),
-                Objective.PassVehicles(8)
+                Objective.PassVehicles(5)
             )
         ),
         // 3 — BOOST. BoostDistance(150) tam bir bar dolusu boost'un biraz
@@ -105,7 +105,7 @@ object LevelCatalog {
             speedRampScale = 0.56f,
             trafficDensity = 0.70f,
             stars = listOf(
-                Objective.PassVehicles(6),
+                Objective.PassVehicles(8),
                 Objective.BoostDistance(150),
                 Objective.ScoreAtLeast(1000)
             )
@@ -125,7 +125,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.CompleteRun,
                 Objective.ScoreAtLeast(1400),
-                Objective.PassVehicles(29)
+                Objective.PassVehicles(12)
             )
         ),
         // 5 — ILK "NORMAL" BOLUM: varsayilan 80 km/h, tam yogunluk. Buraya
@@ -138,7 +138,7 @@ object LevelCatalog {
             trafficDensity = 1f,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(18),
+                Objective.PassVehicles(17),
                 Objective.ScoreAtLeast(1900)
             )
         ),
@@ -160,7 +160,7 @@ object LevelCatalog {
             // pekistiren bir gecis hedefiyle degisti.
             stars = listOf(
                 Objective.CoinsAtLeast(10),
-                Objective.PassVehicles(18),
+                Objective.PassVehicles(17),
                 Objective.ComboAtLeast(3)
             )
         ),
@@ -176,7 +176,7 @@ object LevelCatalog {
             // aliyordu.
             stars = listOf(
                 Objective.ScoreAtLeast(2200),
-                Objective.PassVehicles(27),
+                Objective.PassVehicles(20),
                 Objective.ComboAtLeast(4)
             )
         ),
@@ -201,7 +201,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CoinsAtLeast(15),
-                Objective.PassVehicles(36),
+                Objective.PassVehicles(25),
                 Objective.ScoreAtLeast(2500)
             )
         ),
@@ -211,7 +211,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(18),
+                Objective.PassVehicles(23),
                 Objective.FinishUnderSeconds(52)
             )
         ),
@@ -220,7 +220,7 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(70),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(42),
+                Objective.PassVehicles(30),
                 Objective.ScoreAtLeast(2900),
                 Objective.ComboAtLeast(4)
             )
@@ -250,7 +250,7 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(75),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(45),
+                Objective.PassVehicles(34),
                 Objective.ScoreAtLeast(3300),
                 Objective.ComboAtLeast(5)
             )
@@ -270,7 +270,7 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(75),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(24),
+                Objective.PassVehicles(36),
                 Objective.ScoreAtLeast(4100),
                 Objective.CoinsAtLeast(48)
             )
@@ -281,7 +281,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.ScoreAtLeast(3600),
-                Objective.PassVehicles(51),
+                Objective.PassVehicles(39),
                 Objective.ComboAtLeast(5)
             )
         ),
@@ -301,7 +301,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.BrakeTapsAtMost(0),
-                Objective.PassVehicles(27),
+                Objective.PassVehicles(40),
                 Objective.ScoreAtLeast(3800)
             )
         ),
@@ -310,7 +310,7 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(85),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(54),
+                Objective.PassVehicles(43),
                 Objective.CoinsAtLeast(24),
                 Objective.ComboAtLeast(5)
             )
@@ -331,7 +331,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.ScoreAtLeast(4000),
-                Objective.PassVehicles(54),
+                Objective.PassVehicles(45),
                 Objective.CoinsAtLeast(54)
             )
         ),
@@ -340,7 +340,7 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(85),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(54),
+                Objective.PassVehicles(45),
                 Objective.ScoreAtLeast(4200),
                 Objective.ComboAtLeast(5)
             )
@@ -351,7 +351,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(33),
+                Objective.PassVehicles(45),
                 Objective.FinishUnderSeconds(74)
             )
         ),
@@ -370,7 +370,7 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(90),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(57),
+                Objective.PassVehicles(50),
                 Objective.CoinsAtLeast(30),
                 Objective.ComboAtLeast(5)
             )
@@ -391,7 +391,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.ScoreAtLeast(4600),
-                Objective.PassVehicles(57),
+                Objective.PassVehicles(52),
                 Objective.CoinsAtLeast(55)
             )
         ),
@@ -400,7 +400,7 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(90),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(57),
+                Objective.PassVehicles(52),
                 Objective.ScoreAtLeast(5000),
                 Objective.ComboAtLeast(5)
             )
@@ -411,7 +411,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(63),
+                Objective.PassVehicles(59),
                 Objective.FinishUnderSeconds(88)
             )
         )

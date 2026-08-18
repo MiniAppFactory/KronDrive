@@ -1,5 +1,56 @@
 # Değişiklik günlüğü
 
+## 2026-08-18 (5) — Geçiş hedefleri ölçümden türetildi
+
+Sahibi: *"4. bölümde sürekli boosta bassan bile 29 araç geçmen imkânsız"* ve
+*"3. bölüm 6, 4. bölüm 29, 5. bölüm 18 — saçma olmuş"*. İkisi de doğruydu.
+
+**Kök sebep bendim:** aynı gün dünya %40 yavaşlatılınca hedefleri körü körüne
+×0.6 ile ölçekledim. Ölçüm değil aritmetikti — oysa geçilen araç sayısı hıza
+doğrusal bağlı değil (bölümün süresi, trafik yoğunluğu ve aracın kendi hızı da
+giriyor).
+
+### Ölçümün kendisi de tuzaklıydı
+
+İlk denemede tavanı olduğu gibi ölçtüm ve sayılar hedefe göre değişti:
+hedef 36 iken 36, 27 iken 27, 20 iken 24 ölçüldü. Sebep
+`GameEngine.checkGoalReached`: kariyerde **tüm hedefler tutunca koşu bitiyor**,
+yani hedefi düşürmek koşuyu kısaltıyor ve ölçüm kendi ölçtüğü şeye bağımlı
+hâle geliyor.
+
+Doğrusu: hedefleri ulaşılamaz değerlerle değiştirip ölçmek. O zaman koşu
+bölümün kendi hedefiyle (süre/mesafe) bitiyor ve **gerçek tavan** çıkıyor.
+
+### Yeni eğri
+
+Hedef = tavanın, bölüm ilerledikçe artan bir oranı (%50 → %78), asla önceki
+bölümün %85'inin altına inmeyecek şekilde:
+
+```
+2, 5, 8, 12, 17, 17, 20, 25, 23, 30, 34, 36, 39, 40, 43, 45, 45, 45, 50, 52, 52, 59
+```
+
+Eski dizi 6 → **29** → 18 diye zıplayıp düşüyordu; artık düzgün yükseliyor.
+Tek küçük düşüş 10. bölümde (25 → 23) ve gerçek bir sebebi var: o bölüm mesafe
+hedefli ve komşularından kısa, tavanı 30 (komşusununki 44).
+
+Belirgin değişimler: **bölüm 4: 29 → 12** (ulaşılamazdı), bölüm 9: 36 → 25,
+bölüm 30: 63 → 59.
+
+### İki kalıcı bekçi eklendi
+
+Bu hata neden fark edilmedi: mevcut testler *"üç hedeften ikisi tutsun"* diye
+bakıyor, yani **tek bir hedefin imkânsız olması sessizce geçiyordu**.
+
+1. `her gecis hedefi ulasilabilir` — hedef, gerçek tavanın %80'ini aşamaz
+   (tavan, hedefler kapatılarak ölçülür).
+2. `gecis hedefleri yukselen bir egri olusturur` — bir hedef, önceki bölümün
+   %85'inin altına inemez.
+
+**KANIT:** 219 birim test / 0 hata. `assembleDebug` + `assembleRelease`
+başarılı.
+
+
 ## 2026-08-18 (4) — Sonsuz modda "TEKRAR DENE" (reklamlı) ve bedava reset kaçağı
 
 Sahibi: *"sonsuz modda yandığında tekrar dene deyince reklam çıksın, geri
