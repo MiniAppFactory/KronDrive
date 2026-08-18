@@ -402,6 +402,7 @@ private fun CarCustomizeCard(
             UnlockAction(
                 item = shape,
                 state = shapeState,
+                carLevel = progress.carLevel,
                 language = language,
                 buyLabel = language.pick(tr = "GÖVDEYİ AL", en = "BUY BODY"),
                 onBuy = { onBuyShape(shape.id) }
@@ -416,6 +417,7 @@ private fun CarCustomizeCard(
                 UnlockAction(
                     item = color,
                     state = colorState,
+                    carLevel = progress.carLevel,
                     language = language,
                     buyLabel = language.pick(tr = "RENGİ AL", en = "BUY COLOUR"),
                     onBuy = { onBuyColor(color.id) }
@@ -586,23 +588,38 @@ private fun CarStatPanel(shape: CarShapeDef, language: AppLanguage) {
 private fun UnlockAction(
     item: CarItem,
     state: CarUnlockState,
+    /** Seviye atlama bedelini hesaplamak icin — bkz. CarCatalog.levelSkipFee. */
+    carLevel: Int,
     language: AppLanguage,
     buyLabel: String,
     onBuy: () -> Unit
 ) {
     if (state == CarUnlockState.OWNED) return
 
+    val skipFee = CarCatalog.levelSkipFee(item, carLevel)
+    val total = CarCatalog.totalPrice(item, carLevel)
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = when (state) {
-                // Seviye VE fiyat birlikte yazilir: ikisi ayri sart ve
-                // seviyeyi gorup "demek bedava" diye dusunmek cok kolaydi.
-                CarUnlockState.LEVEL_LOCKED -> language.pick(
-                    tr = "${item.name(language)} · araç seviyesi ${item.requiredCarLevel} ve ${item.priceCoins} coin gerekiyor",
-                    en = "${item.name(language)} · needs car level ${item.requiredCarLevel} and ${item.priceCoins} coins"
+            text = when {
+                // SEVIYE ARTIK DUVAR DEGIL (2026-08-19): eksik seviye coinle
+                // atlanabiliyor. Metin bunu ACIKCA soyler, yoksa oyuncu neden
+                // fiyattan fazla odedigini anlamaz.
+                skipFee > 0 && state == CarUnlockState.AFFORDABLE -> language.pick(
+                    tr = "${item.name(language)} · seviye ${item.requiredCarLevel} gerekiyor — " +
+                        "$skipFee coin ile şimdi açabilirsin",
+                    en = "${item.name(language)} · needs level ${item.requiredCarLevel} — " +
+                        "unlock now for $skipFee extra coins"
                 )
 
-                CarUnlockState.TOO_EXPENSIVE -> language.pick(
+                state == CarUnlockState.LEVEL_LOCKED -> language.pick(
+                    tr = "${item.name(language)} · seviye ${item.requiredCarLevel} ya da " +
+                        "toplam $total coin gerekiyor",
+                    en = "${item.name(language)} · needs level ${item.requiredCarLevel} " +
+                        "or $total coins in total"
+                )
+
+                state == CarUnlockState.TOO_EXPENSIVE -> language.pick(
                     tr = "${item.name(language)} · yeterli coin yok",
                     en = "${item.name(language)} · not enough coins"
                 )
@@ -618,18 +635,15 @@ private fun UnlockAction(
         )
         Spacer(modifier = Modifier.width(10.dp))
         PrimaryButton(
-            text = if (state == CarUnlockState.LEVEL_LOCKED) {
-                language.pick(tr = "SV ${item.requiredCarLevel}", en = "LV ${item.requiredCarLevel}")
-            } else {
-                "${item.priceCoins}"
-            },
-            subtitle = if (state == CarUnlockState.LEVEL_LOCKED) {
-                // Buton "SV 2" diyor (engelleyen sart bu), alt satir fiyati
-                // gosteriyor — oyuncu seviyeye ulasmadan once ne kadar coin
-                // biriktirmesi gerektigini bilsin.
-                language.pick(tr = "${item.priceCoins} coin", en = "${item.priceCoins} coins")
-            } else {
-                buyLabel
+            // Butonda ODENECEK TOPLAM yazar. Fiyati yazip toplami tahsil
+            // etmek oyuncuyu kandirmak olurdu.
+            text = "$total",
+            subtitle = when {
+                skipFee > 0 -> language.pick(
+                    tr = "${item.priceCoins} + $skipFee seviye",
+                    en = "${item.priceCoins} + $skipFee level"
+                )
+                else -> buyLabel
             },
             enabled = state == CarUnlockState.AFFORDABLE,
             modifier = Modifier

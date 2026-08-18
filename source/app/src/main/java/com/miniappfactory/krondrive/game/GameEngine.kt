@@ -555,7 +555,20 @@ class GameEngine(
     }
 
     private fun spawnObstacle() {
-        val lane = random.nextInt(GameConfig.LANE_COUNT)
+        // GECICI ANTRENMAN MODU (bkz. GameConfig.TRAINING_MODE_SIDE_LANES_ONLY):
+        // acikken yalnizca en sol ve en sag serit kullanilir, orta serit bos
+        // kalir. RNG akisi BOZULMUYOR — her iki dalda da `random`dan tam bir
+        // deger cekiliyor, yani ayni tohum ayni trafik dizisini uretmeye
+        // devam ediyor ve testler karsilastirilabilir kaliyor.
+        val lane = if (GameConfig.TRAINING_MODE_SIDE_LANES_ONLY) {
+            if (random.nextInt(GameConfig.LANE_COUNT) < GameConfig.LANE_COUNT / 2) {
+                0
+            } else {
+                GameConfig.LANE_COUNT - 1
+            }
+        } else {
+            random.nextInt(GameConfig.LANE_COUNT)
+        }
         obstacles.add(
             Obstacle(
                 lane = lane,

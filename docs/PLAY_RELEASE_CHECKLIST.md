@@ -140,6 +140,22 @@ en = "Version ${BuildConfig.VERSION_NAME}"
 
 Bir daha eskimez. **Madde kapandı.**
 
+### S-8 · Antrenman modu açık — **AÇIK · BLOKER · YENİ (2026-08-19)**
+
+`GameConfig.TRAINING_MODE_SIDE_LANES_ONLY = true`. Açıkken trafik yalnızca en
+sol ve en sağ şeritte doğuyor, **orta şerit hep boş**. Sahibi test kolaylığı
+için istedi ve *"aab yaparken sileriz"* dedi.
+
+**Yayına bu açık çıkarsa:** oyuncu orta şeritte durup sonsuza kadar hayatta
+kalır. Oyun çökmez, sadece bütün zorluk eğrisi, skor dengesi ve bölüm
+hedefleri anlamsızlaşır — yani sessiz bir felaket.
+
+**Yapılacak:** sabiti `false` yap, `spawnObstacle` içindeki dalı ve
+`GameEngineTest`'teki "antrenman modu" testini sil.
+
+`S-7` (başlangıç coini) ile birlikte kontrol edilmeli — ikisi de aynı türden
+geçici test değeri.
+
 ### A-10 · `developerTestDeviceIds` boş — **AÇIK (gelir riski, politika değil)**
 `AdIds.kt` → `developerTestDeviceIds: List<String> = emptyList()`.
 

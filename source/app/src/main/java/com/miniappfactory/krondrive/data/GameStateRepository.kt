@@ -441,7 +441,12 @@ class GameStateRepository(private val context: Context) {
             val coins = prefs[Keys.COINS] ?: PlayerProgress.STARTING_COINS
             val carLevel = PlayerProgress.carLevelForXp(prefs[Keys.XP] ?: 0)
             if (!CarCatalog.canBuy(item, owned, coins, carLevel)) return@edit
-            prefs[Keys.COINS] = coins - item.priceCoins
+            // FIYAT DEGIL TOPLAM: seviye yetmiyorsa atlama bedeli de dusulur
+            // (2026-08-19). `item.priceCoins` yazsaydik oyuncu seviyeyi
+            // BEDAVAYA atlardi — kontrol `canBuy` toplama bakiyor ama tahsilat
+            // fiyata bakiyor olurdu, yani klasik "kontrol bir yerde, etki
+            // baska yerde" hatasi.
+            prefs[Keys.COINS] = coins - CarCatalog.totalPrice(item, carLevel)
             prefs[ownedKey] = (owned + item.id).joinToString(",")
             select(prefs, item.id)
             success = true

@@ -625,9 +625,18 @@ class CarCatalogTest {
     fun `durum coin ve arac seviyesine gore hesaplanir`() {
         val paid = CarCatalog.shapes.first { it.priceCoins > 0 }
 
+        // 2026-08-19: SEVIYE ARTIK MUTLAK DUVAR DEGIL. Eksik seviye
+        // [CarCatalog.levelSkipFee] ile atlanabiliyor (sahibi karari), yani
+        // sinirsiz coinle seviye eksikken de alinabilir.
+        assertEquals(
+            CarUnlockState.AFFORDABLE,
+            CarCatalog.stateOf(paid, emptySet(), Int.MAX_VALUE, paid.requiredCarLevel - 1)
+        )
+        // LEVEL_LOCKED artik "seviyen yetmiyor VE atlama bedelini de
+        // karsilayamiyorsun" demek: fiyat kadar coin var ama bedel kadar yok.
         assertEquals(
             CarUnlockState.LEVEL_LOCKED,
-            CarCatalog.stateOf(paid, emptySet(), Int.MAX_VALUE, paid.requiredCarLevel - 1)
+            CarCatalog.stateOf(paid, emptySet(), paid.priceCoins, paid.requiredCarLevel - 1)
         )
         assertEquals(
             CarUnlockState.TOO_EXPENSIVE,
@@ -643,6 +652,31 @@ class CarCatalogTest {
         )
     }
 
+    /**
+     * Seviye atlama bedeli sahibinin verdigi formule birebir uymali:
+     * `(gerekenSeviye - mevcutSeviye) x LEVEL_SKIP_COIN_PER_LEVEL`.
+     * Seviye yetiyorsa ya da fazlaysa bedel SIFIR — fazla seviye para iade
+     * etmez, ama ceza da olmaz.
+     */
+    @Test
+    fun `seviye atlama bedeli formule uyar`() {
+        val f1 = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_F1 }
+        val birim = GameConfig.LEVEL_SKIP_COIN_PER_LEVEL
+        for (seviye in 1..f1.requiredCarLevel) {
+            assertEquals(
+                "F1, oyuncu seviye $seviye iken",
+                (f1.requiredCarLevel - seviye) * birim,
+                CarCatalog.levelSkipFee(f1, seviye)
+            )
+        }
+        assertEquals("seviye fazlaysa bedel 0", 0, CarCatalog.levelSkipFee(f1, 99))
+        assertEquals(
+            "toplam = fiyat + bedel",
+            f1.priceCoins + (f1.requiredCarLevel - 1) * birim,
+            CarCatalog.totalPrice(f1, 1)
+        )
+    }
+
     @Test
     fun `canBuy sadece tam olarak alinabilir durumda true doner`() {
         CarCatalog.shapes.forEach { shape ->
@@ -655,15 +689,29 @@ class CarCatalogTest {
                 assertTrue(
                     CarCatalog.canBuy(shape, emptySet(), shape.priceCoins, shape.requiredCarLevel)
                 )
-                assertFalse(
-                    "seviye yetmezken satin alinabiliyor",
-                    CarCatalog.canBuy(
-                        shape,
-                        emptySet(),
-                        Int.MAX_VALUE,
-                        shape.requiredCarLevel - 1
+                // Seviye eksikken SADECE fiyat kadar coinle alinamaz —
+                // atlama bedeli de gerekir (2026-08-19).
+                if (shape.requiredCarLevel > 1) {
+                    assertFalse(
+                        "${shape.id}: seviye eksikken atlama bedeli odenmeden alinabiliyor",
+                        CarCatalog.canBuy(
+                            shape,
+                            emptySet(),
+                            shape.priceCoins,
+                            shape.requiredCarLevel - 1
+                        )
                     )
-                )
+                    // Ama bedel odenirse alinabilir.
+                    assertTrue(
+                        "${shape.id}: atlama bedeli odendigi halde alinamiyor",
+                        CarCatalog.canBuy(
+                            shape,
+                            emptySet(),
+                            CarCatalog.totalPrice(shape, shape.requiredCarLevel - 1),
+                            shape.requiredCarLevel - 1
+                        )
+                    )
+                }
                 assertFalse(
                     "coin yetmezken satin alinabiliyor",
                     CarCatalog.canBuy(

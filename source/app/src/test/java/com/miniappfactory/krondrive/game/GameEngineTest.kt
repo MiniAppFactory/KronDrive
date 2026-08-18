@@ -412,6 +412,35 @@ class GameEngineTest {
     // 8) Sonsuz mod zorluk egrisi
     // -----------------------------------------------------------------
 
+    /**
+     * Antrenman modu ya KAPALI olacak ya da acikken GERCEKTEN yan seritlerde
+     * calisacak — arada bir sey yok.
+     *
+     * Bu test KIRMIZI YANMAZ, bilerek: kalici kirmizi bir test her build'de
+     * hata gosterir ve "hepsi yesil" sinyalini yok eder (ayni gerekce
+     * `PlayerProgressCarTest`'te de yazili). Yaptigi is, bayragin acik
+     * oldugunda DAVRANISININ dogru olmasini garanti etmek.
+     *
+     * ⚠ YAYIN KAPISI TEST DEGIL: `docs/PLAY_RELEASE_CHECKLIST.md` S-8.
+     * `TRAINING_MODE_SIDE_LANES_ONLY` acik yayina cikarsa oyuncu orta seritte
+     * durup sonsuza kadar hayatta kalir; butun zorluk egrisi anlamsizlasir.
+     */
+    @Test
+    fun `antrenman modu acikken orta serit bos kalir`() {
+        val e = engine(RunMode.ENDLESS)
+        e.startRun()
+        e.advance(framesFor(120f), clearTraffic = false)
+        val seritler = e.obstacles.map { it.lane }.toSet()
+        if (GameConfig.TRAINING_MODE_SIDE_LANES_ONLY) {
+            assertTrue(
+                "antrenman modu acik ama orta seritte arac var: $seritler",
+                seritler.none { it != 0 && it != GameConfig.LANE_COUNT - 1 }
+            )
+        } else {
+            assertTrue("trafik hic dogmadi", seritler.isNotEmpty())
+        }
+    }
+
     @Test
     fun `endless hiz carpani SUREKLI artar, sicramaz ve tavanda durur`() {
         // 2026-08-18: rampa basamakliydi (`floor`) ve 30. saniyede tek karede

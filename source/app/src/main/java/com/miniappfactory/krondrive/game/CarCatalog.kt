@@ -1712,12 +1712,32 @@ object CarCatalog {
     fun style(shapeId: String?, colorId: String?): CarStyle =
         CarStyle(shape(shapeId), color(colorId))
 
-    /** Garajdaki rozet/buton durumu. */
+    /**
+     * Eksik arac seviyesini coinle atlama bedeli. Seviye yetiyorsa 0.
+     * Gerekce ve buyukluk: [GameConfig.LEVEL_SKIP_COIN_PER_LEVEL].
+     */
+    fun levelSkipFee(item: CarItem, carLevel: Int): Int =
+        (item.requiredCarLevel - carLevel).coerceAtLeast(0) *
+            GameConfig.LEVEL_SKIP_COIN_PER_LEVEL
+
+    /** Bu oyuncunun BUGUN odeyecegi toplam: fiyat + varsa seviye atlama bedeli. */
+    fun totalPrice(item: CarItem, carLevel: Int): Int =
+        item.priceCoins + levelSkipFee(item, carLevel)
+
+    /**
+     * Garajdaki rozet/buton durumu.
+     *
+     * 2026-08-19'dan beri seviye MUTLAK bir duvar degil: eksik seviye
+     * [levelSkipFee] ile satin alinabiliyor. [CarUnlockState.LEVEL_LOCKED]
+     * artik "seviyen yetmiyor" degil, **"seviyen yetmiyor VE atlama bedelini
+     * de karsilayamiyorsun"** demek — yani ekranda hem seviyeyi hem toplam
+     * bedeli gostermek icin duruyor.
+     */
     fun stateOf(item: CarItem, owned: Set<String>, coins: Int, carLevel: Int): CarUnlockState =
         when {
             isOwned(item, owned) -> CarUnlockState.OWNED
+            coins >= totalPrice(item, carLevel) -> CarUnlockState.AFFORDABLE
             carLevel < item.requiredCarLevel -> CarUnlockState.LEVEL_LOCKED
-            coins >= item.priceCoins -> CarUnlockState.AFFORDABLE
             else -> CarUnlockState.TOO_EXPENSIVE
         }
 

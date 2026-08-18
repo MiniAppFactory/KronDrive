@@ -21,6 +21,24 @@ object GameConfig {
     const val ROAD_WIDTH_RATIO = 0.56f
     const val LANE_COUNT = 3
 
+    /**
+     * ⚠⚠ GECICI ANTRENMAN MODU — AAB'DEN ONCE SILINECEK. ⚠⚠
+     *
+     * Acikken trafik YALNIZCA en soldaki ve en sagdaki seritte dogar, orta
+     * serit hep bos kalir. Sahibi test kolayligi icin istedi (2026-08-19):
+     * orta seritte durup sahneyi, hizi, sesi ve arayuzu carpmadan
+     * izleyebilmek icin.
+     *
+     * Yayina bu ACIK cikarsa oyun oynanamaz hale gelmez ama TAMAMEN
+     * kolaylasir: oyuncu ortada durup sonsuza kadar hayatta kalir, butun
+     * zorluk egrisi ve skor dengesi anlamsizlasir.
+     *
+     * Iki iz birakildi: `PLAY_RELEASE_CHECKLIST` S-8 maddesi ve
+     * `GameEngineTest`'teki "antrenman modu kapali" testi. Test bu deger
+     * `true` iken KIRMIZI YANAR — bilerek, unutulmasin diye.
+     */
+    const val TRAINING_MODE_SIDE_LANES_ONLY = true
+
     /** Oyuncu araci ekranin altindan bu kadar yukarida durur (player.y = H - 210). */
     const val PLAYER_BOTTOM_OFFSET_PX = 210f
 
@@ -497,6 +515,27 @@ object GameConfig {
 
     /** Arac seviyesi = 1 + xp / bu deger. */
     const val XP_PER_CAR_LEVEL = 500
+
+    /**
+     * ARAC SEVIYESI ATLAMA BEDELI — eksik seviye basina coin.
+     *
+     * Sahibi (2026-08-19): *"formula arabasi icin hem coin hem seviye
+     * istiyoruz; o kadar odemek isteyen varsa seviye doldurmadan da ek bir
+     * coin harcayip araci acsin"*. Onerdigi formul birebir alindi:
+     * `(gerekenSeviye - mevcutSeviye) x 500`.
+     *
+     * Ornek — Formula (seviye 8, 5.000 coin):
+     *   seviye 1'de: 5.000 + (8-1)x500 = **8.500**
+     *   seviye 4'te: 5.000 + (8-4)x500 = **7.000**
+     *   seviye 8'de: 5.000 + 0         = **5.000**
+     *
+     * Neden bu buyukluk dogru: bir seviye 500 XP, XP ise `skor/10 +
+     * yildiz x20` — yani kosu basina ~200-500 XP. Bir seviye kabaca bir-iki
+     * kosu demek. 500 coin de kabaca dort bes bolumluk gelir, yani atlamak
+     * beklemekten UCUZ degil; sabirsiz oyuncuya bir kapi aciyor, kestirme
+     * sunmuyor.
+     */
+    const val LEVEL_SKIP_COIN_PER_LEVEL = 500
 
     // ---------------------------------------------------------------------
     // Booster etkileri

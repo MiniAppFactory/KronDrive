@@ -1,5 +1,61 @@
 # Değişiklik günlüğü
 
+## 2026-08-19 (2) — Antrenman modu, seviye atlama bedeli, "Lv 4" sorusu
+
+### Antrenman modu (⚠ GEÇİCİ — AAB'den önce silinecek)
+
+`GameConfig.TRAINING_MODE_SIDE_LANES_ONLY = true`. Trafik yalnızca en sol ve
+en sağ şeritte doğuyor, **orta şerit hep boş**. Sahibi test kolaylığı için
+istedi. Cihazda doğrulandı.
+
+RNG akışı bilerek bozulmadı: her iki dalda da `random`dan tam bir değer
+çekiliyor, yani aynı tohum aynı trafik dizisini üretmeye devam ediyor ve
+ölçümler karşılaştırılabilir kalıyor.
+
+**Yayına bu açık çıkarsa** oyuncu orta şeritte durup sonsuza kadar hayatta
+kalır — oyun çökmez, sadece bütün zorluk eğrisi ve skor dengesi anlamsızlaşır.
+İki iz bırakıldı: `PLAY_RELEASE_CHECKLIST` **S-8** (yeni bloker) ve
+`GameEngineTest`'te davranışı doğrulayan bir test. Kalıcı kırmızı test
+**bilerek eklenmedi** — projenin kendi kuralı (`PlayerProgressCarTest`):
+*"kalıcı kırmızı bir test 'hepsi yeşil' sinyalini yok eder"*.
+
+### Seviye atlama bedeli
+
+Sahibi: *"o kadar ödemek isteyen varsa seviye doldurmadan da ek bir coin
+harcayıp aracı açsın"*. Önerdiği formül birebir alındı:
+
+```
+bedel = (gerekenSeviye − mevcutSeviye) × 500
+```
+
+Formula (seviye 8, 5.000 coin) için cihazda doğrulandı: seviye 1'deki oyuncuya
+buton **8500** yazıyor, altında **"5000 + 3500 seviye"**, yanında *"seviye 8
+gerekiyor — 3500 coin ile şimdi açabilirsin"*.
+
+Büyüklük neden doğru: bir seviye 500 XP, XP ise `skor/10 + yıldız×20` — yani
+koşu başına ~200–500 XP. Bir seviye kabaca bir-iki koşu. 500 coin de kabaca
+dört beş bölümlük gelir, yani atlamak beklemekten **ucuz değil**; sabırsız
+oyuncuya kapı açıyor, kestirme sunmuyor.
+
+**Dikkat edilen tuzak:** kontrol `canBuy` toplama bakarken tahsilat
+`item.priceCoins`'e bakıyor olsaydı oyuncu seviyeyi bedavaya atlardı. Repository
+artık `CarCatalog.totalPrice` düşüyor.
+
+`CarUnlockState.LEVEL_LOCKED` artık *"seviyen yetmiyor"* değil, **"seviyen
+yetmiyor VE atlama bedelini de karşılayamıyorsun"** demek.
+
+### "Lv 4" — hata değil
+
+Sahibi oyunu açınca araç seviyesi 4 gördü ve *"standart araba 4 lv gerektirdiği
+için olabilir"* dedi. Değil: `carLevel = 1 + xp/500` ve `xp = skor/10 +
+yıldız×20`. Koşu başına 200–500 XP geliyor, yani **3-4 koşuda Lv 4** normal.
+Hiçbir araç seviyeyi zorlamıyor; varsayılan araç (Beety) seviye 1 istiyor.
+
+**KANIT:** 221 birim test / 0 hata (2 yeni: atlama bedeli formülü, antrenman
+modu davranışı). `assembleDebug` + `assembleRelease` başarılı. Antrenman modu
+ve F1 fiyatı cihazda ekran görüntüsüyle doğrulandı.
+
+
 ## 2026-08-19 — Sonsuz mod araç farkını yiyordu; garaj artık rakam yazıyor
 
 Sahibi *"Beety'nin top speed'i kaç"* diye sordu. Cevap tek sayı değildi ve
