@@ -174,6 +174,13 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                     navController.navigate(Routes.game(RunMode.CAREER, nextLevel)) {
                         popUpTo(Routes.GAME) { inclusive = true }
                     }
+                },
+                onRetry = {
+                    // Ayni mod bastan baslar ve mevcut oyun ekraninin YERINE
+                    // gelir — geri yiginina ust uste kosu birikmesin.
+                    navController.navigate(Routes.game(mode, levelArg.takeIf { it > 0 })) {
+                        popUpTo(Routes.GAME) { inclusive = true }
+                    }
                 }
             )
         }

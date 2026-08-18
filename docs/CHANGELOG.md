@@ -1,5 +1,69 @@
 # Değişiklik günlüğü
 
+## 2026-08-18 (4) — Sonsuz modda "TEKRAR DENE" (reklamlı) ve bedava reset kaçağı
+
+Sahibi: *"sonsuz modda yandığında tekrar dene deyince reklam çıksın, geri
+tuşuna basınca da reklam çıksın ki ücretsiz reset şansı olmasın"*.
+
+### Buton geri geldi — itiraz butona değil, bedavaya idi
+
+`TEKRAR` 2026-08-14'te kaldırılmıştı: *"bedava oyunu reset yapan yer varsa
+keşfetmeyi engellemeli"*. Sabit (`INTERSTITIAL_EVERY_N_RETRIES`) ve ViewModel
+mantığı **geri alınmak istenirse diye bırakılmıştı** — ikisi de kullanıldı.
+
+Eşik **2 değil 1**: 2'de ilk tekrar bedava kalırdı, yani kapatılmak istenen
+kapı açık kalırdı.
+
+### Asıl kaçak: sonuç ekranında sistem geri tuşu
+
+`BackHandler` yalnızca `RUNNING || paused` iken etkindi. Sonuç ekranında devre
+dışı olduğu için **sistem geri tuşu nav yığınını doğrudan atıyor ve koşu
+hiçbir reklam görmeden bitiyordu** — ekrandaki ANA MENÜ butonu ise reklam
+kapısından geçiyordu. Yani aynı niyetin iki yolu yine iki farklı sonuç
+veriyordu (2026-08-16'daki hatanın aynı deseni).
+
+Sonsuz modda bu, sınırsız bedava reset demekti: kötü başladın → geri tuşu →
+tekrar gir. Geri tuşu artık butonla aynı yoldan gidiyor. Cihazda doğrulandı:
+`AdActivity` ön plana geliyor.
+
+### `INTERSTITIAL_EVERY_N_ENDLESS_RUNS` 3 → 1
+
+Kapıyı aynı yola bağlamak yetmedi: kural "3 koşuda bir" olduğu için geri tuşu
+koşuların ikisinde yine bedava çıkıyordu (cihazda ölçüldü — ilk denemede
+reklam çıkmadı). Sonsuz modda artık her koşu sonunda reklam var.
+
+⚠ **Sonsuz modda reklam yükü üç katına çıktı.** Kariyer ve günlük görev
+etkilenmedi: `INTERSTITIAL_EVERY_N_LEVELS` hâlâ 3, ilk bölümler hâlâ reklamsız.
+Geri alınmak istenirse tek sayı.
+
+### F1 takılması: ölçüldü, F1'in suçu değil
+
+Sahibi *"F1 aracını seçtim, sürerken ekran çok takıldı"* dedi. Ölçmek için F1
+geçici olarak açıldı ve **tema sabitlendi** (temalar arası çizim yükü 4 kat
+değişiyor, sabitlemeden karşılaştırma gürültü olurdu):
+
+| | Beety | F1 |
+|---|---|---|
+| Kare süresi p50 | 28 ms | **28 ms** |
+| p90 | 38 ms | 40 ms |
+| Missed Vsync | 52/1148 (%4,5) | 54/1155 (%4,7) |
+
+**Çizim maliyeti aynı.** F1'e özel bir kusur yok.
+
+Muhtemel sebep: F1 çok daha hızlı (yeni merdivende 184 km/h, Beety 120). Kare
+düşme oranı aynı kalıyor ama düşen her karede dünya iki kat fazla yol aldığı
+için **sıçrama iki kat büyük görünüyor**. Yani çözüm F1'de değil, kalan %4,6
+kare düşmesinde.
+
+**ÖLÇÜLMEDİ:** bu açıklamanın doğru olup olmadığı — sahibinin F1'i yavaşken de
+takılıyor mu diye denemesi gerekir.
+
+**KANIT:** 217 birim test / 0 hata. `assembleDebug` + `assembleRelease`
+başarılı. TEKRAR DENE ve geri tuşu akışları cihazda ekran görüntüsü ve logcat
+(`AdActivity`) ile doğrulandı. Geçici ölçüm değişiklikleri (F1 kilidi, tema
+sabitlemesi) geri alındı.
+
+
 ## 2026-08-18 (3) — Araç merdiveni: taban düşürüldü, yayılım açıldı
 
 Sahibi: *"arabalar sadece görsel ve defaulttan ne kadar +/- sapma o kadar"*,

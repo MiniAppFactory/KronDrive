@@ -158,7 +158,9 @@ fun GameScreen(
     levelId: Int?,
     viewModel: KronViewModel,
     onExit: () -> Unit,
-    onPlayLevel: (Int) -> Unit
+    onPlayLevel: (Int) -> Unit,
+    /** Ayni modu bastan baslatir (sonsuz modun "TEKRAR DENE"si). */
+    onRetry: () -> Unit
 ) {
     val progress by viewModel.playerProgress.collectAsStateWithLifecycle()
     val daily by viewModel.dailyChallenge.collectAsStateWithLifecycle()
@@ -620,8 +622,34 @@ fun GameScreen(
      * ÇIKIŞ butonuyla BIREBIR ayni yol: sonuc yayimlanir, coin/XP/gorev
      * ilerlemesi kaydedilir, reklam kurali isler.
      */
-    BackHandler(enabled = engine.phase == RunPhase.RUNNING || paused) {
-        if (paused) quitRun() else onPauseTap()
+    /**
+     * Sonuc/carpisma ekranindan cikis — sistem geri tusu icin.
+     *
+     * ⚠ BEDAVA RESET KACAGI (2026-08-18, sahibi bildirdi): sonuc ekraninda
+     * [BackHandler] devre disiydi (`enabled` yalnizca RUNNING/paused idi),
+     * yani sistem geri tusu nav yiginini DOGRUDAN atiyor ve kosu HICBIR
+     * reklam gostermeden bitiyordu. Ekrandaki ANA MENU butonu ise
+     * [withOptionalInterstitial]'dan geciyordu — yani ayni niyetin iki yolu
+     * yine iki farkli sonuc veriyordu (bkz. 2026-08-16'daki ayni desen).
+     *
+     * Sonsuz modda bu, sinirsiz bedava reset demekti: kotu basladin, geri
+     * tusu, tekrar gir. Artik geri tusu de butonla AYNI yoldan gidiyor.
+     */
+    val exitFromResult = {
+        withOptionalInterstitial(viewModel, mode, result?.levelId ?: levelId, activity) {
+            onExit()
+        }
+    }
+
+    BackHandler(
+        enabled = engine.phase == RunPhase.RUNNING || paused ||
+            result != null || showCrashDialog
+    ) {
+        when {
+            paused -> quitRun()
+            result != null || showCrashDialog -> exitFromResult()
+            else -> onPauseTap()
+        }
     }
     val onToggleSpeedLock = remember(engine) {
         {
@@ -845,6 +873,18 @@ fun GameScreen(
                     // reklam cikmaz, cikaran kosu hala reklamsiz bolgedeydi.
                     withOptionalInterstitial(viewModel, mode, runResult.levelId, activity) {
                         nextLevelId?.let(onPlayLevel)
+                    }
+                },
+                // Sonsuz mod bir skor kovalamacasi: dogal dongu "yine".
+                // Kariyerde tekrar bolum haritasindan girilir, gunluk gorev
+                // gunde bir kez oynanir — o yuzden yalnizca ENDLESS.
+                canRetry = mode == RunMode.ENDLESS,
+                onRetry = {
+                    if (activity != null && viewModel.consumeRetryInterstitial()) {
+                        viewModel.onInterstitialShown(mode)
+                        InterstitialAdManager.loadAndShow(activity, activity) { onRetry() }
+                    } else {
+                        onRetry()
                     }
                 },
                 onHome = {
@@ -2183,6 +2223,9 @@ private fun RunResultOverlay(
     adFailed: Boolean,
     onDoubleCoins: () -> Unit,
     onNext: () -> Unit,
+    /** Sonsuz modda "TEKRAR DENE" gosterilir mi (bkz. cagri yeri). */
+    canRetry: Boolean,
+    onRetry: () -> Unit,
     onHome: () -> Unit
 ) {
     val stats = result.stats
@@ -2415,11 +2458,23 @@ private fun RunResultOverlay(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                 }
-                // "TEKRAR" butonu KALDIRILDI (2026-08-14): kosuyu bedavaya
-                // sifirlayip yeniden baslatmak reklamsiz tur cevirmenin ve
-                // kisa kosu farmlamanin en kolay yoluydu. Ayni bolumu tekrar
-                // oynamak icin bolum haritasindan girilir; carpisma aninda
-                // reklamli ve kosu basina bir kez "devam et" teklifi var.
+                // "TEKRAR DENE" 2026-08-18'de GERI KONDU — ama reklamli.
+                //
+                // 2026-08-14'te kaldirilma gerekcesi *bedava* resetti, butonun
+                // kendisi degil. Artik her tekrar bir gecis reklamindan geciyor
+                // ([GameConfig.INTERSTITIAL_EVERY_N_RETRIES] = 1) ve ANA MENU
+                // de zaten reklamdan geciyor, yani reklamsiz cikis yolu yok.
+                //
+                // Yalnizca sonsuz modda: kariyerde tekrar bolum haritasindan
+                // girilir, gunluk gorev gunde bir kez oynanir.
+                if (canRetry) {
+                    PrimaryButton(
+                        text = language.pick(tr = "TEKRAR DENE", en = "TRY AGAIN"),
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onRetry
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
                 SecondaryButton(
                     text = language.pick(tr = "ANA MENÜ", en = "HOME"),
                     modifier = Modifier.fillMaxWidth(),

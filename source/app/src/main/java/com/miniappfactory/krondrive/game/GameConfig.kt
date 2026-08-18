@@ -557,7 +557,24 @@ object GameConfig {
     const val INTERSTITIAL_EVERY_N_LEVELS = 3
 
     /** Kac sonsuz-mod kosusundan sonra gecis reklami gosterilecek. */
-    const val INTERSTITIAL_EVERY_N_ENDLESS_RUNS = 3
+    /**
+     * Sonsuz modda gecis reklami sikligi. **1 = her kosu sonunda.**
+     *
+     * 2026-08-18: 3 -> 1 (sahibi istegi). Gerekce onun sozleriyle:
+     * *"tekrar dene deyince reklam ciksin, geri tusuna basinca da reklam
+     * ciksin ki ucretsiz reset sansi olmasin"*.
+     *
+     * 3'te kosunun ikisi bedava cikisti; sonsuz mod bir skor kovalamacasi
+     * oldugu icin kotu baslayan kosuyu aninda sifirlamak serbest kaliyordu —
+     * hem reklamsiz tur cevirme hem kisa kosu farmlama yolu. Ayni endise
+     * 2026-08-14'te "TEKRAR" butonunu kaldirtmisti; buton simdi reklamli
+     * olarak geri geldi ve kacak yollarin da kapanmasi gerekti.
+     *
+     * ⚠ Bu, sonsuz modda reklam yukunu UC KATINA cikarir. Kariyer ve gunluk
+     * gorev ETKILENMEZ ([INTERSTITIAL_EVERY_N_LEVELS] hala 3, ilk bolumler
+     * hala reklamsiz). Geri almak isteniyorsa tek sayi.
+     */
+    const val INTERSTITIAL_EVERY_N_ENDLESS_RUNS = 1
 
     /**
      * Bir kariyer kosusunun reklam sayacini artirmasi icin gereken en kisa
@@ -594,14 +611,23 @@ object GameConfig {
     const val INTERSTITIAL_FREE_LEVELS = 3
 
     /**
-     * KULLANILMIYOR (2026-08-14). Sonuc ekranindaki "TEKRAR" butonu kaldirildi:
-     * kosuyu bedavaya sifirlayip yeniden baslatmak, hem reklamsiz tur cevirmenin
-     * hem de kisa kosu farmlamanin en kolay yoluydu (sahibi: "bedava oyunu reset
-     * yapan yer varsa kesfetmeyi engellemeli"). Yerine carpisma aninda REKLAMLI
-     * ve kosu basina BIR KEZ "devam et" var (bkz. [REVIVE_MAX_PER_RUN]).
-     * Sabit, geri alinmak istenirse diye duruyor.
+     * "TEKRAR DENE" basina reklam sikligi. **1 = her tekrarda.**
+     *
+     * Gecmis: buton 2026-08-14'te kaldirilmisti — *"bedava oyunu reset yapan
+     * yer varsa kesfetmeyi engellemeli"*. Itiraz butona degil, BEDAVAYA idi.
+     *
+     * 2026-08-18'de sahibi geri istedi ve itirazi da kendisi kapatti:
+     * *"sonsuz modda yandiginda tekrar dene deyince reklam ciksin, geri
+     * tusuna basinca da reklam ciksin ki ucretsiz reset sansi olmasin"*.
+     *
+     * Bu yuzden esik 2 DEGIL 1: 2'de ilk tekrar bedava kalirdi, yani tam da
+     * kapatilmak istenen kapi acik kalirdi. Kacis yolu da yok — sonuc
+     * ekranindaki ANA MENU zaten [withOptionalInterstitial]'dan geciyor.
+     *
+     * Yalnizca SONSUZ mod. Kariyerde tekrar, bolum haritasindan girilir ve
+     * oradaki sayac isler; gunluk gorev gunde bir kez oynanir.
      */
-    const val INTERSTITIAL_EVERY_N_RETRIES = 2
+    const val INTERSTITIAL_EVERY_N_RETRIES = 1
 
     /** Odullu reklam karsiligi verilen coin. */
     const val REWARDED_COIN_AMOUNT = 150
