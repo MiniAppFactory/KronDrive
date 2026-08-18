@@ -413,22 +413,46 @@ class GameEngineTest {
     // -----------------------------------------------------------------
 
     @Test
-    fun `endless hiz carpani 30 saniyelik adimlarla artar ve tavanda durur`() {
+    fun `endless hiz carpani SUREKLI artar, sicramaz ve tavanda durur`() {
+        // 2026-08-18: rampa basamakliydi (`floor`) ve 30. saniyede tek karede
+        // %10 zipliyordu — sahibi *"bir anda top speed'e gidiyor"* diye
+        // bildirdi. Test o basamaklari KILITLIYORDU, yani kusuru koruyordu.
+        // Artik tersini dogruluyor: ayni uc noktalar, ama arada sicrama yok.
         val e = engine(RunMode.ENDLESS)
         e.startRun()
-        assertEquals(1f, e.endlessSpeedMultiplier(), 1e-4f)
+        assertEquals(1f, e.endlessSpeedMultiplier(), 1e-3f)
 
-        e.advance(framesFor(20f))
-        assertEquals(1f, e.endlessSpeedMultiplier(), 1e-4f)
+        // Uc noktalar degismedi: 30 s'de +1 adim, 60 s'de +2 adim.
+        e.advance(framesFor(30f))
+        assertEquals(1f + GameConfig.ENDLESS_SPEED_STEP, e.endlessSpeedMultiplier(), 5e-3f)
 
-        e.advance(framesFor(11f)) // toplam ~31 s
-        assertEquals(1f + GameConfig.ENDLESS_SPEED_STEP, e.endlessSpeedMultiplier(), 1e-4f)
+        e.advance(framesFor(30f)) // toplam ~60 s
+        assertEquals(1f + 2f * GameConfig.ENDLESS_SPEED_STEP, e.endlessSpeedMultiplier(), 5e-3f)
 
-        e.advance(framesFor(30f)) // toplam ~61 s
-        assertEquals(1f + 2f * GameConfig.ENDLESS_SPEED_STEP, e.endlessSpeedMultiplier(), 1e-4f)
-
-        e.advance(framesFor(140f)) // toplam ~201 s -> 6 adim, tavan
+        e.advance(framesFor(150f)) // toplam ~210 s -> tavan
         assertEquals(GameConfig.ENDLESS_SPEED_MAX_MULTIPLIER, e.endlessSpeedMultiplier(), 1e-4f)
+    }
+
+    /**
+     * Asil korunan sey: rampanin SUREKLI olmasi. Yarim saniyelik adimlarla
+     * bakildiginda hicbir aralikta carpan tek seferde bir adimin ucte birinden
+     * fazla artmamali — eski `floor` surumunde tam bir adim (%10) zipliyordu.
+     */
+    @Test
+    fun `endless hiz rampasinda sicrama yok`() {
+        val e = engine(RunMode.ENDLESS)
+        e.startRun()
+        var prev = e.endlessSpeedMultiplier()
+        val esik = GameConfig.ENDLESS_SPEED_STEP / 3f
+        repeat(400) { i ->
+            e.advance(framesFor(0.5f))
+            val now = e.endlessSpeedMultiplier()
+            assertTrue(
+                "carpan ${i * 0.5f} sn civarinda sicradi: $prev -> $now",
+                now - prev < esik
+            )
+            prev = now
+        }
     }
 
     @Test
@@ -678,8 +702,12 @@ class GameEngineTest {
         )
         assertTrue("dokunulmazlik pencere boyunca surmeli", e.isInvulnerable())
 
-        // Pencere bitince trafik geri gelir.
-        e.advance((1.2f / dt).toInt(), clearTraffic = false)
+        // Pencere bitince trafik geri gelir. Beklenen sure SABIT YAZILMAZ:
+        // dogus araligi bir denge dugmesi (2026-08-18'de 0.78 -> 1.30 oldu ve
+        // buradaki eski 1.2f sabiti o degisikligi yanlislikla "hata" diye
+        // raporladi). Bir dogus araligi + pay kadar bekleniyor.
+        val bekle = e.obstacleSpawnInterval() * 1.5f
+        e.advance((bekle / dt).toInt(), clearTraffic = false)
         assertTrue("pencere bitti, trafik geri gelmeli", e.obstacles.isNotEmpty())
     }
 
@@ -1124,15 +1152,25 @@ class GameEngineTest {
             "super araba daha yuksek tavana ulasmali: sehir=$city super=$supercar",
             supercar > city + 0.2f
         )
-        // Fark yukseltmenin YERINE gecmiyor: seviye 8 Sehir, seviye 4 Super
-        // Araba'yi hâlâ geciyor.
+        // 2026-08-18: "yukseltme aracin onunde kalmali" kurali kaldirildi
+        // (gerekce UpgradeCatalogTest'te). Yerine gecen sey: yukseltmenin
+        // kazandirdigi TAVAN ARTISI aractan bagimsiz olmali — yani ucuz arac
+        // sahibi de tam olcekli bir iyilesme gorur, "once pahali arabayi al,
+        // sonra yukselt" zorunlulugu dogmaz.
         val maxedCity = engine(
             upgrades = UpgradeLevels(speed = 8, acceleration = 8, brake = 8, boost = 8),
             shape = CarCatalog.defaultShape
         ).driveToTopSpeed()
-        assertTrue(
-            "yukseltme aracin onunde kalmali: maxSehir=$maxedCity sv4Super=$supercar",
-            maxedCity > supercar
+        val cityKazanc = maxedCity - engine(shape = CarCatalog.defaultShape).driveToTopSpeed()
+        val superKazanc = engine(
+            upgrades = UpgradeLevels(speed = 8, acceleration = 8, brake = 8, boost = 8),
+            shape = CarCatalog.shape(CarCatalog.SHAPE_SUPERCAR)
+        ).driveToTopSpeed() - engine(
+            shape = CarCatalog.shape(CarCatalog.SHAPE_SUPERCAR)
+        ).driveToTopSpeed()
+        assertEquals(
+            "yukseltme kazanci aractan bagimsiz olmali: sehir=$cityKazanc super=$superKazanc",
+            cityKazanc.toDouble(), superKazanc.toDouble(), 0.15
         )
     }
 

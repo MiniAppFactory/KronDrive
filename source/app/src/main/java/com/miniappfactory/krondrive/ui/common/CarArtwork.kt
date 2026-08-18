@@ -21,6 +21,7 @@ import com.miniappfactory.krondrive.game.CarCatalog
 import com.miniappfactory.krondrive.game.CarGradient
 import com.miniappfactory.krondrive.game.CarPart
 import com.miniappfactory.krondrive.game.CarStyle
+import com.miniappfactory.krondrive.game.VehicleClass
 import com.miniappfactory.krondrive.game.GameConfig
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -333,8 +334,26 @@ fun DrawScope.drawStyledCar(
 
 /**
  * Garaj onizlemesi. Arac, verilen alana golgesiyle birlikte ORTALANIR ve
- * sigacak kadar buyutulur; hangi sekil secilirse secilsin ayni cerceveyi
- * doldurur (kutu sabit — bkz. CarCatalog kutu kurali).
+ * sigacak kadar buyutulur.
+ *
+ * ## Kutu SABIT DEGIL — govdenin kendi olcu sinifindan gelir
+ *
+ * Burasi 2026-08-18'e kadar [CarCatalog.ART_LEFT] ailesini kullaniyordu ve o
+ * degerler [VehicleClass.BINEK]'in kutusu (40x76). Sekiz govde de binek
+ * oldugu surece dogruydu; **2026-08-17'de motosiklet (22x59) ve tir (48x202)
+ * eklenince bozuldu**.
+ *
+ * Ayni gun [drawCarSprite] her govdeyi KENDI sinif kutusuna cizmeye
+ * gecirilmisti (commit `3411a4b`) ama onizleme yolu ayni degisiklikten
+ * gecmemisti. Sonuc: sigdirma 76 birime gore hesaplaniyor, cizim 202 birim
+ * yapiyordu — **2,66 kat tasma**. Tir garajda kendi karesinden tasip ekranin
+ * yarisini kapliyordu (sahibi ekran goruntusuyle bildirdi, 2026-08-18).
+ * Motosiklet ters yonde etkileniyordu: 59 birimlik govde 76 birimlik kutuya
+ * gore sigdirildigi icin gereginden kucuk cikiyordu.
+ *
+ * Golge yalnizca VEKTOR yolunda hesaba katilir. [drawCarShadowIfVector]
+ * sprite varken zaten cizmiyor; kutuya her zaman katsaydik golge sabit 42x68
+ * oldugu icin 22 birimlik motosikleti bosuna kuculturdu.
  */
 @Composable
 fun CarPreview(
@@ -346,11 +365,15 @@ fun CarPreview(
     sprites: CarSpriteSet = rememberCarSprites()
 ) {
     Canvas(modifier = modifier) {
-        // Onizleme kutusu = katalogun garanti ettigi arac kutusu + golge alani.
-        val left = minOf(CarCatalog.ART_LEFT, CarCatalog.SHADOW_LEFT)
-        val right = maxOf(CarCatalog.ART_RIGHT, CarCatalog.SHADOW_LEFT + CarCatalog.SHADOW_WIDTH)
-        val top = minOf(CarCatalog.ART_TOP, CarCatalog.SHADOW_TOP)
-        val bottom = maxOf(CarCatalog.ART_BOTTOM, CarCatalog.SHADOW_TOP + CarCatalog.SHADOW_HEIGHT)
+        // Onizleme kutusu = GOVDENIN KENDI sinif kutusu (+ vektor yolunda golge).
+        val shape = style.shape
+        val vector = sprites.of(shape.id) == null
+        val shadowRight = CarCatalog.SHADOW_LEFT + CarCatalog.SHADOW_WIDTH
+        val shadowBottom = CarCatalog.SHADOW_TOP + CarCatalog.SHADOW_HEIGHT
+        val left = if (vector) minOf(shape.boxLeft, CarCatalog.SHADOW_LEFT) else shape.boxLeft
+        val right = if (vector) maxOf(shape.boxRight, shadowRight) else shape.boxRight
+        val top = if (vector) minOf(shape.boxTop, CarCatalog.SHADOW_TOP) else shape.boxTop
+        val bottom = if (vector) maxOf(shape.boxBottom, shadowBottom) else shape.boxBottom
         val artWidth = right - left
         val artHeight = bottom - top
         if (artWidth <= 0f || artHeight <= 0f) return@Canvas

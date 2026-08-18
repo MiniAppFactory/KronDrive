@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- URETILDI: docs/play_store_assets/tools/gen_launcher.py — elle duzenleme.
      Aday C'nin zemin katmani: gece gradyani + asfalt + kerb + serit + ufuk
-     parlamasi + coin. Geometri gen_icons.c_road_pt ile birebir ayni; 512'lik
+     parlamasi. COIN BILEREK YOK (2026-08-18): sari daire + icindeki dikey
+     parlama, launcher boyutunda kucultulunce UNLEM ISARETI gibi okunuyordu,
+     yani uygulama ikonunun uzerinde bir sistem uyari rozeti varmis gibi.
+     Sahibi bildirdi. Geometri gen_icons.c_road_pt ile birebir ayni; 512'lik
      ikon 108'lik viewport'a olceklendi. Renkler koddan (kron_art.py). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -56,11 +59,4 @@
         </aapt:attr>
     </path>
 
-    <!-- Coin (drawCoin renkleri) -->
-    <path android:fillColor="#FFF6C000"
-        android:pathData="M25.25,77.10a5.48,5.48 0 1,0 10.97,0a5.48,5.48 0 1,0 -10.97,0Z" />
-    <path android:strokeColor="#FF8F6A00" android:strokeWidth="1.65"
-        android:pathData="M25.25,77.10a5.48,5.48 0 1,0 10.97,0a5.48,5.48 0 1,0 -10.97,0Z" />
-    <path android:fillColor="#FFFFF0A8"
-        android:pathData="M29.63,73.81h2.19v6.58h-2.19z" />
 </vector>

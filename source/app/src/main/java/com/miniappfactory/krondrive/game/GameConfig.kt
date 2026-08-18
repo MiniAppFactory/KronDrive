@@ -161,7 +161,25 @@ object GameConfig {
     const val SCORE_SPEED_DIVISOR = 600f
 
     /** Skordan gelen hiz artisinin tavani (SPEED yukseltmesi bunu buyutur). */
-    const val SCORE_SPEED_CAP_BASE = 3.2f
+    /**
+     * Skordan gelen hiz tavaninin TABANI — referans arac (carpan 1.0) icin.
+     *
+     * 2026-08-18: 3.2 -> 1.90. Sahibi: *"Beety 180 yapamaz"* ve *"arabalar
+     * sadece gorsel, defaulttan ne kadar +/- sapma o kadar"*. Ikisi de ayni
+     * kokten geliyordu: TABAN zaten super araba rakamiydi.
+     *
+     * Olculdu (2026-08-18): butun araclarin hiz carpani 0.97-1.18 arasinda
+     * sikisikti, yani bedava aractan 5000 coinlik Formula'ya toplam kazanc
+     * **+%18**. Ayni anda TEK bir yukseltme dali (SPEED 1->8) +%20 veriyordu.
+     * Yani oyundaki butun araclari almak, bedava arabanin tek bir dalini
+     * sonuna kadar acmaktan daha az hiz veriyordu — "araclar kozmetik"
+     * hissinin aritmetigi buydu.
+     *
+     * Yeni taban bedava araci **120 km/h**'e oturtuyor; merdivenin tepesi
+     * (Formula, tam yukseltme) 220. Araclar arasi fark %11'den **%108**'e
+     * cikti. Gosterge tavani 240, yani tepe hala icinde.
+     */
+    const val SCORE_SPEED_CAP_BASE = 1.90f
     const val MIN_SPEED = 2.0f
 
     /** Boost basiliyken hedef hiza eklenen degeri. */
@@ -196,10 +214,29 @@ object GameConfig {
      * degismesin diye. Aksi halde tum bolumlerin mesafe hedefleri ve gunluk
      * gorevlerin "3000 m" tipi hedefleri sessizce %25 uzardi.
      *
-     * Tek dugme: hala hizli gelirse bu sayiyi kucult (0.65 -> 160 km/h ~ 105
-     * km/h hissi), yavas gelirse 1.0'a yaklastir. Baska hicbir yeri elleme.
+     * **2026-08-18: 0.75 -> 0.45** (sahibi: "dunyanin akis hizini %40 azalt").
+     * Mevcut akisin %60'i. Gostergedeki km/h AYNEN kalir.
+     *
+     * ⚠ ARTIK TEK DUGME DEGIL. Yukaridaki "trafik sikligi bozulmuyor"
+     * gerekcesi 0.75'te geciyordu, 0.45'te GECMIYOR. Engeller ZAMANA gore
+     * dogdugundan dunya yavaslayinca ardisik araclar ekranda birbirine
+     * yaklasir; olculdu (2026-08-18): tek basina 0.45, temkinli otopilotu
+     * **bolum 4'te carptiriyor** ve kariyer orada kesiliyor.
+     *
+     * Bu yuzden ucu BIRLIKTE degisti — biri digerleri olmadan degistirilemez:
+     *   1. WORLD_SPEED_SCALE      0.75 -> 0.45   (dunya 0.6x hizda)
+     *   2. OBSTACLE_SPAWN_INTERVAL_SEC 0.78 -> 1.30  (0.78 / 0.6; ekrandaki
+     *      arac araligi birebir korunsun diye)
+     *   3. LevelCatalog'daki 22 [Objective.PassVehicles] hedefi x0.6 —
+     *      saniyedeki arac %40 azaldigi icin eski sayilar erisilemez olurdu
+     *      (olculdu: yalniz 1+2 yapilinca bolum 6, 45 saniyede 28 gecisle
+     *      2 yildiz yerine 1 yildiz veriyordu).
+     *
+     * Korunanlar: metre/saniye ([PIXELS_PER_METER] ayni carpanla kuculuyor,
+     * yani mesafe hedefleri kaymadi) ve skor/coin formulu (`speed`ten
+     * besleniyor, bu carpandan degil).
      */
-    const val WORLD_SPEED_SCALE = 0.75f
+    const val WORLD_SPEED_SCALE = 0.45f
 
     const val WORLD_PX_PER_SPEED_UNIT = WORLD_PX_PER_SPEED_UNIT_PROTOTYPE * WORLD_SPEED_SCALE
 
@@ -267,7 +304,13 @@ object GameConfig {
      * dokunulmadi. Bolum bazinda seyreltme [LevelDef.trafficDensity] ile
      * yapilir.
      */
-    const val OBSTACLE_SPAWN_INTERVAL_SEC = 0.78f
+    /**
+     * 2026-08-18: 0.78 -> 1.30 (= 0.78 / 0.6). [WORLD_SPEED_SCALE] ile
+     * BIRLIKTE degisti; gerekce orada yazili. Dunya 0.6x hizda aktigi icin
+     * dogus araligi 1/0.6 ile uzatildi — boylece ardisik araclar arasindaki
+     * EKRAN mesafesi eskisiyle ayni kalir, degisen yalnizca zaman.
+     */
+    const val OBSTACLE_SPAWN_INTERVAL_SEC = 1.30f
     const val COIN_SPAWN_INTERVAL_SEC = 1.05f
 
     /**

@@ -568,7 +568,7 @@ object CarCatalog {
         // Guclu yon FREN secildi cunku oyunun ilk ogrettigi sey kacinmak;
         // biraz daha iyi fren, yeni oyuncunun ilk parasini harcadigina
         // dogrudan deger. Hicbir aracı domine etmiyor, edilmiyor de.
-        topSpeedMul = 1.00f,
+        topSpeedMul = 1.08f,
         accelMul = 1.00f,
         brakeMul = 1.04f,
         boostMul = 1.00f,
@@ -638,8 +638,8 @@ object CarCatalog {
         requiredCarLevel = 2,
         // Sakin, uzun soluklu: son hizi referansin ALTINDA, karsiliginda
         // kataloğun en uzun boost'u ve saglam freni.
-        topSpeedMul = 0.97f,
-        accelMul = 1.00f,
+        topSpeedMul = 1.18f,
+        accelMul = 0.96f,
         brakeMul = 1.06f,
         boostMul = 1.12f,
         traitTr = "Acelesi yok ama nitrosu bir türlü bitmez",
@@ -708,7 +708,7 @@ object CarCatalog {
         // Bedel FREN secildi cunku aracin kimligi zaten "hizlan ve one gec";
         // hizlanan ama biraz gec duran bir arac tutarli. Ustunlugu (hiz+ivme)
         // dokunulmadan duruyor ve hala bariz bir yukselti.
-        topSpeedMul = 1.04f,
+        topSpeedMul = 1.22f,
         accelMul = 1.08f,
         brakeMul = 0.98f,
         boostMul = 1.00f,
@@ -760,7 +760,7 @@ object CarCatalog {
         priceCoins = 1800,
         requiredCarLevel = 4,
         // Kas arabasi ailesi: yuksek son hiz, zayif ivme ve zayif fren.
-        topSpeedMul = 1.08f,
+        topSpeedMul = 1.42f,
         accelMul = 0.96f,
         brakeMul = 0.96f,
         boostMul = 1.00f,
@@ -830,7 +830,7 @@ object CarCatalog {
         priceCoins = 1500,
         requiredCarLevel = 2,
         // Agir ama tutusu iyi: kataloğun EN IYI freni, en kotu ivmesi.
-        topSpeedMul = 1.00f,
+        topSpeedMul = 1.15f,
         accelMul = 0.94f,
         brakeMul = 1.12f,
         boostMul = 1.06f,
@@ -946,7 +946,7 @@ object CarCatalog {
         //  - boost 1.04    -> buyuk depo. Super Araba'ya karsi TEK ustunlugu;
         //                     olmasaydi 2400'luk basamak "ucuz Super Araba"
         //                     olurdu ve 3200'u almanin anlami kalmazdi.
-        topSpeedMul = 1.10f,
+        topSpeedMul = 1.55f,
         accelMul = 0.92f,
         brakeMul = 0.90f,
         boostMul = 1.04f,
@@ -1038,7 +1038,7 @@ object CarCatalog {
         priceCoins = 3200,
         requiredCarLevel = 6,
         // Katalogun en hizlisi ve en kivragi; bedeli fren.
-        topSpeedMul = 1.12f,
+        topSpeedMul = 1.80f,
         accelMul = 1.10f,
         brakeMul = 0.94f,
         boostMul = 1.00f,
@@ -1230,7 +1230,7 @@ object CarCatalog {
         priceCoins = 2800,
         requiredCarLevel = 5,
         vehicleClass = VehicleClass.MOTOSIKLET,
-        topSpeedMul = 1.06f,
+        topSpeedMul = 1.62f,
         accelMul = 1.12f,
         brakeMul = 0.88f,
         boostMul = 1.02f,
@@ -1295,10 +1295,10 @@ object CarCatalog {
         //
         // 1.14 rastgele degil: 1.12'de Super Araba onu DORT EKSENDE BIRDEN
         // geciyordu (dominasyon testi kirmisti), 1.14 o esigin hemen ustu.
-        topSpeedMul = 1.14f,
+        topSpeedMul = 1.30f,
         accelMul = 0.86f,
         brakeMul = 0.88f,
-        boostMul = 0.94f,
+        boostMul = 1.20f,
         traitTr = "Geç hızlanır ama durmaz — kataloğun en büyük kutusu",
         traitEn = "Slow to spin up but never stops — biggest hitbox here",
         parts = listOf(
@@ -1358,7 +1358,7 @@ object CarCatalog {
         // Dominasyon testi hala geciyor: Super Araba'yi hiz/ivme/boostta
         // geciyor ama FRENDE geride (0.85 < 0.94), yani dort eksende birden
         // gecmiyor.
-        topSpeedMul = 1.18f,
+        topSpeedMul = 2.08f,
         accelMul = 1.15f,
         brakeMul = 0.85f,
         boostMul = 1.06f,

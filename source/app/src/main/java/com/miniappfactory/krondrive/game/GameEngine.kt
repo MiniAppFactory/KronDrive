@@ -2,7 +2,6 @@ package com.miniappfactory.krondrive.game
 
 import com.miniappfactory.krondrive.data.BoosterType
 import kotlin.math.abs
-import kotlin.math.floor
 import kotlin.math.min
 import kotlin.random.Random
 
@@ -100,9 +99,7 @@ class GameEngine(
     var countdownRemaining: Float = GameConfig.COUNTDOWN_SECONDS.toFloat()
         private set
 
-    // GECICI: olcum icin tema sabitlendi (PERF_MEASUREMENT_20260817). Geri alinacak.
-    val theme: RoadTheme = RoadTheme.CROWD
-        .also { random.nextInt(RoadTheme.entries.size) } // RNG akisi bozulmasin
+    val theme: RoadTheme = RoadTheme.entries[random.nextInt(RoadTheme.entries.size)]
 
     /** Bu kosunun taban hizi — bolum kendi baslangic hizini verebilir. */
     private val baseSpeed: Float =
@@ -370,52 +367,6 @@ class GameEngine(
     }
 
     // -----------------------------------------------------------------
-    // GECICI OLCUM KANCASI — PERF_MEASUREMENT_20260817, commit EDILMEZ
-    // -----------------------------------------------------------------
-    private var pFrames = 0
-    private var pWall = 0.0          // gercek gecen sure (kirpilmamis dt toplami)
-    private var pSim = 0.0           // simulasyona verilen sure (kirpilmis dt toplami)
-    private var pClip32 = 0          // dt > 0.032 olan kare sayisi
-    private var pLost32 = 0.0        // 0.032 sinirinda kaybolacak toplam sure
-    private var pClipCap = 0         // dt > MAX_FRAME_DT olan kare sayisi
-    private var pLostCap = 0.0       // mevcut sinirda GERCEKTEN kaybolan sure
-    private val pBuckets = IntArray(7)
-
-    private fun perfProbe(raw: Float) {
-        if (raw <= 0f) return
-        pFrames++
-        pWall += raw
-        pSim += raw.coerceIn(0f, GameConfig.MAX_FRAME_DT)
-        if (raw > 0.032f) { pClip32++; pLost32 += (raw - 0.032f) }
-        if (raw > GameConfig.MAX_FRAME_DT) { pClipCap++; pLostCap += (raw - GameConfig.MAX_FRAME_DT) }
-        val ms = raw * 1000f
-        val b = when {
-            ms < 20f -> 0      // 1 vsync (60 Hz)
-            ms < 28f -> 1
-            ms < 36f -> 2      // 2 vsync
-            ms < 45f -> 3
-            ms < 56f -> 4      // 3 vsync
-            ms < 75f -> 5      // 4 vsync
-            else -> 6
-        }
-        pBuckets[b]++
-        if (pFrames % 120 == 0) {
-            println(
-                "KDPERF cap=${GameConfig.MAX_FRAME_DT} theme=$theme frames=$pFrames " +
-                    "wall=${"%.2f".format(pWall)}s sim=${"%.2f".format(pSim)}s " +
-                    "drift=${"%.0f".format((pWall - pSim) * 1000)}ms " +
-                    "avgdt=${"%.1f".format(pWall / pFrames * 1000)}ms " +
-                    "fps=${"%.1f".format(pFrames / pWall)} " +
-                    "clip32=$pClip32(${"%.1f".format(100.0 * pClip32 / pFrames)}%) " +
-                    "lost32=${"%.0f".format(pLost32 * 1000)}ms(${"%.1f".format(pLost32 / pWall * 1000)}ms/s) " +
-                    "clipCap=$pClipCap(${"%.1f".format(100.0 * pClipCap / pFrames)}%) " +
-                    "lostCap=${"%.0f".format(pLostCap * 1000)}ms(${"%.1f".format(pLostCap / pWall * 1000)}ms/s) " +
-                    "buckets=${pBuckets.joinToString(",")}"
-            )
-        }
-    }
-
-    // -----------------------------------------------------------------
     // Ana dongu
     // -----------------------------------------------------------------
 
@@ -427,7 +378,6 @@ class GameEngine(
      * ulassin diye (bastan temizleseydik sessizce kaybolurlardi).
      */
     fun step(deltaSeconds: Float): List<GameEvent> {
-        perfProbe(deltaSeconds)
         val dt = deltaSeconds.coerceIn(0f, GameConfig.MAX_FRAME_DT)
         when (phase) {
             RunPhase.COUNTDOWN -> {
@@ -1002,17 +952,51 @@ class GameEngine(
     )
 
     /** Sonsuz modda sure ilerledikce hiz carpani (30sn -> +%10, 60sn -> +%20 ...). */
+    /**
+     * Sonsuz modun hiz rampasi — SUREKLI, basamakli DEGIL.
+     *
+     * 2026-08-18'e kadar `floor(timeElapsed / ENDLESS_STEP_SECONDS)` idi, yani
+     * carpan 30. saniyede TEK KAREDE %10 ziplıyordu. Sahibi bunu oynarken
+     * bildirdi: *"180'i gectikten sonra ivmelenme bir anda top speed'e
+     * gidiyor, yavas yavas artmiyor"*.
+     *
+     * JVM'de olculdu (sonsuz mod, temiz yol, yarim saniyelik dokum):
+     *
+     *     24.0 sn | 160 km/h | +1     <- 26 saniye boyunca yarim saniyede +1/+2
+     *     26.0 sn | 166 km/h | +1
+     *     26.5 sn | 178 km/h | +12    <- SICRAMA (t=30 sn basamagi)
+     *     27.0 sn | 187 km/h |  +9
+     *     27.5 sn | 189 km/h |  +2    <- sonra yine normal
+     *
+     * Bir saniyede +21 km/h. Oyuncunun tepki mesafesi bir anda kisaliyor ve
+     * bunun ekranda hicbir habercisi yok.
+     *
+     * `floor` kalkti; rampa artik zamanla dogrusal. Baslangic (1.0), tavan
+     * ([GameConfig.ENDLESS_SPEED_MAX_MULTIPLIER]) ve tavana varma suresi
+     * DEGISMEDI — yalnizca aradaki yol duzlestirildi. Oyuncu ortalamada
+     * yarim basamak (~%5) daha hizli olur; karsiliginda hiz artisi
+     * hissedilebilir ve ongorulebilir hale gelir.
+     */
     fun endlessSpeedMultiplier(): Float {
         if (mode != RunMode.ENDLESS) return 1f
-        val steps = floor(timeElapsed / GameConfig.ENDLESS_STEP_SECONDS)
-        return (1f + GameConfig.ENDLESS_SPEED_STEP * steps)
+        val t = timeElapsed / GameConfig.ENDLESS_STEP_SECONDS
+        return (1f + GameConfig.ENDLESS_SPEED_STEP * t)
             .coerceAtMost(GameConfig.ENDLESS_SPEED_MAX_MULTIPLIER)
     }
 
+    /**
+     * Trafik yogunlugu rampasi — [endlessSpeedMultiplier] ile AYNI gerekce
+     * (2026-08-18): `floor` kalkti, rampa surekli.
+     *
+     * Bu taraf sahibi tarafindan bildirilmedi ama ayni kusurdu ve daha
+     * sinsiydi: 30. saniyede dogus araligi tek karede %6 kisaliyor, yani
+     * trafik bir anda sikilasyordu. Hizla ayni anda oldugu icin sicramanin
+     * bir kismi aslinda buradan geliyordu.
+     */
     private fun endlessTrafficMultiplier(): Float {
         if (mode != RunMode.ENDLESS) return 1f
-        val steps = floor(timeElapsed / GameConfig.ENDLESS_STEP_SECONDS)
-        return (1f + GameConfig.ENDLESS_TRAFFIC_STEP * steps)
+        val t = timeElapsed / GameConfig.ENDLESS_STEP_SECONDS
+        return (1f + GameConfig.ENDLESS_TRAFFIC_STEP * t)
             .coerceAtMost(GameConfig.ENDLESS_TRAFFIC_MAX_MULTIPLIER)
     }
 

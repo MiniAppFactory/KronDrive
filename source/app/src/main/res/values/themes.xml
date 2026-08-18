@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.KronDrive" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <!--
+        windowBackground OYUNUN ZEMIN RENGI (KronColors.Background = 0xFF020915).
+
+        NEDEN: `enableEdgeToEdge()` ile pencere sistem cubuklarinin ALTINA
+        uzaniyor; o bolgeyi dolduran sey pencere arkaplanidir. Eskiden burasi
+        DeviceDefault'un varsayilan rengiydi ve rengi Compose tarafinda
+        fillMaxSize bir `Surface` veriyordu. Yani ayni piksel iki kez
+        boyaniyordu: bir pencere arkaplani, bir `Surface`.
+
+        Rengi buraya taşıyıp `Surface`i kaldirmak TAM EKRAN bir doldurma
+        katmanini siler. Cihazda olculdu (2026-08-18): oyun ekraninda her
+        piksel 4x+ overdraw aliyordu, GPU kare basina 28 ms harciyordu ve
+        `Slow issue draw commands` %98'di.
+    -->
+    <style name="Theme.KronDrive" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/kron_background</item>
+    </style>
 </resources>

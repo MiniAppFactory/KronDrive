@@ -155,14 +155,25 @@ class CarCatalogTest {
 
     @Test
     fun `hicbir carpan asiri degil`() {
-        // Band sahibinin karari (docs/BALANCE.md): fark ~%10 civarinda kalmali,
-        // yoksa 8 seviyelik dort yukseltme dali anlamsizlasir.
+        // 2026-08-18: SPEED ekseninin bandi acildi, digerleri ayni kaldi.
+        //
+        // Eski band dortu icin de 0.80–1.25 idi ve gerekcesi *"fark ~%10
+        // civarinda kalmali, yoksa dort yukseltme dali anlamsizlasir"*. Sahibi
+        // bunun bedelini oynarken gordu: butun araclarin hiz carpani
+        // 0.97–1.18'e sikismisti, yani bedava aractan Formula'ya toplam kazanc
+        // +%18 iken TEK bir yukseltme dali +%20 veriyordu — araclar kozmetige
+        // donmustu.
+        //
+        // Yukseltmelerin anlamsizlasma endisesi hala gecerli ama ayri bir
+        // testte korunuyor (UpgradeCatalogTest: SPEED dali oyunun en ucuz
+        // km/h'i olmali). Burada yalnizca carpanlarin makul kalmasi bakiliyor.
         CarCatalog.shapes.forEach { shape ->
             UpgradeType.entries.forEach { type ->
                 val mul = shape.multiplier(type)
+                val band = if (type == UpgradeType.SPEED) 0.95f..2.10f else 0.80f..1.25f
                 assertTrue(
-                    "${shape.id}.${type.name} = $mul, 0.80–1.25 bandi disinda",
-                    mul in 0.80f..1.25f
+                    "${shape.id}.${type.name} = $mul, $band bandi disinda",
+                    mul in band
                 )
             }
         }
@@ -268,7 +279,8 @@ class CarCatalogTest {
         // maxByOrNull { priceCoins } ile bulunuyordu ve Beety (4000) gelince
         // test kirildi — oysa olcmek istedigi sey Super Araba'nin carpanlari.
         val supercar = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_SUPERCAR }
-        assertEquals(12, CarCatalog.statDeltaPercent(supercar, UpgradeType.SPEED))
+        // 2026-08-18: hiz yayilimi acildi (bkz. GameConfig.SCORE_SPEED_CAP_BASE).
+        assertEquals(80, CarCatalog.statDeltaPercent(supercar, UpgradeType.SPEED))
         assertEquals(-6, CarCatalog.statDeltaPercent(supercar, UpgradeType.BRAKE))
 
         // Beety 2026-08-16'da BASLANGIC ARACI ve referans oldu: dort eksen
@@ -282,10 +294,10 @@ class CarCatalogTest {
                 CarCatalog.statDeltaPercent(beety, type)
             )
         }
-        // Sehir en ucuz ucretli arac ve tek guclu yonu fren.
+        // Sehir en ucuz ucretli arac; fren guclu yonu, hizda da kucuk bir adim.
         val sehir = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_HATCHBACK }
         assertEquals(4, CarCatalog.statDeltaPercent(sehir, UpgradeType.BRAKE))
-        assertEquals(0, CarCatalog.statDeltaPercent(sehir, UpgradeType.SPEED))
+        assertEquals(8, CarCatalog.statDeltaPercent(sehir, UpgradeType.SPEED))
     }
 
     // -----------------------------------------------------------------

@@ -1,5 +1,234 @@
 # Değişiklik günlüğü
 
+## 2026-08-18 (3) — Araç merdiveni: taban düşürüldü, yayılım açıldı
+
+Sahibi: *"arabalar sadece görsel ve defaulttan ne kadar +/- sapma o kadar"*,
+*"Beety 180 yapamaz"*, *"insanlar ilerledikçe araba aldıklarında aradaki farkı
+hissetmeli"*. Ölçüm ikisini de doğruladı ve **tek bir kıyas** her şeyi anlattı:
+
+> Bedava araçtan 5000 coinlik Formula'ya toplam hız kazancı **+%18** idi.
+> Tek bir yükseltme dalı (SPEED 1→8) **+%20** veriyordu.
+> Yani oyundaki bütün araçları almak, bedava arabanın tek bir dalını sonuna
+> kadar açmaktan daha az hız veriyordu.
+
+Kök sebep araçlar değil **taban**dı: referans araç (Beety) 1.00 = 180 km/h,
+yani merdivenin ilk basamağı zaten süper araba rakamıydı, yukarıda yer yoktu.
+
+### Değişenler
+
+1. `SCORE_SPEED_CAP_BASE` **3.20 → 1.90** — bedava araç 161 → **120 km/h**.
+2. Araç hız çarpanları **0.97–1.18 → 1.00–2.08**. Araçlar arası fark
+   **%11 → %108**. Tepe (Formula, tam yükseltme) **220 km/h**, gösterge
+   tavanının (240) altında.
+3. **Yükseltme artık araç çarpanıyla ÇARPILMIYOR, sabit ekleniyor.**
+   Eskiden `cap(level) * carMul` idi; yayılım açılınca bileşik etki Formula'yı
+   sv8'de 258 km/h'e çıkarıyordu ve gösterge 240'ta kırpıyordu — oyuncu
+   yükseltme alıp hiçbir şey görmeyecekti. Ayrıca ayırmak, yükseltmeyi ucuz
+   araçta oransal olarak daha değerli yapıyor (120 üzerine +%29, 184 üzerine
+   +%19): yükseltme yetişme aracı, araçlar tavan aracı.
+4. **Yükseltme maliyeti `250×seviye` → `150×seviye`** (dal 7.000 → 4.200).
+   Bu bir ekonomi tercihi değil, (2)'nin zorunlu sonucu — aşağıya bakın.
+5. Kuş SLX `accelMul` 1.00 → **0.96**, Tır `boostMul` 0.94 → **1.20**.
+   Gerekçe aşağıda; ikisi de testlerin yakaladığı gerçek hata.
+6. Bölüm hedefleri ölçeklendi: 17 `ScoreAtLeast` ×0.75, 9 `ReachDistance`
+   ×0.75, 4 `BoostDistance` ×0.75. Skor ve mesafe `speed`ten beslendiği için
+   taban düşünce ikisi de düştü.
+
+### Testler iki gerçek hata yakaladı — ikisi de düzeltildi
+
+**(a) Kuş SLX zayıf yönünü kaybetti.** Hız çarpanını 0.97 → 1.18 yapınca
+1500 coinlik araç, 350 coinlik Şehir'i **dört eksende birden** geçer oldu —
+`hatchback çöpe döndü`. Kimliği "boost uzmanı, hızı zayıf" idi; `accelMul`
+0.96 ile zayıf yön geri geldi.
+
+**(b) Tır 3600 coine düpedüz kazıktı.** Gerçekçi (yavaş) hız verilince Kas
+Arabası (1800), Boğa 67 (2400) ve Süper Araba (3200) tarafından dört eksende
+birden eziliyordu. Kurgusuna uyan gerçek bir üstünlük verildi: ağır motor =
+**en uzun boost** (1.20, kataloğun en iyisi).
+
+### Yükseltme maliyeti neden düşmek ZORUNDAYDI
+
+İlk hesabımda dal maliyetini 1.750 sandım; gerçeği **7.000** (`250×seviye`,
+1'den 8'e 28 basamak). Doğru tabloyla bakınca araçları güçlendirmek
+yükseltmeleri tuzağa çevirmişti:
+
+| Yol | Maliyet | Kazanç | coin/km-h |
+|---|---|---|---|
+| SPEED dalı 1→8 (eski maliyet) | 7.000 | +35 km/h | **200** |
+| Şehir | 350 | +5 | 70 |
+| Süper Araba | 3.200 | +48 | 67 |
+| Formula | 5.000 | +65 | 77 |
+
+Eski `CarCatalogTest` kuralı (*"fark %10'da kalmalı, yoksa dört yükseltme dalı
+anlamsızlaşır"*) tam da bunu önlüyordu; kural kalkınca koruduğu şey de
+korumasız kaldı. `150×seviye` ile dal 120 coin/km-h olur: araçlar hâlâ daha
+büyük sıçrama verir (istenen bu) ama yükseltme yolu makul kalır.
+
+⚠ Bu, oyunun **en büyük coin gideriydi** (28.000 → 16.800). Ekonominin kalan
+yarısı (`docs/ECONOMY_STATUS_20260817.md`) bu sayıya göre yeniden bakılmalı.
+
+### Testlerin felsefesi değişti — ama korudukları şey değişmedi
+
+`UpgradeCatalogTest` ve `GameEngineTest`'teki *"yükseltme her zaman aracın
+önünde olmalı"* kuralı kaldırıldı (sahibi tersini istedi). Yerine arkasındaki
+gerçek endişe kondu: **yükseltme yolu tuzak olmamalı** — dal, coin başına
+hiçbir araçtan iki kattan fazla kötü olamaz. `CarCatalogTest`'teki band
+yalnızca SPEED ekseni için açıldı (0.95–2.10); diğer üç eksen 0.80–1.25'te
+kaldı.
+
+**KANIT:** 217 birim test / 0 hata. `assembleDebug` + `assembleRelease`
+başarılı. Cihazda koşuldu.
+
+**ÖLÇÜLMEDİ:** yeni merdivenin oynanışta doğru hissettirip hissettirmediği ve
+araç fiyatlarının yeni güce göre doğru olup olmadığı — ikisi de oyuncu kararı.
+
+
+## 2026-08-18 (2) — Dünyanın akış hızı %40 azaltıldı
+
+Sahibi isteği: *"dünyanın akış hızını %40 azalt"*. Seçilen yorum **saf ağır
+çekim**: ekrandaki dizilim birebir korunur, yalnızca zaman yavaşlar.
+
+`WORLD_SPEED_SCALE` **artık tek düğme değil.** Belgesindeki *"trafik sıklığı
+bozulmuyor, çünkü engeller zamana göre doğuyor"* gerekçesi 0.75'te geçiyordu,
+0.45'te geçmiyor: dünya yavaşlayınca ardışık araçlar ekranda birbirine
+yaklaşıyor.
+
+**Ölçüm — neden üç değişiklik birden gerekti:**
+
+| Denenen | Sonuç |
+|---|---|
+| Yalnız `WORLD_SPEED_SCALE` 0.45 | Otopilot **bölüm 4'te çarpıyor**, kariyer kesiliyor |
+| + doğuş aralığı 1.30 | Çarpma yok ama **bölüm 6** 45 sn'de 28 geçişle 2 yıldız yerine 1 veriyor |
+| + `PassVehicles` ×0.6 | **216 test / 0 hata** |
+
+Ayrıca ölçüldü: bölüm tasarımına hiç dokunmadan yapılabilecek en büyük
+yavaşlatma **0.64** (%15). 0.62 kırıyor. İstenen %40 bu toleransın çok
+ötesinde olduğu için bölüm hedefleri de değişti.
+
+**Değişenler:**
+
+1. `WORLD_SPEED_SCALE` **0.75 → 0.45** — dünya mevcut hızın %60'ında.
+2. `OBSTACLE_SPAWN_INTERVAL_SEC` **0.78 → 1.30** (= 0.78 / 0.6) — ardışık
+   araçlar arasındaki **ekran** mesafesi eskisiyle aynı kalsın diye.
+3. `LevelCatalog`'daki **22 `Objective.PassVehicles` hedefi ×0.6**
+   (3→2 … 105→63) — saniyedeki araç %40 azaldığı için eski sayılar
+   erişilemez olurdu.
+4. `GameEngineTest` içindeki revive testi doğuş aralığını **sabit yazmıştı**
+   (`1.2f`, eski 0.78'e göre seçilmiş). Artık `obstacleSpawnInterval()`'dan
+   türetiyor, yani bir sonraki denge ayarında yanlışlıkla "hata" raporlamaz.
+
+**Korunanlar:** göstergedeki km/h (yalnızca `speed`ten hesaplanıyor),
+metre/saniye (`PIXELS_PER_METER` aynı çarpanla küçülüyor → mesafe hedefleri ve
+günlük görevlerin "3000 m" tipi hedefleri kaymadı), skor ve coin formülü
+(`speed`ten besleniyor, bu çarpandan değil).
+
+**⚠ AÇIK — kapsam dışı bırakıldı:** coinler de zamana göre doğuyor
+(`COIN_SPAWN_INTERVAL_SEC = 1.05`). Ölçeklenmediği için yolda **%40 daha sık**
+duruyorlar. Ölçeklenseydi coin geliri saniyede %40 düşerdi — istenmeyen bir
+ekonomi değişikliği olurdu, o yüzden dokunulmadı. Sahibi karar verecek.
+
+**KANIT:** 216 birim test / 0 hata. `assembleDebug` + `assembleRelease`
+başarılı. Cihazda koşuldu: gösterge 64 km/h (değişmedi), bölüm 1 geçiş hedefi
+0/2 (eski 0/3), araç aralıkları normal.
+
+**ÖLÇÜLMEDİ:** yeni hızın oynanışta doğru hissettirip hissettirmediği.
+
+
+## 2026-08-18 — Takılan rakip araçlar: sebep dt yumuşatmasıymış
+
+Sahibi *"ekrandaki takılarak akan rakip araçlar"* dedi. `3411a4b` bu şikâyet
+için yazılmıştı ama kendi commit mesajı *"ÖLÇÜLMEDİ"* diyordu. Cihazda ölçüldü
+(S8, 1080x2220, Mali-G71) ve **teşhis yanlış çıktı**.
+
+### Ölçüm
+
+Ham `withFrameNanos` dt histogramı, 1200 kare:
+
+| kova | kare |
+|---|---|
+| 14–19 ms (1 vsync) | **1151** |
+| 19–24 ms | **0** |
+| 24–30 ms | **0** |
+| 30–37 ms (2 vsync) | 44 |
+
+`framestats`: vsync aralığı ort. **16,68 ms → 60,0 FPS**.
+
+Yani dt **dalgalanmıyor** — vsync'e kusursuz kuantize ve ekran sabit 60 Hz
+sunuyor. Tek gerçek olay karelerin **%3,7'sinin düşmesi**. `3411a4b`'nin
+dayandığı *"dt dalgalanıyor, nesne 8 dp / 14 dp / 6 dp ilerliyor"* gözlemi
+gerçek değil.
+
+### Neden yumuşatma zararlıydı
+
+Filtre (katsayı 0,20 ≈ 5 kare) düşen karedeki 33 ms'i sonraki beş kareye
+**yayıyordu**. Beş kare boyunca dünya, ekranın gerçekte gösterdiği zamandan
+farklı bir zamana göre ilerliyordu. Tek ve kısa bir hıçkırık, saniyede ~2 kez
+tekrarlayan bir salınıma dönüşüyordu — görülen tam olarak buydu.
+
+Filtrenin ürettiği ara değerler sayıldı: hamda **0** kare olan 20–28 ms
+kovasında, filtreyle **99** kare vardı.
+
+**Düzeltme:** yumuşatma kaldırıldı, geçen gerçek süre kullanılıyor.
+Doğrulama: `buckets=1271, 0, 45, 0, 1, 0, 3` — ara kova artık tam sıfır.
+`MAX_FRAME_DT = 0.050` üst sınırı yerinde (arka plandan dönüşte ışınlanmayı
+o engelliyor).
+
+### Yan bulgu: iki tam ekran zemin katmanı boşa boyanıyordu
+
+`debug.hwui.overdraw` + ekran görüntüsü piksel sayımı: oyun ekranının
+**%98,7'si 4x+ overdraw**. Katmanlar sayıldı, ikisi gereksizdi:
+
+1. `MainActivity` içindeki `Surface(fillMaxSize)` — aynı işi pencere arkaplanı
+   zaten yapıyordu. Kaldırıldı; renk `themes.xml`'e
+   (`android:windowBackground` → yeni `colors.xml`) taşındı, sistem çubuklarının
+   arkası eskisi gibi dolu.
+2. `GameScreen`'deki `Box.background(KronColors.Background)` — tuval zaten tüm
+   ekranı opak dolduruyor. Sarsıntıda kenarda açılan şeridi artık
+   `drawGameScene` **yalnızca sarsıntı varken** dolduruyor.
+
+**Dürüstlük notu:** bu ikisi kare süresini ölçülebilir şekilde
+değiştirmedi (p50 28 ms → 28 ms). Fill-rate darboğaz değil. Doğru ve bedava
+oldukları için tutuldular, "performans düzeltmesi" diye sayılmazlar.
+
+### Garaj önizlemesi: tır kendi karesinden taşıyordu
+
+Sahibi ekran görüntüsüyle bildirdi. `CarPreview` (`CarArtwork.kt`) sığdırma
+kutusunu `CarCatalog.ART_*`'tan alıyordu; o değerler `VehicleClass.BINEK`
+(40×76). Ama `drawCarSprite` **aynı gün** (`3411a4b`) her gövdeyi kendi sınıf
+kutusuna çizmeye geçirilmişti — önizleme yolu o değişiklikten geçmemişti.
+
+Sonuç: sığdırma 76 birime göre, çizim 202 birime göre → **2,66 kat taşma**.
+Tır garajda kendi karesinden taşıp ekranın yarısını kaplıyordu. Motosiklet ters
+yönde etkileniyordu (59 birimlik gövde 76'ya göre sığdırıldığı için küçük).
+
+Düzeltme: kutu artık `style.shape.box*`'tan geliyor. Gölge yalnızca vektör
+yolunda hesaba katılıyor — `drawCarShadowIfVector` sprite varken zaten
+çizmiyor, her zaman katsaydık sabit 42×68 gölge 22 birimlik motosikleti boşuna
+küçültürdü.
+
+Tek çağrı noktası: `CarPreview`. Üç ekran (garaj listesi, garaj detayı, bölüm
+haritası) oradan geçiyor, üçü de düzeldi. Cihazda doğrulandı.
+
+**KANIT:** 216 birim test / 0 hata. `assembleDebug` + `assembleRelease`
+başarılı. Cihazda kuruldu, garajda tır/motosiklet/formula ekran görüntüsüyle
+kontrol edildi.
+
+### `3411a4b`'den sızan iki geçici kanca temizlendi
+
+İkisi de "commit EDİLMEZ / geri alınacak" diye işaretliydi ama commit'e girmişti:
+
+- `GameEngine.theme` **CROWD'a sabitlenmişti** — her oyuncu her koşuda aynı
+  temayı görüyordu, dört temanın üçü ölüydü. Rastgeleye döndü.
+- `GameEngine` içindeki KDPERF sayacı `step()` içinde çalışıyordu (release
+  dahil), 120 karede bir `String.format` + `println`. Kaldırıldı.
+
+**KANIT:** 216 birim test / 0 hata. `assembleDebug` + `assembleRelease`
+başarılı. Cihazda kuruldu, koşuldu, crash yok, görsel regresyon yok.
+
+**ÖLÇÜLMEDİ:** hareketin sahibinin gözüne artık düzgün görünüp görünmediği —
+bu his kararı, cihazda sahibi bakacak.
+
+
 ## 2026-08-16 (3) — Ekonomi: oynanış geliri ölçülüp yükseltildi
 
 `docs/ECONOMY_BALANCE_PROPOSAL.md`'deki öneri 1+2 uygulandı (sahibi onayı).

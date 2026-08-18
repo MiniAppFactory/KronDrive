@@ -8,11 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Modifier
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
 import com.miniappfactory.krondrive.ads.AdIds
@@ -20,7 +17,6 @@ import com.miniappfactory.krondrive.ads.ConsentManager
 import com.miniappfactory.krondrive.audio.EngineSoundManager
 import com.miniappfactory.krondrive.ui.KronViewModel
 import com.miniappfactory.krondrive.ui.navigation.AppNavigation
-import com.miniappfactory.krondrive.ui.theme.KronColors
 import com.miniappfactory.krondrive.ui.theme.KronDriveTheme
 
 class MainActivity : ComponentActivity() {
@@ -61,13 +57,20 @@ class MainActivity : ComponentActivity() {
         setContent {
             val consentResolved by adsConsentResolved
             KronDriveTheme {
-                // Zemin rengi Activity seviyesinde veriliyor: sistem cubuklarinin
-                // ARKASI da oyunun rengiyle dolsun (siyah serit gorunmesin).
-                // Ic bosluklari (safe area) her ekran kendi yonetir — oyun
-                // ekraninda tuval tam ekran, sadece kontroller icerlek olmali.
-                Surface(modifier = Modifier.fillMaxSize(), color = KronColors.Background) {
-                    AppNavigation(viewModel = viewModel, adsConsentResolved = consentResolved)
-                }
+                // BURADA TAM EKRAN BIR ZEMIN KATMANI YOK — bilerek.
+                //
+                // Eskiden burasi `Surface(fillMaxSize, KronColors.Background)`
+                // idi. Amaci sistem cubuklarinin ARKASINI oyunun rengiyle
+                // doldurmakti (`enableEdgeToEdge` ile pencere oraya uzaniyor).
+                // Ama ayni isi pencere arkaplani zaten yapiyor ve o
+                // kaldirilamaz — yani ayni piksel iki kez boyaniyordu.
+                //
+                // Renk `res/values/themes.xml` icindeki `android:windowBackground`
+                // olarak duruyor; sistem cubuklarinin arkasi eskisi gibi dolu,
+                // bir doldurma katmani eksik. Ic bosluklari (safe area) her
+                // ekran kendi yonetir — oyun ekraninda tuval tam ekran,
+                // sadece kontroller icerlek olmali.
+                AppNavigation(viewModel = viewModel, adsConsentResolved = consentResolved)
             }
         }
     }

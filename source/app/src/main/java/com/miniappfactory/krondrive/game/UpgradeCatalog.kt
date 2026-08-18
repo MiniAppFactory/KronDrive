@@ -40,9 +40,37 @@ object UpgradeCatalog {
 
     const val MAX_LEVEL = 8
 
-    /** Seviye 1'den 8'e toplam maliyet: 250+500+...+1750 = 7000 coin. */
+    /**
+     * Seviye 1'den 8'e toplam maliyet: 150+300+...+1050 = **4.200 coin**.
+     *
+     * 2026-08-18: adim 250 -> 150 (dal 7.000 -> 4.200, dort dal 28.000 ->
+     * 16.800). Tek basina bir ekonomi karari degil, arac merdiveninin
+     * ZORUNLU sonucu:
+     *
+     * Ayni gun arac hiz yayilimi %11'den %108'e acildi (sahibi karari —
+     * "araba aldiklarinda farki hissetmeli"). O degisiklikten SONRA coin
+     * basina kazanc soyle oldu:
+     *
+     *     SPEED dali 1->8 : 7.000 coin -> +35 km/h  =>  200 coin/km-h
+     *     Sehir           :   350 coin -> + 5 km/h  =>   70
+     *     Super Araba     : 3.200 coin -> +48 km/h  =>   67
+     *     Formula         : 5.000 coin -> +65 km/h  =>   77
+     *
+     * Yani yukseltmeler araclardan uc kat pahali hale geldi — tuzaga
+     * dondu. Eski `CarCatalogTest` kurali ("fark %10'da kalmali, yoksa dort
+     * yukseltme dali anlamsizlasir") tam da bunu onluyordu; kural kalkinca
+     * korudugu sey de korunmasiz kaldi.
+     *
+     * 150 ile dal 120 coin/km-h olur: araclar hala daha buyuk sicrama verir
+     * (sahibinin istedigi bu) ama yukseltme yolu makul kalir. Ustelik bir dal
+     * yalnizca hizi degil kendi eksenini de iyilestiriyor.
+     *
+     * ⚠ Bu, oyunun EN BUYUK coin gideriydi (28.000 -> 16.800). Ekonominin
+     * kalan yarisi (`docs/ECONOMY_STATUS_20260817.md`) bu sayiya gore
+     * yeniden bakilmali.
+     */
     fun cost(currentLevel: Int): Int? =
-        if (currentLevel >= MAX_LEVEL) null else 250 * currentLevel
+        if (currentLevel >= MAX_LEVEL) null else 150 * currentLevel
 
     fun cost(type: UpgradeType, levels: UpgradeLevels): Int? = cost(levels.levelOf(type))
 
@@ -77,8 +105,14 @@ object UpgradeCatalog {
      */
     val CAREER_BASE_SPEED: Float = GameConfig.speedFromKmh(60)
 
+    /**
+     * SPEED yukseltmesinin tepe hiza katkisi (referans araca gore ~+35 km/h).
+     * Arac carpaniyla CARPILMAZ — bkz. [scoreSpeedCap].
+     */
+    const val SPEED_UPGRADE_GAIN = 1.12f
+
     fun scoreSpeedCap(speedLevel: Int): Float =
-        GameConfig.SCORE_SPEED_CAP_BASE + 1.12f * curve(speedLevel)
+        GameConfig.SCORE_SPEED_CAP_BASE + SPEED_UPGRADE_GAIN * curve(speedLevel)
 
     /** ACCELERATION: hedef hiza yaklasma orani (6.0 -> 10.0). */
     fun accelRate(accelerationLevel: Int): Float =
@@ -124,8 +158,22 @@ object UpgradeCatalog {
     // Varsayilan govdede dort carpan da tam 1.0 oldugu icin bu asiri
     // yuklemeler eski davranisi BIT BIT ayni uretir (`x * 1f == x`).
 
+    /**
+     * Arac TABANI olcekler, yukseltme SABIT ekler.
+     *
+     * 2026-08-18'e kadar `scoreSpeedCap(level) * car.topSpeedMul` idi, yani
+     * yukseltme de arac carpaniyla carpiliyordu. Carpan araligi genisletilince
+     * bu bilesik etki tavani patlatti: Formula sv8'de 258 km/h cikiyordu ve
+     * gosterge 240'ta kirpiyordu — oyuncu yukseltme alip hicbir sey
+     * gormeyecekti.
+     *
+     * Ayirmanin ikinci faydasi: yukseltme herkese ayni +35 km/h'i veriyor,
+     * yani UCUZ aracta oransal olarak daha degerli (120 uzerine +%29,
+     * 184 uzerine +%19). Yukseltmeler yetisme araci, araclar tavan araci.
+     */
     fun scoreSpeedCap(speedLevel: Int, car: CarShapeDef): Float =
-        scoreSpeedCap(speedLevel) * car.topSpeedMul
+        GameConfig.SCORE_SPEED_CAP_BASE * car.topSpeedMul +
+            SPEED_UPGRADE_GAIN * curve(speedLevel)
 
     fun accelRate(accelerationLevel: Int, car: CarShapeDef): Float =
         accelRate(accelerationLevel) * car.accelMul

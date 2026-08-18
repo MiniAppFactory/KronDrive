@@ -6,7 +6,7 @@ telefon ikonu hem magaza ikonu olacak. TEK kompozisyon, uc ciktiya dagitiliyor:
   1) legacy mipmap  : mipmap-*/ic_launcher.png ve ic_launcher_round.png
                       (minSdk 24 -> API 24/25 adaptive ikonu tanimaz)
   2) adaptive       : drawable/ic_launcher_background.xml  (zemin: gece
-                      gradyani + asfalt + kerb + serit + ufuk + coin)
+                      gradyani + asfalt + kerb + serit + ufuk; coin YOK)
                       drawable/ic_launcher_foreground.png  (on plan: far
                       konisi + arac; govde 66 dp guvenli dairenin icinde)
   3) magaza ikonu   : docs/play_store_assets/play-store-icon-512.png
@@ -218,13 +218,10 @@ def background_vector():
         </aapt:attr>
     </path>
 
-    <!-- Coin (drawCoin renkleri) -->
-    <path android:fillColor="{coin}"
-        android:pathData="M{cx_l:.2f},{cy:.2f}a{cr:.2f},{cr:.2f} 0 1,0 {cd:.2f},0a{cr:.2f},{cr:.2f} 0 1,0 -{cd:.2f},0Z" />
-    <path android:strokeColor="{coin_ring}" android:strokeWidth="{ring_w:.2f}"
-        android:pathData="M{cx_l:.2f},{cy:.2f}a{cr:.2f},{cr:.2f} 0 1,0 {cd:.2f},0a{cr:.2f},{cr:.2f} 0 1,0 -{cd:.2f},0Z" />
-    <path android:fillColor="{coin_shine}"
-        android:pathData="M{sx0:.2f},{sy0:.2f}h{sw:.2f}v{sh:.2f}h-{sw:.2f}z" />
+    <!-- COIN YOK — bilerek. 2026-08-18'de kaldirildi: sari daire + icindeki
+         dikey parlama, launcher boyutunda UNLEM ISARETI gibi okunuyordu ve
+         ikonun uzerinde sistem uyari rozeti varmis izlenimi veriyordu.
+         Geri eklenecekse once 48 dp'de bakilmali. -->
 </vector>
 """.format(
         sky_top=_hex(K.NIGHT_TOP), sky_bot=_hex(K.NIGHT_BOT),

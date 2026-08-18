@@ -40,7 +40,7 @@ object LevelCatalog {
         // Yildiz esikleri docs/BALANCE.md'deki skor egrisinden turetildi:
         //   skor(t) ~ 600 * tabanHiz * (e^(t/54.5) - 1) + 8*gecilenArac + 35*coin
         // ve beklenenin %75-80'ine ayarlandi. Eski bolum 2'nin
-        // ScoreAtLeast(2200) hedefi bu egride ~%92'ye denk geliyordu, yani
+        // ScoreAtLeast(1600) hedefi bu egride ~%92'ye denk geliyordu, yani
         // pratikte ulasilamazdi — "fazla zor" sikayetinin somut kaynagi.
         //
         // SIRA ONEMLI: yildizlar SIRALI kazanilir (bkz. LevelEvaluator) ve
@@ -77,7 +77,7 @@ object LevelCatalog {
             trafficDensity = 0.30f,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(3),
+                Objective.PassVehicles(2),
                 Objective.CoinsAtLeast(3)
             )
         ),
@@ -92,10 +92,10 @@ object LevelCatalog {
             stars = listOf(
                 Objective.CompleteRun,
                 Objective.CoinsAtLeast(6),
-                Objective.PassVehicles(14)
+                Objective.PassVehicles(8)
             )
         ),
-        // 3 — BOOST. BoostDistance(200) tam bir bar dolusu boost'un biraz
+        // 3 — BOOST. BoostDistance(150) tam bir bar dolusu boost'un biraz
         // altinda (dolu bar ~2.6 s x ~35 m/s ~ 90 m; sarjla birlikte kosu
         // boyunca ~450 m yapilabilir), yani "boost'a birkac kez bas" demek.
         LevelDef(
@@ -105,9 +105,9 @@ object LevelCatalog {
             speedRampScale = 0.56f,
             trafficDensity = 0.70f,
             stars = listOf(
-                Objective.PassVehicles(10),
-                Objective.BoostDistance(200),
-                Objective.ScoreAtLeast(1400)
+                Objective.PassVehicles(6),
+                Objective.BoostDistance(150),
+                Objective.ScoreAtLeast(1000)
             )
         ),
         // 4 — YOGUN TRAFIK. Yogunluk 0.85; ilk kez "yol dolu" hissi.
@@ -124,8 +124,8 @@ object LevelCatalog {
             trafficDensity = 0.85f,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.ScoreAtLeast(1800),
-                Objective.PassVehicles(48)
+                Objective.ScoreAtLeast(1400),
+                Objective.PassVehicles(29)
             )
         ),
         // 5 — ILK "NORMAL" BOLUM: varsayilan 80 km/h, tam yogunluk. Buraya
@@ -138,8 +138,8 @@ object LevelCatalog {
             trafficDensity = 1f,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(30),
-                Objective.ScoreAtLeast(2500)
+                Objective.PassVehicles(18),
+                Objective.ScoreAtLeast(1900)
             )
         ),
         // 6 — NEFES BOLUMU + COMBO. Bilerek 5'ten KOLAY (75 km/h, yogunluk
@@ -160,7 +160,7 @@ object LevelCatalog {
             // pekistiren bir gecis hedefiyle degisti.
             stars = listOf(
                 Objective.CoinsAtLeast(10),
-                Objective.PassVehicles(30),
+                Objective.PassVehicles(18),
                 Objective.ComboAtLeast(3)
             )
         ),
@@ -175,8 +175,8 @@ object LevelCatalog {
             // beceri hedefi yapiyordu. Olcumde temkinli oyun 1 yildiz
             // aliyordu.
             stars = listOf(
-                Objective.ScoreAtLeast(2900),
-                Objective.PassVehicles(45),
+                Objective.ScoreAtLeast(2200),
+                Objective.PassVehicles(27),
                 Objective.ComboAtLeast(4)
             )
         ),
@@ -187,7 +187,7 @@ object LevelCatalog {
         // mesafe bolumunde panik yaratmayacak kadar genis.
         LevelDef(
             id = 8,
-            goal = LevelGoal.ReachDistance(meters = 1200, timeLimitSec = 60),
+            goal = LevelGoal.ReachDistance(meters = 900, timeLimitSec = 60),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
@@ -201,17 +201,17 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CoinsAtLeast(15),
-                Objective.PassVehicles(60),
-                Objective.ScoreAtLeast(3300)
+                Objective.PassVehicles(36),
+                Objective.ScoreAtLeast(2500)
             )
         ),
         LevelDef(
             id = 10,
-            goal = LevelGoal.ReachDistance(meters = 2000, timeLimitSec = 80),
+            goal = LevelGoal.ReachDistance(meters = 1500, timeLimitSec = 80),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(30),
+                Objective.PassVehicles(18),
                 Objective.FinishUnderSeconds(52)
             )
         ),
@@ -220,14 +220,14 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(70),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(70),
-                Objective.ScoreAtLeast(3900),
+                Objective.PassVehicles(42),
+                Objective.ScoreAtLeast(2900),
                 Objective.ComboAtLeast(4)
             )
         ),
         LevelDef(
             id = 12,
-            goal = LevelGoal.ReachDistance(meters = 2400, timeLimitSec = 85),
+            goal = LevelGoal.ReachDistance(meters = 1800, timeLimitSec = 85),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
@@ -242,7 +242,7 @@ object LevelCatalog {
             stars = listOf(
                 Objective.BrakeTapsAtMost(1),
                 Objective.CoinsAtLeast(18),
-                Objective.ScoreAtLeast(4000)
+                Objective.ScoreAtLeast(3000)
             )
         ),
         LevelDef(
@@ -250,18 +250,18 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(75),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(75),
-                Objective.ScoreAtLeast(4400),
+                Objective.PassVehicles(45),
+                Objective.ScoreAtLeast(3300),
                 Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
             id = 15,
-            goal = LevelGoal.ReachDistance(meters = 2800, timeLimitSec = 90),
+            goal = LevelGoal.ReachDistance(meters = 2100, timeLimitSec = 90),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.BoostDistance(600),
+                Objective.BoostDistance(450),
                 Objective.FinishUnderSeconds(62)
             )
         ),
@@ -270,8 +270,8 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(75),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(40),
-                Objective.ScoreAtLeast(5500),
+                Objective.PassVehicles(24),
+                Objective.ScoreAtLeast(4100),
                 Objective.CoinsAtLeast(48)
             )
         ),
@@ -280,14 +280,14 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(80),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.ScoreAtLeast(4800),
-                Objective.PassVehicles(85),
+                Objective.ScoreAtLeast(3600),
+                Objective.PassVehicles(51),
                 Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
             id = 18,
-            goal = LevelGoal.ReachDistance(meters = 3200, timeLimitSec = 95),
+            goal = LevelGoal.ReachDistance(meters = 2400, timeLimitSec = 95),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
@@ -301,8 +301,8 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.BrakeTapsAtMost(0),
-                Objective.PassVehicles(45),
-                Objective.ScoreAtLeast(5000)
+                Objective.PassVehicles(27),
+                Objective.ScoreAtLeast(3800)
             )
         ),
         LevelDef(
@@ -310,18 +310,18 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(85),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(90),
+                Objective.PassVehicles(54),
                 Objective.CoinsAtLeast(24),
                 Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
             id = 21,
-            goal = LevelGoal.ReachDistance(meters = 3600, timeLimitSec = 100),
+            goal = LevelGoal.ReachDistance(meters = 2700, timeLimitSec = 100),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.BoostDistance(800),
+                Objective.BoostDistance(600),
                 Objective.FinishUnderSeconds(70)
             )
         ),
@@ -330,8 +330,8 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(85),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.ScoreAtLeast(5400),
-                Objective.PassVehicles(90),
+                Objective.ScoreAtLeast(4000),
+                Objective.PassVehicles(54),
                 Objective.CoinsAtLeast(54)
             )
         ),
@@ -340,18 +340,18 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(85),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(90),
-                Objective.ScoreAtLeast(5600),
+                Objective.PassVehicles(54),
+                Objective.ScoreAtLeast(4200),
                 Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
             id = 24,
-            goal = LevelGoal.ReachDistance(meters = 4000, timeLimitSec = 105),
+            goal = LevelGoal.ReachDistance(meters = 3000, timeLimitSec = 105),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(55),
+                Objective.PassVehicles(33),
                 Objective.FinishUnderSeconds(74)
             )
         ),
@@ -361,7 +361,7 @@ object LevelCatalog {
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.BrakeTapsAtMost(1),
-                Objective.ScoreAtLeast(5800),
+                Objective.ScoreAtLeast(4400),
                 Objective.ComboAtLeast(5)
             )
         ),
@@ -370,18 +370,18 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(90),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(95),
+                Objective.PassVehicles(57),
                 Objective.CoinsAtLeast(30),
                 Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
             id = 27,
-            goal = LevelGoal.ReachDistance(meters = 4500, timeLimitSec = 115),
+            goal = LevelGoal.ReachDistance(meters = 3400, timeLimitSec = 115),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.BoostDistance(1000),
+                Objective.BoostDistance(750),
                 Objective.FinishUnderSeconds(80)
             )
         ),
@@ -390,8 +390,8 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(90),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.ScoreAtLeast(6200),
-                Objective.PassVehicles(95),
+                Objective.ScoreAtLeast(4600),
+                Objective.PassVehicles(57),
                 Objective.CoinsAtLeast(55)
             )
         ),
@@ -400,18 +400,18 @@ object LevelCatalog {
             goal = LevelGoal.SurviveTime(90),
             startSpeedKmh = 60,
             stars = listOf(
-                Objective.PassVehicles(95),
-                Objective.ScoreAtLeast(6600),
+                Objective.PassVehicles(57),
+                Objective.ScoreAtLeast(5000),
                 Objective.ComboAtLeast(5)
             )
         ),
         LevelDef(
             id = 30,
-            goal = LevelGoal.ReachDistance(meters = 5000, timeLimitSec = 120),
+            goal = LevelGoal.ReachDistance(meters = 3800, timeLimitSec = 120),
             startSpeedKmh = 60,
             stars = listOf(
                 Objective.CompleteRun,
-                Objective.PassVehicles(105),
+                Objective.PassVehicles(63),
                 Objective.FinishUnderSeconds(88)
             )
         )

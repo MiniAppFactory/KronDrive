@@ -26,6 +26,7 @@ import com.miniappfactory.krondrive.game.RoadTheme
 import com.miniappfactory.krondrive.ui.common.CarSpriteSet
 import com.miniappfactory.krondrive.ui.common.drawCarBody
 import com.miniappfactory.krondrive.ui.common.drawCarShadowIfVector
+import com.miniappfactory.krondrive.ui.theme.KronColors
 import com.miniappfactory.krondrive.ui.common.drawStyledCar
 import kotlin.math.cos
 import kotlin.math.floor
@@ -63,6 +64,11 @@ fun DrawScope.drawGameScene(
     impact: CrashImpact? = null
 ) {
     val beat = impact?.takeIf { it.isActive }
+    // Sarsinti TUM sahneyi kaydiriyor ve bir kenarda en cok [SHAKE_AMPLITUDE_DP]
+    // kadar bos serit aciliyor. Eskiden bu seridi alttaki Box'in zemin rengi
+    // kapatiyordu — ama o zemin HER KARE tam ekran boyaniyordu, oysa serit
+    // yalnizca sarsinti aninda var. Artik doldurma da yalnizca o anda yapiliyor.
+    if (beat != null) drawRect(KronColors.Background)
     // Kamera sarsintisi TUM sahneyi kaydirir (yol, trafik, oyuncu, gosterge) —
     // kamera sallaniyor, sahnedeki nesneler degil. HUD disarida kalir: Compose
     // katmanindaki metinlerin sallanmasi "titreme" degil "arayuz bozuldu"

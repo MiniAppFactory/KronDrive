@@ -327,48 +327,44 @@ fun GameScreen(
     // Ana oyun dongusu: her ekran karesinde bir simulasyon adimi.
     LaunchedEffect(engine) {
         var lastFrameNanos = 0L
-        // Yumusatilmis kare suresi. Baslangicta 0 = "henuz olcum yok".
-        var smoothDt = 0f
         while (true) {
             androidx.compose.runtime.withFrameNanos { now ->
-                val rawDt = if (lastFrameNanos == 0L) 0f else (now - lastFrameNanos) / 1_000_000_000f
+                // KARE SURESI OLDUGU GIBI KULLANILIR — YUMUSATILMAZ.
+                //
+                // 2026-08-17'de buraya bir alcak geciren filtre konmustu
+                // (katsayi 0.20), gerekce "dt dalgalaniyor" idi. CIHAZDA
+                // OLCULDU (2026-08-18) ve gerekce yanlis cikti:
+                //
+                //   ham dt histogrami, 1200 kare, S8:
+                //     14-19 ms : 1151      <- 1 vsync
+                //     19-24 ms :    0      <- ARA DEGER YOK
+                //     24-30 ms :    0      <- ARA DEGER YOK
+                //     30-37 ms :   44      <- 2 vsync (dusen kare)
+                //
+                // Yani `withFrameNanos`in verdigi dt DALGALANMIYOR; vsync'e
+                // kusursuz kuantize. Ekran da sabit 60 Hz sunuyor (framestats:
+                // vsync araligi ort. 16,68 ms). Tek gercek olay, karelerin
+                // %3,7'sinin dusmesi.
+                //
+                // Filtre bu tabloda ZARARLI: dusen karedeki 33 ms'i sonraki
+                // ~5 kareye yayiyor, yani bes kare boyunca dunya ekranin
+                // GERCEKTE gosterdigi zamandan farkli bir zamana gore
+                // ilerliyor. Tek ve kisa bir hickirik, saniyede ~2 kez
+                // tekrarlayan bir salinima donusuyordu — sahibinin
+                // "yukaridan gelen arabalar takila takila geliyor"
+                // gozleminin kaynagi buydu. Ayni ölçümde filtrenin urettigi
+                // ara degerler sayildi: hamda 0 olan 20-28 ms kovasinda
+                // filtreyle 99 kare vardi.
+                //
+                // Dogru davranis: gecen GERCEK sure kadar ilerlemek. Boylece
+                // araç her karede ayni mesafeyi gider; dusen karede tek bir
+                // cift adim olur ve gozle tek bir kisa siçrama olarak
+                // okunur. [GameConfig.MAX_FRAME_DT] ust siniri yerinde
+                // duruyor: uygulama arka plandan dondugunde biriken devasa
+                // dt'nin sahneyi isinlamasini o engelliyor.
+                val dt = if (lastFrameNanos == 0L) 0f
+                    else (now - lastFrameNanos) / 1_000_000_000f
                 lastFrameNanos = now
-
-                // KARE SURESI YUMUSATILIYOR (2026-08-17).
-                //
-                // Sorun: sahibi cihazda *"yukaridan gelen arabalar takila
-                // takila geliyor"* dedi. Hareket zaten dt tabanliydi, yani
-                // kare hizindan bagimsizdi — ama dt'nin KENDISI dalgalaniyor
-                // (bu cihazda ~40 FPS ve jitterli). Dalgalanan dt, dogrudan
-                // dalgalanan konum demek: nesne bir karede 8 dp, sonrakinde
-                // 14 dp, sonrakinde 6 dp ilerliyor.
-                //
-                // Yolun duzgun gorunmesi bunu curutmuyor: yol tekrarli ve
-                // birbirinin ayni seritlerden olusuyor, ayni titreme orada
-                // neredeyse gorunmez. Tek bir arac ise referans nokta —
-                // titreme yalnizca orada GORULUYOR, orada OLMUYOR.
-                //
-                // Cozum: dt'yi alcak geciren filtreden gecirmek. Dunya biraz
-                // "gecmisin ortalamasi" hizinda ilerler; anlik hata birikmez,
-                // cunku filtre gercek dt'ye yakinsiyor. Oyun hissi acisindan
-                // bedeli yok — bu bir arcade oyunu, fizik dogrulugu degil
-                // hareketin duzgun OKUNMASI onemli.
-                //
-                // Neden sabit adimli birikirici degil: o daha "dogru" ama kare
-                // basina birden fazla simulasyon adimi demek ve bu cihaz zaten
-                // ~40 FPS'te zorlaniyor. Yumusatma sifir ek maliyetli.
-                //
-                // 0.20 katsayisi: ~5 karelik pencere (40 FPS'te ~125 ms).
-                // Daha kucuk deger daha duzgun ama hiz degisimine gec tepki
-                // verir (fren/boost gec hissedilir); daha buyugu titremeyi
-                // yeterince kesmez.
-                val dt = if (smoothDt == 0f) {
-                    smoothDt = rawDt
-                    rawDt
-                } else {
-                    smoothDt += (rawDt - smoothDt) * 0.20f
-                    smoothDt
-                }
 
                 // Carpisma vurusu motordan ONCE ilerletilir. Sirasi onemli:
                 // asagida bir Crash olayi gelirse `trigger` sayaci sifirlar ve
@@ -585,6 +581,23 @@ fun GameScreen(
     }
 
     /**
+     * Kosudan CIKIS — tek yol.
+     *
+     * Hem duraklatma menusundeki ÇIKIŞ butonu hem de duraklatilmisken
+     * basilan geri tusu buradan gecer. Iki ayri yerde kopyalanmiyor: ayni
+     * niyetin iki yolunun iki farkli sonuc vermesi 2026-08-16'daki hatanin
+     * ta kendisiydi (geri tusu kosuyu sessizce siliyordu, menudeki cikis
+     * ise kaydediyordu).
+     */
+    val quitRun = {
+        engine.finish(completed = false)
+        engine.lastResult?.let { publishResult(it) }
+        // Duraklatmadan cikmak da bir kosu sonudur: reklamsiz cikis yolu
+        // birakilmiyor (sahibi karari, 2026-08-14).
+        withOptionalInterstitial(viewModel, mode, levelId, activity) { onExit() }
+    }
+
+    /**
      * Sistem geri tusu KOSUYU SESSIZCE SILIYORDU (2026-08-16'da bulundu).
      *
      * Projede hicbir `BackHandler` yoktu: sürerken geri tusuna basmak ekrani
@@ -593,17 +606,22 @@ fun GameScreen(
      * ise tam tersini yapiyor (sonucu yayimliyor) — yani ayni niyetin iki
      * yolu iki farkli sonuc veriyordu.
      *
-     * Cozum en az sasirtan davranis: geri tusu DURAKLATIR. Oyuncu cikmak
-     * isterse duraklatma menusundeki cikisi kullanir, o da sonucu kaydeder.
-     * Duraklatilmisken ikinci kez basmak devam ettirir.
+     * Cozum: geri tusu once DURAKLATIR, ikinci basista CIKAR.
+     *
+     * Ikinci basis 2026-08-18'e kadar "devam ettir"di ve sahibi bunu hata
+     * olarak bildirdi: *"kariyerde iken oyuna girdim ciktim, o zaman geri
+     * tusu calismiyor"*. Hakliydi — cihazda tekrarlandi: geri, duraklat ve
+     * devam et arasinda SONSUZ gidip geliyordu, oyun ekranindan geri tusuyla
+     * cikmanin hicbir yolu yoktu. "Geri" tusunun evrensel anlami geri
+     * gitmektir; devam ettirmek zaten DEVAM ET butonunun isi.
+     *
+     * 2026-08-16'daki asil endise (kosunun sessizce silinmesi) korunuyor:
+     * ikinci basis dogrudan ekrani kapatmiyor, [quitRun]'a giriyor — yani
+     * ÇIKIŞ butonuyla BIREBIR ayni yol: sonuc yayimlanir, coin/XP/gorev
+     * ilerlemesi kaydedilir, reklam kurali isler.
      */
     BackHandler(enabled = engine.phase == RunPhase.RUNNING || paused) {
-        if (paused) {
-            engine.resume()
-            paused = false
-        } else {
-            onPauseTap()
-        }
+        if (paused) quitRun() else onPauseTap()
     }
     val onToggleSpeedLock = remember(engine) {
         {
@@ -614,7 +632,12 @@ fun GameScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(KronColors.Background)) {
+    // Box'ta ZEMIN RENGI YOK — bilerek. Tuval zaten tum ekrani opak dolduruyor
+    // (`drawSideBackgrounds` + `drawTrack` birlikte tam genislik/yukseklik),
+    // yani buradaki `background(...)` her karede bir kez daha bosa boyuyordu.
+    // Sarsinti sirasinda kenarda acilan seridi `drawGameScene` kendi iginde
+    // dolduruyor — tek fark, artik yalnizca sarsinti VARKEN.
+    Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             // Motor "dp uzayinda" calisir; viewport'u da dp olarak veriyoruz.
             engine.setViewport(size.width / density, size.height / density)
@@ -725,13 +748,7 @@ fun GameScreen(
                     engine.resume()
                     paused = false
                 },
-                onQuit = {
-                    engine.finish(completed = false)
-                    engine.lastResult?.let { publishResult(it) }
-                    // Duraklatmadan cikmak da bir kosu sonudur: reklamsiz
-                    // cikis yolu birakilmiyor (sahibi karari, 2026-08-14).
-                    withOptionalInterstitial(viewModel, mode, levelId, activity) { onExit() }
-                }
+                onQuit = quitRun
             )
         }
 

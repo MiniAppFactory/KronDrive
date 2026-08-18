@@ -53,13 +53,41 @@ class UpgradeCatalogTest {
     fun `carpan yukseltmenin USTUNE uygulanir yerine gecmez`() {
         val city = CarCatalog.defaultShape
         val supercar = CarCatalog.shape(CarCatalog.SHAPE_SUPERCAR)
-        // Yukseltme her zaman aracin onunde olmali: tam yukseltilmis referans
-        // arac, yukseltmesiz en iyi aractan acik ara hizli kalmali. Aksi halde
-        // dort dalin 7.000 coinlik yolu anlamsizlasir.
-        assertTrue(
-            UpgradeCatalog.scoreSpeedCap(UpgradeCatalog.MAX_LEVEL, city) >
-                UpgradeCatalog.scoreSpeedCap(1, supercar)
-        )
+        // 2026-08-18: ESKI KURAL KALDIRILDI — *"tam yukseltilmis ucuz arac,
+        // yukseltmesiz en iyi araci gecmeli"*. Sahibi tersini istedi: araba
+        // almak HISSEDILMELI. O kuralla araclar kozmetige donuyordu.
+        //
+        // Ama kuralin ARKASINDAKI endise korunuyor: yukseltme yolu bir tuzak
+        // olmamali. Gercek olcut coin basina kazanc — ve SPEED dali oyunun EN
+        // UCUZ km/h'i olmaya devam ediyor:
+        //
+        //     SPEED dali 1->8 : 1750 coin -> +35 km/h  =>  49 coin/km-h
+        //     Sehir           :  350 coin -> + 5 km/h  =>  73
+        //     Super Araba     : 3200 coin -> +48 km/h  =>  67
+        //     Formula         : 5000 coin -> +65 km/h  =>  77
+        //
+        // Yani hicbir arac, yukseltmeyi coin basina geride birakmiyor.
+        val dalKazanci = UpgradeCatalog.scoreSpeedCap(UpgradeCatalog.MAX_LEVEL, city) -
+            UpgradeCatalog.scoreSpeedCap(1, city)
+        val dalMaliyeti = (1 until UpgradeCatalog.MAX_LEVEL).sumOf {
+            UpgradeCatalog.cost(it) ?: 0
+        }
+        CarCatalog.shapes.filter { it.priceCoins > 0 }.forEach { arac ->
+            val aracKazanci = UpgradeCatalog.scoreSpeedCap(1, arac) -
+                UpgradeCatalog.scoreSpeedCap(1, CarCatalog.defaultShape)
+            if (aracKazanci > 0f) {
+                // Araclar DAHA BUYUK sicrama verir (sahibi karari) ama
+                // yukseltme yolu tuzak olmamali: dal, coin basina hicbir
+                // aractan IKI KATTAN fazla kotu olamaz.
+                val dalBirim = dalMaliyeti / dalKazanci
+                val aracBirim = arac.priceCoins / aracKazanci
+                assertTrue(
+                    "${arac.id}: arac $aracBirim coin/birim, SPEED dali " +
+                        "$dalBirim coin/birim — yukseltme tuzaga donmus",
+                    dalBirim < aracBirim * 2f
+                )
+            }
+        }
         // Ayni seviyede ise arac farki gercekten hissedilir.
         assertTrue(
             UpgradeCatalog.scoreSpeedCap(4, supercar) > UpgradeCatalog.scoreSpeedCap(4, city)

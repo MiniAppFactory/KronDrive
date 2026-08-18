@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- KronColors.Background ile AYNI deger; tek kaynak orasi, burasi ayna. -->
+    <color name="kron_background">#FF020915</color>
+</resources>
