@@ -221,9 +221,18 @@ private fun DailyTierChip(
     next: Boolean
 ) {
     val shape = RoundedCornerShape(14.dp)
+    // ⚠ DOLU SARI KULLANILMIYOR — bilerek (2026-08-19).
+    //
+    // Bu rozet TIKLANAMAZ: gunluk gorev odulu kosu bitince KENDILIGINDEN
+    // odenir. Ama "sirada" olan rozet, haftalik gorevlerdeki ALINABILIR
+    // rozetle ve oyunun birincil butonuyla BIREBIR ayni dolu sari zemini
+    // kullaniyordu. Sahibi ekranlari gezerken "calismayan tuslar" bildirdi ve
+    // cihazda dogrulandi: rozete basiliyor, hicbir sey olmuyor.
+    //
+    // Ayni renk iki ekranda iki farkli sey demeyecek: dolu sari = BAS,
+    // sari cerceve = HEDEF.
     val background = when {
         granted -> KronColors.SurfaceDeep
-        next -> KronColors.Accent
         else -> KronColors.Locked
     }
 
@@ -232,7 +241,7 @@ private fun DailyTierChip(
             .height(TIER_CHIP_HEIGHT)
             .background(background, shape)
             .border(
-                1.dp,
+                if (next) 2.dp else 1.dp,
                 if (next) KronColors.AccentBright else KronColors.SurfaceBorder,
                 shape
             )
@@ -250,7 +259,7 @@ private fun DailyTierChip(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "+$rewardCoins",
-                    color = if (next) KronColors.Background else KronColors.TextSecondary,
+                    color = if (next) KronColors.Accent else KronColors.TextSecondary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Black,
                     textAlign = TextAlign.Center
@@ -258,7 +267,7 @@ private fun DailyTierChip(
                 target?.let {
                     Text(
                         text = "$it",
-                        color = if (next) KronColors.Background else KronColors.TextMuted,
+                        color = if (next) KronColors.TextSecondary else KronColors.TextMuted,
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center
                     )
