@@ -155,6 +155,15 @@ class GameEngine(
         if (BoosterType.TURBO_START in boosters) GameConfig.TURBO_START_FREE_BOOST_SEC else 0f
     private var secondChanceAvailable: Boolean = BoosterType.SECOND_CHANCE in boosters
 
+    /**
+     * Agir darbe yutmanin yeniden dolmasina kalan sure.
+     *
+     * Kosu 0 ile baslar, yani ILK temas her zaman yutulur. Kosunun ilk
+     * saniyelerinde hazir olmamasi icin bir sebep yok: tir zaten gec
+     * hizlaniyor ve bos yolda temas olmuyor.
+     */
+    private var impactAbsorbCooldown: Float = 0f
+
     /** Bar bosaldi ve parmak hala basili — boost yeniden tutusamaz. */
     private var boostLockedUntilRelease: Boolean = false
 
@@ -370,6 +379,9 @@ class GameEngine(
         // baslar baslamaz tekrar carptim" diye bildirdi (2026-08-14).
         obstacles.clear()
         invulnerableFor = GameConfig.INVULNERABLE_SEC_AFTER_SAVE
+        // Yutma da yenilenir: oyuncu reklami izleyip DEVAM ediyor, bekleyen
+        // bir bekleme suresiyle degil.
+        impactAbsorbCooldown = 0f
         // Bos yolun hemen yeni araclarla dolmamasi icin dogma da duraklatilir.
         spawnPausedFor = GameConfig.REVIVE_SPAWN_PAUSE_SEC
         obstacleSpawnAcc = 0f
@@ -415,6 +427,7 @@ class GameEngine(
     private fun updateRunning(dt: Float) {
         timeElapsed += dt
         if (invulnerableFor > 0f) invulnerableFor -= dt
+        if (impactAbsorbCooldown > 0f) impactAbsorbCooldown -= dt
 
         updateSpeed(dt)
         updateBoostEnergy(dt)
@@ -730,6 +743,21 @@ class GameEngine(
                     obstacleHitLeft, obstacleHitTop, obstacleBox.width, obstacleBox.height
                 )
                 if (hit && invulnerableFor <= 0f) {
+                    // AGIR DARBE YUTMA once, SECOND_CHANCE sonra.
+                    //
+                    // Sira bilerek boyle: yutma kendi kendine dolan bir arac
+                    // ozelligi, Second Chance ise oyuncunun SATIN ALDIGI tek
+                    // kullanimlik bir booster. Bedavayi once harcamak
+                    // oyuncunun parasini korur; ters sirada tir surerken
+                    // alinan ilk temas booster'i yakar ve oyuncu onu hic
+                    // kullanmadigini bile fark etmezdi.
+                    if (car.absorbsImpact && impactAbsorbCooldown <= 0f) {
+                        absorbImpact()
+                        obstacles.removeAt(i)
+                        events.add(GameEvent.Crash(saved = true))
+                        i--
+                        continue
+                    }
                     if (secondChanceAvailable) {
                         secondChanceAvailable = false
                         invulnerableFor = GameConfig.INVULNERABLE_SEC_AFTER_SAVE
@@ -897,6 +925,33 @@ class GameEngine(
     // -----------------------------------------------------------------
     // Bitis kosullari
     // -----------------------------------------------------------------
+
+    /**
+     * AGIR DARBE YUTMA (2026-08-19). Tir gibi bir kutle, onunde giden
+     * otomobile carptiginda durmaz — hizini kaybeder ve devam eder.
+     * Gerekcenin tamami [GameConfig.HEAVY_IMPACT_SPEED_KEEP] uzerinde.
+     *
+     * Kosuyu bitirmedigi icin [crashed] bayragina DOKUNULMAZ: bolum "kazasiz
+     * bitirildi" sayilir ve `Objective` sayaclari bozulmaz. Oyuncuya gorunen
+     * geri bildirim [GameEvent.Crash] `saved = true` — Second Chance ile ayni
+     * olay, yani mevcut VFX/ses/haptik hattinin tamami hazir.
+     */
+    private fun absorbImpact() {
+        impactAbsorbCooldown = car.impactAbsorbSec
+        invulnerableFor = GameConfig.INVULNERABLE_SEC_AFTER_SAVE
+        // Taban hizin altina inilmez: bolum kendi baslangic hizini veriyor.
+        speed = (speed * GameConfig.HEAVY_IMPACT_SPEED_KEEP).coerceAtLeast(baseSpeed)
+        // Temas comboyu kirar — yutulmus olmasi "hic olmadi" demek degil.
+        //
+        // [GameEvent.ComboBroken] ACIKCA uretiliyor: [onCrash] bunu yapmaz
+        // cunku orada kosu biter ve HUD zaten kapanir. Burada kosu DEVAM
+        // ediyor, olay uretilmezse HUD kirilmis comboyu gostermeye devam
+        // ederdi.
+        if (combo > 0) events.add(GameEvent.ComboBroken)
+        combo = 0
+        comboTimer = 0f
+        boosting = false
+    }
 
     private fun onCrash() {
         crashed = true

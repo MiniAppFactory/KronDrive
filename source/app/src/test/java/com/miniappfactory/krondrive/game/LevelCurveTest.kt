@@ -31,7 +31,19 @@ class LevelCurveTest {
 
     private enum class Style { SAFE, RISKY }
 
-    private fun engineFor(level: LevelDef, seed: Int): GameEngine {
+    private fun engineFor(
+        level: LevelDef,
+        seed: Int,
+        /**
+         * Hangi govde surulsun (2026-08-19).
+         *
+         * Varsayilan BASLANGIC ARACI ve oyle kalmali: bolum hedeflerinin
+         * ulasilabilirligi, o bolumu ILK KEZ oynayan oyuncunun elindeki
+         * aracla olculur. Parametre yalnizca ARAC KARSILASTIRMASI yapan
+         * olcumler icin var (bkz. `her arac kariyeri bitirebilir`).
+         */
+        shape: CarShapeDef = CarCatalog.defaultShape
+    ): GameEngine {
         // ANTRENMAN MODU KAPALI olcum yapiyoruz — acik kalirsa orta serit bos
         // olur, otopilot hic carpmaz ve "bu hedef ulasilabilir" sonucu YALAN
         // olur (bkz. GameEngine.sideLanesOnly).
@@ -39,7 +51,8 @@ class LevelCurveTest {
             mode = RunMode.CAREER,
             level = level,
             random = Random(seed),
-            sideLanesOnly = false
+            sideLanesOnly = false,
+            carStyle = CarStyle(shape, CarCatalog.defaultColor)
         )
         // DIKKAT: `apply { setViewport(viewWidth, viewHeight) }` yazma —
         // isimler GameEngine'in KENDI viewWidth/viewHeight alanlarina (0f)
@@ -62,12 +75,39 @@ class LevelCurveTest {
         while (phase == RunPhase.COUNTDOWN && guard++ < 1000) step(dt)
 
         val dodgeCeiling = GameConfig.perfectDodgeMaxDx(laneWidth)
+
+        // OTOPILOT KENDI ARACININ BOYUNU GORMELI (2026-08-19).
+        //
+        // Asagidaki uc yardimci "bu arac benim ARKAMDA MI kaldi" sorusunu
+        // soruyordu ve esik olarak [GameConfig.CAR_HEIGHT_PX], yani BINEK
+        // boyunu kullaniyordu. Tir surulunce bu esik YALAN SOYLUYOR:
+        // dorsenin carpisma kutusu oyuncunun y'sinden 147 px asagi kadar
+        // uzaniyor, yani `playerY + 60.8` altindaki bir arac hala TAM
+        // ICIMDE olabiliyor. Otopilot o seridi "bos" sayip iceri kaydiriyor
+        // ve dorseye yandan carpiyordu — insan oyuncu dorseyi EKRANDA
+        // GORDUGU icin bu hatayi yapmaz.
+        //
+        // Bu bir denge duzeltmesi degil, OTOPILOTUN GORME SINIRI: olcum
+        // aracin kendi geometrisiyle yapilmali. Somut etkisi: tirin kariyer
+        // kaza orani 90/90'dan 33/90'a dustu; hicbiri oynanisla ilgili
+        // degildi.
+        //
+        // BINEK icin `max` bilerek: o sinifin gercek kutu arkasi 55.6 px,
+        // yani 60.8'in ALTINDA. Esik degismesin diye buyugu aliniyor —
+        // mevcut butun bolum olcumleri bit bazinda korunuyor.
+        val cls = carStyle.shape.vehicleClass
+        val playerRearPx = maxOf(
+            GameConfig.CAR_HEIGHT_PX,
+            cls.artTop * GameConfig.CAR_ART_SCALE +
+                (cls.artHeightPx - cls.hitboxHeightPx) / 2f + cls.hitboxHeightPx
+        )
+
         guard = 0
         while (phase == RunPhase.RUNNING && guard++ < maxFrames) {
             // Bir seritteki en yakin tehdide olan dikey mesafe. Gecilmis
             // araclar (oyuncunun altinda kalanlar) sayilmaz.
             fun gapAhead(lane: Int): Float = obstacles
-                .filter { it.lane == lane && it.y < playerY + GameConfig.CAR_HEIGHT_PX }
+                .filter { it.lane == lane && it.y < playerY + playerRearPx }
                 .minOfOrNull { playerY - it.y } ?: Float.MAX_VALUE
 
             // Yan serit ancak "girilebilir" ise secilir: oyuncunun HIZASINDA
@@ -76,7 +116,7 @@ class LevelCurveTest {
             fun enterable(lane: Int): Boolean = obstacles.none { o ->
                 o.lane == lane &&
                     o.y > playerY - SIDE_SWIPE_PX &&
-                    o.y < playerY + GameConfig.CAR_HEIGHT_PX
+                    o.y < playerY + playerRearPx
             }
 
             // ICINDEN GECILEBILIR MI — YERLESILEBILIR MI DEGIL (2026-08-19).
@@ -97,7 +137,7 @@ class LevelCurveTest {
             fun passable(lane: Int): Boolean = obstacles.none { o ->
                 o.lane == lane &&
                     o.y > playerY - TRANSIT_CLEAR_PX &&
-                    o.y < playerY + GameConfig.CAR_HEIGHT_PX
+                    o.y < playerY + playerRearPx
             }
 
             val myGap = gapAhead(playerLane)
@@ -183,9 +223,10 @@ class LevelCurveTest {
         level: LevelDef,
         seed: Int,
         style: Style = Style.SAFE,
+        shape: CarShapeDef = CarCatalog.defaultShape,
         sample: ((GameEngine) -> Unit)? = null
     ): RunResult =
-        requireNotNull(engineFor(level, seed).autopilot(style, sample = sample)) {
+        requireNotNull(engineFor(level, seed, shape).autopilot(style, sample = sample)) {
             "bolum ${level.id} sonuc uretmedi"
         }
 
@@ -595,7 +636,185 @@ class LevelCurveTest {
         )
     }
 
+    /**
+     * ARAC KARSILASTIRMA SURUCUSU — bir kosuyu surer, (kaza, maruziyet)
+     * dondurur; skoru [sonSkor] alanina birakir.
+     *
+     * ## Neden [autopilot] kullanilmiyor
+     *
+     * O surucu coin topluyor, riskli manevra yapiyor ve cok iyi: butun
+     * govdelerle 30 bolumun tamamini 0/90 kazayla bitiriyor (olculdu). Sifir
+     * varyansli bir metrik araclari birbirinden AYIRAMAZ.
+     *
+     * Buradaki surucu bilerek daha basit: yalnizca "en genis bosluga tek
+     * adim at". Coin toplamaz, yanasma yapmaz. Boylece kaza orani araclar
+     * arasinda gercekten degisiyor ve tabani 5/90'da oturuyor — o taban
+     * ARACA DEGIL bu surucunun sinirlarina ait (butun govdelerde ayni
+     * kosularda: 26-30. bolumler, tohum 42).
+     *
+     * ## Iki olcum
+     *
+     * - **kaza**: kosu carpisarak mi bitti.
+     * - **maruziyet** (binde): kutumun bir engelle DIKEY olarak ortustugu
+     *   kare orani. Yatay mesafeye bakmaz — olculen sey "ani bir serit
+     *   degisimi beni oldururdu" penceresi, yani uzun govdenin asil bedeli.
+     *   Kaza oraninin aksine neredeyse gurultusuz, o yuzden asil kanit bu.
+     */
+    private fun stressSurvival(
+        shape: CarShapeDef,
+        seed: Int,
+        level: LevelDef?
+    ): Pair<Boolean, Int> {
+        val e = GameEngine(
+            mode = if (level == null) RunMode.ENDLESS else RunMode.CAREER,
+            level = level,
+            random = Random(seed),
+            sideLanesOnly = false,
+            carStyle = CarStyle(shape, CarCatalog.defaultColor)
+        )
+        e.setViewport(VIEW_WIDTH, VIEW_HEIGHT)
+        var guard = 0
+        while (e.phase == RunPhase.COUNTDOWN && guard++ < 1000) e.step(dt)
+
+        val cls = shape.vehicleClass
+        val rear = maxOf(
+            GameConfig.CAR_HEIGHT_PX,
+            cls.artTop * GameConfig.CAR_ART_SCALE +
+                (cls.artHeightPx - cls.hitboxHeightPx) / 2f + cls.hitboxHeightPx
+        )
+
+        var desired = e.playerLane
+        var frame = 0
+        var overlapFrames = 0
+        val hitTop = cls.artTop * GameConfig.CAR_ART_SCALE +
+            (cls.artHeightPx - cls.hitboxHeightPx) / 2f
+        while (e.phase == RunPhase.RUNNING && frame < 60_000) {
+            run {
+                fun gapAhead(lane: Int): Float = e.obstacles
+                    .filter { it.lane == lane && it.y < e.playerY + rear }
+                    .minOfOrNull { e.playerY - it.y } ?: Float.MAX_VALUE
+
+                fun passable(lane: Int): Boolean = e.obstacles.none { o ->
+                    o.lane == lane &&
+                        o.y > e.playerY - TRANSIT_CLEAR_PX &&
+                        o.y < e.playerY + rear
+                }
+
+                val best = (0 until GameConfig.LANE_COUNT)
+                    .maxWithOrNull(
+                        compareBy<Int> { gapAhead(it) }.thenBy { abs(it - e.playerLane) * -1 }
+                    ) ?: e.playerLane
+                val step = when {
+                    best < e.playerLane -> e.playerLane - 1
+                    best > e.playerLane -> e.playerLane + 1
+                    else -> e.playerLane
+                }
+                desired = if (step == e.playerLane || passable(step)) step else e.playerLane
+            }
+            if (desired < e.playerLane) e.steerLeft() else if (desired > e.playerLane) e.steerRight()
+
+            // MARUZIYET: bu karede en az bir engel benim carpisma kutumla
+            // DIKEY olarak ortusuyor mu. Yatay mesafeye bakilmiyor — olculen
+            // sey "sudden bir serit degisimi beni oldururdu" penceresi, yani
+            // uzun govdenin gercek bedeli.
+            val pTop = e.playerY + hitTop
+            val pBottom = pTop + cls.hitboxHeightPx
+            val ortusuyor = e.obstacles.any { o ->
+                val oc = o.vehicleClass
+                val oTop = o.y + oc.artTop * GameConfig.CAR_ART_SCALE +
+                    (oc.artHeightPx - oc.hitboxHeightPx) / 2f
+                pTop < oTop + oc.hitboxHeightPx && pBottom > oTop
+            }
+            if (ortusuyor) overlapFrames++
+
+            e.step(dt)
+            frame++
+        }
+        if (e.phase == RunPhase.CRASHED) e.finish(completed = false)
+        val kaza = e.lastResult?.stats?.crashed ?: false
+        val maruziyet = if (frame == 0) 0 else (1000L * overlapFrames / frame).toInt()
+        sonSkor = e.lastResult?.stats?.score ?: 0
+        return kaza to maruziyet
+    }
+
+    /** [stressSurvival]'in son kosusunun skoru (imza sismesin diye alanda). */
+    private var sonSkor: Int = 0
+
+    /** Bir govdenin kariyer dokumu: kaza sayisi, maruziyet (binde), skor. */
+    private fun kariyerOzet(shape: CarShapeDef): Triple<Int, Int, Int> {
+        var kaza = 0
+        var kosu = 0
+        var maruziyet = 0L
+        var skor = 0L
+        LevelCatalog.levels.forEach { level ->
+            CRASH_SEEDS.forEach { seed ->
+                val (k, m) = stressSurvival(shape, seed, level)
+                kosu++
+                if (k) kaza++
+                maruziyet += m
+                skor += sonSkor
+            }
+        }
+        return Triple(kaza, (maruziyet / kosu).toInt(), (skor / kosu).toInt())
+    }
+
+    /**
+     * HICBIR ARAC, PARASINI ODEYEN OYUNCUYU ORANTISIZ CEZALANDIRMAZ.
+     *
+     * 2026-08-19'da tir tam olarak bunu yapiyordu ve hicbir test gormuyordu:
+     * ayni surucuyle butun otomobiller 5/90 kaza alirken tir 33/90 aliyordu
+     * (6.6 kat) ve fiyati kataloğun ikinci en yuksegiydi. Sebep dort surus
+     * carpani DEGILDI — [VehicleClass.AGIR] kutusu dikey maruziyeti %25'ten
+     * %44'e cikariyordu, yani bir govdenin OLCU SINIFI tek basina araci
+     * satilamaz yapabiliyor.
+     *
+     * `CarCatalogTest` bunu yakalayamaz: orada yalnizca dort carpan var,
+     * carpisma kutusu yok. Bu yuzden bekci BURADA, bolumlerin gercekten
+     * oynandigi yerde.
+     *
+     * Esik 3 kat: aracin bir KARAKTERI olabilir (tir gercekten daha zor
+     * surulur ve oyle kalmali), ama "alma sebebi yok" seviyesine inemez.
+     */
+    @Test
+    fun `hicbir arac orantisiz kaza almiyor`() {
+        val dokum = CarCatalog.shapes.associate { it.id to kariyerOzet(it) }
+        val enIyi = dokum.values.minOf { it.first }
+        val rapor = dokum.entries.joinToString("\n") { (id, d) ->
+            "  %-14s kaza=%2d/90 maruziyet=%4.1f%% skor=%d".format(id, d.first, d.second / 10f, d.third)
+        }
+        dokum.forEach { (id, d) ->
+            assertTrue(
+                "$id: ${d.first}/90 kaza, kataloğun en iyisi $enIyi/90 — " +
+                    "3 kati asti, bu arac parasini hak etmiyor\n$rapor",
+                d.first <= maxOf(enIyi * 3, 3)
+            )
+        }
+    }
+
+    /**
+     * AGIR SINIFIN YUTMA MEKANIGI GERCEKTEN ISE YARIYOR.
+     *
+     * Ustteki test "tir orantisiz degil" diyor; bu test o sonucun YUTMADAN
+     * geldigini dogruluyor. Yutma sessizce kapanirsa (ornegin
+     * [CarShapeDef.impactAbsorbSec] sifirlanirsa) ustteki test de kirilir
+     * ama sebebini soylemez — bu soyler.
+     */
+    @Test
+    fun `agir sinifin yutma mekanigi kaza oranini gercekten dusuruyor`() {
+        val tir = CarCatalog.shapes.first { it.id == CarCatalog.SHAPE_TIR }
+        assertTrue("tir yutmuyor — mekanik kapanmis", tir.absorbsImpact)
+        val yutmali = kariyerOzet(tir).first
+        val yutmasiz = kariyerOzet(tir.copy(impactAbsorbSec = 0f)).first
+        assertTrue(
+            "yutma kaza oranini dusurmuyor: yutmali=$yutmali yutmasiz=$yutmasiz",
+            yutmali * 2 <= yutmasiz
+        )
+    }
+
     private companion object {
+        /** Arac karsilastirmasinda kullanilan tohumlar. */
+        val CRASH_SEEDS = listOf(1, 7, 42)
+
         /** Yaygin bir telefon: 360 x 800 dp. Uzun ekran = uzun yaklasma mesafesi. */
         const val VIEW_WIDTH = 360f
         const val VIEW_HEIGHT = 800f

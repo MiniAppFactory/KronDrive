@@ -1266,6 +1266,137 @@ class GameEngineTest {
         assertTrue("fark olculebilir olmali", slx - city >= 5)
     }
 
+    // -----------------------------------------------------------------
+    // AGIR DARBE YUTMA — kutle mekanigi (2026-08-19)
+    //
+    // Gerekce ve olcumler: GameConfig.HEAVY_IMPACT_SPEED_KEEP ve
+    // CarCatalog'daki tir notu. Buradaki testler mekanigin DAVRANISINI
+    // donduruyor; kaza oraninin gercekten dustugunu LevelCurveTest olcuyor.
+    // -----------------------------------------------------------------
+
+    private val tir get() = CarCatalog.shape(CarCatalog.SHAPE_TIR)
+
+    @Test
+    fun `agir arac ilk darbeyi yutar ve kosu devam eder`() {
+        val e = engine(shape = tir)
+        e.startRun()
+        e.advance(60)
+        e.placeObstacleOnPlayer()
+        val events = e.step(dt)
+
+        assertEquals("ilk temas kosuyu bitirmemeli", RunPhase.RUNNING, e.phase)
+        assertTrue(
+            "yutma Second Chance ile AYNI olayi uretmeli (VFX/ses/haptik hatti hazir)",
+            events.any { it is GameEvent.Crash && it.saved }
+        )
+        assertTrue("carpilan arac sahneden kalkmali", e.obstacles.isEmpty())
+        assertTrue("yutmadan sonra kisa dokunulmazlik olmali", e.isInvulnerable())
+    }
+
+    @Test
+    fun `yutulan darbe hizi goturur`() {
+        val e = engine(shape = tir)
+        e.startRun()
+        // Once hizlan: taban hizda olsaydi ceza tabana carpar ve olculemezdi.
+        e.setBoost(true)
+        e.advance(240)
+        e.setBoost(false)
+        val once = e.speed
+
+        e.placeObstacleOnPlayer()
+        e.step(dt)
+
+        assertTrue(
+            "yutma bedavaya gelmemeli — hiz dusmeli (once=$once sonra=${e.speed})",
+            e.speed < once
+        )
+    }
+
+    @Test
+    fun `yutma bekleme suresi dolmadan ikinci darbe kosuyu bitirir`() {
+        val e = engine(shape = tir)
+        e.startRun()
+        e.advance(60)
+        e.placeObstacleOnPlayer()
+        e.step(dt)
+        assertEquals(RunPhase.RUNNING, e.phase)
+
+        // Dokunulmazlik bitsin ama bekleme suresi DOLMASIN.
+        e.advance((GameConfig.INVULNERABLE_SEC_AFTER_SAVE / dt).toInt() + 2)
+        assertEquals("hazirlik: hala kosuyor olmali", RunPhase.RUNNING, e.phase)
+        e.placeObstacleOnPlayer()
+        e.step(dt)
+
+        assertEquals("ikinci darbe yutulmamali", RunPhase.CRASHED, e.phase)
+    }
+
+    @Test
+    fun `yutma bekleme suresi dolunca yeniden dolar`() {
+        val e = engine(shape = tir)
+        e.startRun()
+        e.advance(60)
+        e.placeObstacleOnPlayer()
+        e.step(dt)
+        assertEquals(RunPhase.RUNNING, e.phase)
+
+        // Bekleme suresini TAM olarak bekle.
+        e.advance((tir.impactAbsorbSec / dt).toInt() + 2)
+        e.placeObstacleOnPlayer()
+        e.step(dt)
+
+        assertEquals("bekleme dolunca yeniden yutmali", RunPhase.RUNNING, e.phase)
+    }
+
+    /**
+     * OLUMSUZLUK SINIRI. [GameConfig.INVULNERABLE_SEC_AFTER_SAVE] kadar sure
+     * boyunca zaten dokunulmazsin; yutmanin bekleme suresi ona esit ya da
+     * kisa olursa dokunulmazlik biterken yutma coktan dolmus olur ve arac
+     * FIILEN OLUMSUZ hale gelir. Olculdu (2026-08-19): 3 saniyelik beklemeyle
+     * tirin kariyer kaza orani 0/90'a dusuyordu.
+     *
+     * Bu bir denge tercihi degil, bir SINIR SARTI — o yuzden testi var.
+     */
+    @Test
+    fun `yutma beklemesi dokunulmazlik suresinden belirgin uzun`() {
+        CarCatalog.shapes.filter { it.absorbsImpact }.forEach { shape ->
+            assertTrue(
+                "${shape.id}: yutma beklemesi ${shape.impactAbsorbSec} sn, " +
+                    "dokunulmazlik ${GameConfig.INVULNERABLE_SEC_AFTER_SAVE} sn — " +
+                    "arac fiilen olumsuz olur",
+                shape.impactAbsorbSec >= GameConfig.INVULNERABLE_SEC_AFTER_SAVE * 2f
+            )
+        }
+    }
+
+    @Test
+    fun `yutmayan araclarda ilk darbe kosuyu bitirir`() {
+        val yutmayan = CarCatalog.shapes.filter { !it.absorbsImpact }
+        assertTrue("yutmayan arac kalmamis, test anlamsiz", yutmayan.isNotEmpty())
+        yutmayan.forEach { shape ->
+            val e = engine(shape = shape)
+            e.startRun()
+            e.advance(60)
+            e.placeObstacleOnPlayer()
+            e.step(dt)
+            assertEquals("${shape.id}: yutma yok, ilk darbe bitirmeli", RunPhase.CRASHED, e.phase)
+        }
+    }
+
+    @Test
+    fun `yutulan darbe kosuyu kazali saymaz`() {
+        // Yutma kosuyu bitirmiyor; bolum "kazasiz tamamlandi" sayilmali,
+        // aksi halde kaza sayan gorevler tirda hicbir zaman tutmazdi.
+        val e = engine(shape = tir)
+        e.startRun()
+        e.advance(60)
+        e.placeObstacleOnPlayer()
+        e.step(dt)
+        e.advance(60)
+        e.finish(completed = true)
+
+        assertEquals(false, e.lastResult?.stats?.crashed)
+    }
+
     @Test
     fun `carpisma kutusu AYNI SINIF icinde araca gore DEGISMEZ`() {
         // PROVENANCE #6 yeni hâli (2026-08-16): kutuyu degistiren tek sey
@@ -1287,11 +1418,28 @@ class GameEngineTest {
                 beklenenSinif[shape.id] ?: VehicleClass.BINEK,
                 shape.vehicleClass
             )
+            // TEMAS her govdede olusur; SONUCU govdenin yutma ozelligi
+            // belirler (2026-08-19). Yutan govdede ilk temas kosuyu
+            // bitirmez, o yuzden ikinci bir temas uygulanip ondan sonra
+            // CRASHED bekleniyor — yani "kutu calisiyor mu" sorusu hala
+            // sorulmus oluyor, sadece dogru esikten.
             val e = engine(shape = shape)
             e.startRun()
             e.advance(60)
             e.placeObstacleOnPlayer()
             e.step(dt)
+            if (shape.absorbsImpact) {
+                assertEquals(
+                    "${shape.id}: ilk temas yutulmali (bkz. CarShapeDef.impactAbsorbSec)",
+                    RunPhase.RUNNING,
+                    e.phase
+                )
+                // Dokunulmazlik bitsin, sonra ikinci temas: yutma daha
+                // dolmadigi icin bu sefer kaza olmali.
+                e.advance((GameConfig.INVULNERABLE_SEC_AFTER_SAVE / dt).toInt() + 2)
+                e.placeObstacleOnPlayer()
+                e.step(dt)
+            }
             assertEquals("${shape.id}: carpisma davranisi degisti", RunPhase.CRASHED, e.phase)
         }
     }

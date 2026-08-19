@@ -437,13 +437,19 @@ class CarCatalogTest {
                 CarCatalog.SHAPE_KUS_SLX to 1500,
                 CarCatalog.SHAPE_MOUNTAIN_GOAT to 1500,
                 CarCatalog.SHAPE_MUSCLE to 1800,
+                // Tir 2026-08-19'da 3600 -> 2000 indi ve merdivende Super
+                // Araba'nin ustunden Kas Arabasi ile Boga 67 ARASINA dustu.
+                // Sebep olcum: yutma mekanigiyle BILE 1800 coinlik Kas
+                // Arabasi'ni gecmiyor (kaza 10/90'a karsi 5/90, skor 3671'e
+                // karsi 3787), yani katalogun ikinci en pahalisi olamazdi.
+                // Gerekcenin tamami CarCatalog'daki fiyat notunda.
+                CarCatalog.SHAPE_TIR to 2000,
                 CarCatalog.SHAPE_MUSCLE_67 to 2400,
                 // 2026-08-16: uc sinif disi arac. Motosiklet ve tir kendi
                 // olcu siniflarini getiriyor; F1 BINEK'te kaliyor (referans
                 // cizim otomobilden DAHA DAR, bkz. docs/VEHICLE_CLASSES.md).
                 CarCatalog.SHAPE_MOTOSIKLET to 2800,
                 CarCatalog.SHAPE_SUPERCAR to 3200,
-                CarCatalog.SHAPE_TIR to 3600,
                 CarCatalog.SHAPE_F1 to 5000
             ),
             CarCatalog.shapes.map { it.id to it.priceCoins }

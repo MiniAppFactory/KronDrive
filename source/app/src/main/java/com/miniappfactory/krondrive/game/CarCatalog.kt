@@ -230,10 +230,29 @@ data class CarShapeDef(
      * trafik govdesi tek satir bile degismeden calissin diye.
      */
     val vehicleClass: VehicleClass = VehicleClass.BINEK,
+    /**
+     * AGIR DARBE YUTMA: ilk temas kosuyu bitirmez, `impactAbsorbSec` saniyede
+     * bir yeniden dolar. 0 = yutma yok (bkz. [GameConfig.HEAVY_IMPACT_SPEED_KEEP]).
+     *
+     * Varsayilan 0 olmak ZORUNDA: bu dosyadaki diger on govde ve butun trafik
+     * araclari tek satir bile degismeden eski davranisi surdursun diye. Bugun
+     * yalnizca [VehicleClass.AGIR] govdesi (tir) sifirdan farkli.
+     *
+     * BESINCI EKSEN OLDUGUNU BILEREK: [multiplier] dort surus eksenini
+     * dondurur ve bu alan ORAYA GIRMEZ — yutma bir carpan degil, olay
+     * bazinda bir kurtarma. `CarCatalogTest`'in dominasyon testi de dort
+     * ekseni okur, yani bu alan oradaki "hicbir arac otekini her eksende
+     * gecmiyor" guvencesinin DISINDA kalir; tirin dort eksende zayif
+     * kalabilmesinin sebebi de bu (bkz. o testin yanindaki not).
+     */
+    val impactAbsorbSec: Float = 0f,
     /** Garajda gosterilen tek satirlik karakter cumlesi. */
     val traitTr: String = "",
     val traitEn: String = ""
 ) : CarItem {
+
+    /** Bu govde agir darbe yutuyor mu (garaj karti ve motor bunu sorar). */
+    val absorbsImpact: Boolean get() = impactAbsorbSec > 0f
 
     // AYRIM ONEMLI:
     //   box*  = SINIFIN hedef kutusu (VehicleClass'tan gelir)
@@ -1265,10 +1284,20 @@ object CarCatalog {
     /**
      * Tir — katalogun tek [VehicleClass.AGIR] govdesi.
      *
-     * 202 birim uzun, yani binegin 2.7 kati. Bu bir OZELLIK degil BEDEL:
-     * carpisma kutusu 142 dp boyunda ve yandan gecen trafik cok daha uzun sure
-     * temas riskinde kaliyor. Karsiliginda boost: agir arac bir kere hizlandi
-     * mi durmuyor.
+     * 202 birim uzun, yani binegin 2.7 kati. Carpisma kutusu 142 dp boyunda
+     * ve yandan gecen trafik cok daha uzun sure temas riskinde kaliyor.
+     *
+     * 2026-08-19'A KADAR BU SADECE BEDELDI ve arac satilamaz durumdaydi:
+     * olculen dikey maruziyet %44 (butun otomobillerde %23-27), kariyer kaza
+     * orani 33/90 (digerlerinde 5/90), ve dort surus ekseninin ucunde 1800
+     * coinlik Kas Arabasi'nin gerisinde — ustelik 3600 coinle katalogun
+     * ikinci en pahalisi. Eski not "karsiliginda boost" diyordu ama sahibi
+     * 2026-08-17'de boostu reddetmisti (*"tir boostlanamaz ki"*), yani
+     * karsilik diye yazilan sey de gecerli degildi.
+     *
+     * BUGUNKU KARSILIK KUTLE: ilk darbe kosuyu bitirmez, hizi goturur
+     * ([impactAbsorbSec], [GameConfig.HEAVY_IMPACT_SPEED_KEEP]). Ayni 202
+     * birim artik hem bedel hem karsilik. Fiyat da olcume gore 2000'e indi.
      *
      * TRAFIGE KOYULMADI (dikkat). Regresyon olcumu (2026-08-16): iki tirin
      * dikey ortusme suresi 0.72-0.95 s, dogma araligi ise 0.78 s — yani
@@ -1281,8 +1310,37 @@ object CarCatalog {
         nameEn = "Truck",
         descriptionTr = "Uzun ve ağır — hızlanması zor, durması daha zor",
         descriptionEn = "Long and heavy — hard to speed up, harder to stop",
-        priceCoins = 3600,
-        requiredCarLevel = 6,
+        // FIYAT 3600 -> 2000, SEVIYE 6 -> 5 (2026-08-19, olcume dayali).
+        //
+        // 3600 kataloğun IKINCI EN PAHALISIYDI ve tir o parayi hicbir olcumde
+        // hak etmiyordu: dort surus ekseninin ucunde 1800 coinlik Kas
+        // Arabasi'nin gerisinde, kaza oraninda 6.6 kati. Yutma mekanigi bunu
+        // duzeltiyor ama tiri "en iyi" yapmiyor — olcum (kariyer, ayni surucu):
+        //
+        //              kaza      ort. skor
+        //     muscle    5/90      3787      1800 coin
+        //     TIR      10/90      3671      <- yutma ACIK haliyle
+        //     beety     5/90      3600      bedava
+        //
+        // Yani tir, yutmayla birlikte bile 1800 coinlik araci GECMIYOR: skoru
+        // arasinda, kaza orani hala iki kati. Supercar'in (3200) ustunde bir
+        // fiyat savunulamaz.
+        //
+        // 2000 secildi cunku:
+        //   - 1800'un USTUNDE: yutma gercek bir deger ve olcum onu
+        //     gormuyor. Bot panik yapmaz, insan yapar; "her 8 saniyede bir
+        //     bedava Second Chance" zorlanan oyuncu icin katalogun en
+        //     degerli seyi, iyi oyuncu icin neredeyse degersiz.
+        //   - 2400'un ALTINDA: Boga 67 her surus ekseninde daha iyi ve
+        //     kutusu normal.
+        //   - 1800-2400 ARALIGINA oturuyor, merdiveni UZATMIYOR — katalogun
+        //     "yeni govde mevcut bosluga girer" kurali.
+        //
+        // Seviye 6 -> 5: 2000 coinlik bir arac seviye 6 kapisinin arkasinda
+        // duramaz. 5, tirin yeni basamagiyla (Boga 67 ve Motosiklet) ayni ve
+        // oyuncunun ZORLANMAYA basladigi yer — yutma tam orada ise yariyor.
+        priceCoins = 2000,
+        requiredCarLevel = 5,
         vehicleClass = VehicleClass.AGIR,
         // 2026-08-17, sahibi: *"tirin boostu cok yuksek, tir boostlanamaz ki"*.
         // Hakli — 1.18 ile kataloğun en gucu boostuydu ve bu bir tirin
@@ -1298,9 +1356,71 @@ object CarCatalog {
         topSpeedMul = 1.30f,
         accelMul = 0.86f,
         brakeMul = 0.88f,
-        boostMul = 1.20f,
-        traitTr = "Geç hızlanır ama durmaz — kataloğun en büyük kutusu",
-        traitEn = "Slow to spin up but never stops — biggest hitbox here",
+        // 2026-08-19: 1.20 -> 1.06. Sahibinin 2026-08-17 karari
+        // (*"tirin boostu cok yuksek, tir boostlanamaz ki"*) koda HIC
+        // islenmemisti — ustteki not "boost kaldirildi, guc son hiza tasindi"
+        // diyor ama alan 1.20'de duruyordu ve bu KATALOGUN EN YUKSEK
+        // BOOSTUYDU. Not ile kod celisiyordu.
+        //
+        // Neden 1.06 ve neden 1.00 degil: 1.00'da Kas Arabasi (1.42/0.96/
+        // 0.96/1.00) tiri DORT EKSENDE BIRDEN geciyor ve `CarCatalogTest`in
+        // dominasyon testi kiriliyor. 1.06 sahibinin sikayetini karsiliyor
+        // (artik katalogun en gucu degil, Kus SLX 1.12'nin altinda, F1 ile
+        // esit) ve tiri copa cevirmiyor.
+        //
+        // Tirin GERCEK gucu artik boost degil: agir darbe yutma (asagida).
+        boostMul = 1.06f,
+        // AGIR DARBE YUTMA — tirin varlik sebebi (2026-08-19).
+        //
+        // 202 birimlik govde bugune kadar sadece bedeldi: olculen maruziyet
+        // %44'e karsi butun otomobillerde %23-27, kaza orani 33/90'a karsi
+        // 5/90 (kariyer, 30 bolum x 3 tohum, ayni surucu). Gerekcenin tamami
+        // [GameConfig.HEAVY_IMPACT_SPEED_KEEP] uzerinde.
+        //
+        // SURE OLCULDU (kariyer kaza orani, ayni kosullar):
+        //
+        //     yutma yok   33/90 (%36.7)   <- satilamaz
+        //     12 sn       10/90 (%11.1)
+        //      8 sn       10/90 (%11.1)
+        //      6 sn        9/90 (%10.0)
+        //      4 sn        9/90 (%10.0)
+        //      3 sn        0/90 ( %0.0)   <- OLUMSUZ, bkz. asagi
+        //
+        // Iki sey ogrendik ve ikisi de sezgiye aykiriydi:
+        //
+        // 1. 4 ile 12 saniye ARASINDA FARK YOK. Bolum ~60 sn ve tir kosu
+        //    basina ortalama bir kez temas ediyor; bekleme suresi pratikte
+        //    hic baglamiyor. Yani bu sayiyi "kaza oranini ayarlamak" icin
+        //    kullanmak mumkun degil — kazandiran sey ILK darbenin
+        //    yutulmasi.
+        //
+        // 2. 3 SANIYE BIR UCURUM. [GameConfig.INVULNERABLE_SEC_AFTER_SAVE]
+        //    de 3 saniye: bekleme suresi ona esit ya da altinda olursa
+        //    dokunulmazlik biterken yutma zaten dolmus oluyor ve tir
+        //    OLUMSUZ hale geliyor (0/90). Bu bir denge ayari degil, bir
+        //    sinir sarti — bunu bir test donduruyor.
+        //
+        // 8 saniye o sinirin 2.7 kati: ne olumsuzluk sinirina yakin, ne de
+        // oynanista hissedilmeyecek kadar uzun.
+        //
+        // KALAN FARK DURUST YAZILIYOR: tir hala 10/90, digerleri 5/90. Ama
+        // iki kume AYRIK — digerlerinin oldugu yerde (26-30. bolumler,
+        // tohum 42) tir yutma sayesinde HAYATTA KALIYOR, kendi kayiplarini
+        // baska bolumlerde veriyor. Yani "iki kat kotu" degil, "farkli".
+        impactAbsorbSec = 8f,
+        // KARTIN SOYLEMESI GEREKEN SEY OLCU SINIFI (2026-08-19).
+        //
+        // Garaj karti dort surus cubugu gosteriyor ve tir onlarin hepsinde
+        // vasat/kotu duruyor; oyuncunun GERCEKTEN bilmesi gereken iki sey
+        // ise cubuklarda hic yok: (1) govde 2.7 kat uzun ve dorse ARKANDA
+        // kaliyor — yan serit "bos" gorunse de kuyrugun hala orada, (2)
+        // buna karsilik ilk darbe kosuyu bitirmiyor. Eski cumle ("Gec
+        // hizlanir ama durmaz") ikisini de soylemiyordu.
+        //
+        // Uzunluk mevcut en uzun karakter cumlesiyle ayni bantta tutuldu
+        // (Motosiklet, 49 karakter); 11sp'de dar ekranda tasmasin diye.
+        traitTr = "Dorse 2,7 kat uzun — arkanı kolla, ilk darbeyi yutar",
+        traitEn = "Trailer 2.7x longer — mind your tail, absorbs a hit",
         parts = listOf(
             // Cekici tekerlekleri — kutunun SOL/SAG kenarina degiyor.
             CarPart.Box(CarPaint.TIRE, -24f, 16f, 6f, 20f, 2.4f, WHEEL_ROLL),
@@ -1413,8 +1533,12 @@ object CarCatalog {
      * bos bir ucurum vardi, artik ara bir hedef var. Hepsi yalnizca kozmetik.
      */
     val shapes: List<CarShapeDef> = listOf(
-        BEETY, HATCHBACK, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE, MUSCLE_67,
-        MOTOSIKLET, SUPERCAR, TIR, F1
+        BEETY, HATCHBACK, RACE_SEDAN, KUS_SLX, MOUNTAIN_GOAT, MUSCLE,
+        // Tir 2026-08-19'da 3600'den 2000'e indi ve listede SUPERCAR ile F1
+        // arasindan buraya, Kas Arabasi ile Boga 67 arasina tasindi —
+        // liste sirasi fiyat merdivenidir, fiyat degisince sira da degisir.
+        // Gerekce fiyatin yaninda.
+        TIR, MUSCLE_67, MOTOSIKLET, SUPERCAR, F1
     )
 
     // -----------------------------------------------------------------

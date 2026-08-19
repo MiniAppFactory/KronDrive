@@ -1,4 +1,4 @@
-package com.miniappfactory.krondrive.game
+﻿package com.miniappfactory.krondrive.game
 
 /**
  * TUM denge/ayar degerleri burada. Baska hicbir dosyada "sihirli sayi" yok —
@@ -692,6 +692,77 @@ object GameConfig {
      * uzerine gelmis oluyordu. Once bos yol, sonra trafik.
      */
     const val REVIVE_SPAWN_PAUSE_SEC = 1.2f
+
+    // ---------------------------------------------------------------------
+    // AGIR DARBE YUTMA — kutle mekanigi (2026-08-19)
+    // ---------------------------------------------------------------------
+    //
+    // NEDEN VAR. Tirin 202 birimlik govdesi bugune kadar SADECE bedeldi.
+    // Olcum (LevelCurveTest, kariyer 30 bolum x 3 tohum, ayni surucu):
+    //
+    //     maruziyet (kutum bir engelle dikey ortusuyor)   kaza orani
+    //     butun BINEK govdeleri   %23-27                   5/90
+    //     motosiklet              %21                      5/90
+    //     TIR                     %44                     33/90
+    //
+    // Yani tir, 3600 coin karsiliginda 6.6 KAT kaza aliyordu ve dort surus
+    // ekseninin ucunde 1800 coinlik Kas Arabasi'nin gerisindeydi. Fiyat
+    // modeli ona -3400 veriyordu: hicbir fiyat onu alinabilir yapmazdi.
+    //
+    // NEDEN BU MEKANIK, NEDEN BOOSTTA EZME DEGIL. Iki sey belirledi:
+    //
+    //  1. Bedel SUREKLI, o halde karsiligi da surekli olmali. Maruziyet
+    //     cezasi her karede odeniyor (%44'u boost basiliyken degil, HER AN).
+    //     Yalnizca boost basiliyken calisan bir guc, her an odenen bir
+    //     bedeli kapatamaz.
+    //  2. Sahibinin 2026-08-17 karari: *"tirin boostu cok yuksek, tir
+    //     boostlanamaz ki"*. Ezme mekanigi tirin kimligini yine BOOST
+    //     TUSUNA baglardi — sahibinin reddettigi sey tam olarak buydu.
+    //
+    // Ustelik yutma, kutunun ZATEN modelledigi seyin ta kendisi: KUTLE.
+    // Ayni 202 birim once %100 bedeldi, artik hem bedel hem karsilik.
+    //
+    // BEDAVA DEGIL. Yutulan darbe hizin %45'ini goturur ve tir
+    // [CarShapeDef.accelMul] 0.86 ile kataloğun en yavas toparlanani; skor
+    // hizla biriktigi icin ceza dogrudan skora yansir. Combo da sifirlanir.
+    //
+    // Bu bedelin BUYUKLUGU henuz olculmedi ve oyle yazilmali: olcum
+    // otopilotu yutmayi kosu basina ortalama bir kez tetikliyor, yani
+    // "yutma sonrasi ne kaybettim" sorusunu ayirt edecek kadar ornek
+    // uretmiyor. Cihazda oynanarak dogrulanmasi gereken tek nokta bu.
+
+    /**
+     * Yutulan darbeden sonra hizin KORUNAN orani.
+     *
+     * Taban hizin ALTINA inilmez ([GameEngine.baseSpeed]): bolum kendi
+     * baslangic hizini veriyor ve onun altina dusmek bolum tasarimini bozar.
+     *
+     * OLCULDU (tirin kariyer kaza orani / ortalama skoru, ayni surucu):
+     *
+     *     0.35   10/90 (%11.1)   skor 3671
+     *     0.55   10/90 (%11.1)   skor 3671
+     *     0.75    1/90 ( %1.1)   skor 4011
+     *     0.90    1/90 ( %1.1)   skor 4007
+     *
+     * Iki sonuc da sezgiye aykiriydi:
+     *
+     * 1. 0.35 ile 0.55 BIREBIR AYNI cikiyor, cunku ikisi de yukaridaki taban
+     *    hiz tabanina CARPIYOR — carpanin kendisi degil, tabana inmesi
+     *    belirleyici. Fark ancak yuksek [LevelDef.startSpeedKmh] veren
+     *    bolumlerde ortaya cikar; 0.55, taban baglamadiginda momentumun
+     *    yaklasik yarisini goturur.
+     *
+     * 2. YAVASLAMAK TIRI DAHA COK OLDURUYOR, daha az degil. Yaklasma hizi
+     *    `oyuncuHizi - engelHizi` oldugu icin yavas oyuncunun yanindaki
+     *    trafik uzaklasmiyor, YANINDA KALIYOR; 202 birimlik govde de o
+     *    sure boyunca ortusmede kaliyor. 0.75'te tir kataloğun EN GUVENLI
+     *    araci oluyor (1/90, digerleri 5/90) — en buyuk kutunun en az
+     *    carpmasi sacma, o yuzden alinmadi.
+     *
+     * 0.55 bu yuzden: bedel gercekten hissediliyor (momentum sifirlaniyor)
+     * ve tir kimsenin onune gecmiyor.
+     */
+    const val HEAVY_IMPACT_SPEED_KEEP = 0.55f
 
     const val SCORE_BOOSTER_MULTIPLIER = 1.25f
     const val DOUBLE_REWARD_MULTIPLIER = 2
