@@ -117,7 +117,12 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
      * DUSULUR — yani kosu basladigi an harcanmis sayilir (kullanici oyundan
      * cikip tekrar girerek ayni guclendiriciyi iki kez kullanamaz).
      */
-    fun createEngine(mode: RunMode, levelId: Int? = null): GameEngine {
+    fun createEngine(
+        mode: RunMode,
+        levelId: Int? = null,
+        /** ANTRENMAN modu: trafik yalnizca yan seritlerde dogar, orta serit bos kalir. */
+        training: Boolean = false
+    ): GameEngine {
         val progress = playerProgress.value
         val boosters = _selectedBoosters.value.filter { progress.boosterCount(it) > 0 }.toSet()
         val level = when (mode) {
@@ -142,7 +147,8 @@ class KronViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 0
             },
-            carStyle = progress.carStyle
+            carStyle = progress.carStyle,
+            sideLanesOnly = training
         )
     }
 

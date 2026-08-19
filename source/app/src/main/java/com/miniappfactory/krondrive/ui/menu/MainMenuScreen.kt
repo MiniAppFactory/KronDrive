@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miniappfactory.krondrive.R
+import com.miniappfactory.krondrive.game.GameConfig
 import com.miniappfactory.krondrive.data.DailyChallengeState
 import com.miniappfactory.krondrive.data.PlayerProgress
 import com.miniappfactory.krondrive.game.LevelCatalog
@@ -55,6 +56,8 @@ fun MainMenuScreen(
     adsConsentResolved: Boolean,
     onCareer: () -> Unit,
     onEndless: () -> Unit,
+    /** ANTRENMAN modu — bkz. GameConfig.TRAINING_MODE_MENU_ENABLED. */
+    onTraining: () -> Unit,
     onDaily: () -> Unit,
     onGarage: () -> Unit,
     onMissions: () -> Unit,
@@ -164,6 +167,29 @@ fun MainMenuScreen(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onEndless
             )
+
+            // ⚠ ANTRENMAN — GECICI, AAB'DEN ONCE SILINECEK.
+            //
+            // Trafik yalnizca yan seritlerde dogar, orta serit hep bos kalir;
+            // sahne, hiz, ses ve arayuz carpmadan izlenebilsin diye.
+            //
+            // AYRI BIR GIRIS olmasi bilincli: ilk surumde bu global bir
+            // sabitti ve KARIYER/SONSUZ/GUNLUK dahil her kosuda orta serit
+            // bostu. Sahibi menude bir sey goremedi — ve daha kotusu, normal
+            // oyun da bozuluyordu: ayni gun eklenen zorluk egrisi
+            // degerlendirilemez hale geliyordu. Artik diger uc mod gercek
+            // trafikle oynanir, antrenman yalnizca buradan gelir.
+            if (GameConfig.TRAINING_MODE_MENU_ENABLED) {
+                MenuButton(
+                    text = language.pick(tr = "ANTRENMAN", en = "TRAINING"),
+                    subtitle = language.pick(
+                        tr = "Orta şerit boş — test için",
+                        en = "Middle lane clear — for testing"
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onTraining
+                )
+            }
 
             // Gunluk gorev tamamlaninca buton KAPATILMAZ: oyuncu gorevi tekrar
             // oynayabilsin diye aktif kalir, sadece "bugun bitti" sinyali verilir.

@@ -158,6 +158,8 @@ private data class HudState(
 fun GameScreen(
     mode: RunMode,
     levelId: Int?,
+    /** ANTRENMAN modu — bkz. GameConfig.TRAINING_MODE_MENU_ENABLED. */
+    training: Boolean = false,
     viewModel: KronViewModel,
     /**
      * UMP onay akisi cozuldu mu (`MainActivity`'deki mandal).
@@ -232,7 +234,9 @@ fun GameScreen(
 
     // Yeniden dene: anahtari degistirmek yeni bir motor (yeni kosu) yaratir.
     var runKey by remember { mutableIntStateOf(0) }
-    val engine = remember(runKey, mode, levelId) { viewModel.createEngine(mode, levelId) }
+    val engine = remember(runKey, mode, levelId, training) {
+        viewModel.createEngine(mode, levelId, training)
+    }
 
     var frame by remember(engine) { mutableIntStateOf(0) }
     // Motorun `phase` alani Compose durumu DEGIL — overlay'lerin dogru anda

@@ -470,7 +470,7 @@ kırılıp hatırlatma yapması bekleniyor. **Not: bu iddia bu denetimde
 
 ### S-8 · Antrenman modu açık — **AÇIK · BLOKER**
 
-`game/GameConfig.kt:40` → `const val TRAINING_MODE_SIDE_LANES_ONLY = true`
+`game/GameConfig.kt:40` → `const val TRAINING_MODE_MENU_ENABLED = true`
 (denetim anında satır 40; sabit adıyla arayın).
 
 Açıkken trafik yalnızca en sol ve en sağ şeritte doğuyor, **orta şerit hep

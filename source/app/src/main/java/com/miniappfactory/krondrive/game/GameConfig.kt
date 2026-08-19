@@ -24,20 +24,30 @@ object GameConfig {
     /**
      * ⚠⚠ GECICI ANTRENMAN MODU — AAB'DEN ONCE SILINECEK. ⚠⚠
      *
-     * Acikken trafik YALNIZCA en soldaki ve en sagdaki seritte dogar, orta
-     * serit hep bos kalir. Sahibi test kolayligi icin istedi (2026-08-19):
-     * orta seritte durup sahneyi, hizi, sesi ve arayuzu carpmadan
-     * izleyebilmek icin.
+     * Acikken ana menude **ANTRENMAN** girisi cikar. O girisle baslayan
+     * kosuda trafik yalnizca en soldaki ve en sagdaki seritte dogar, orta
+     * serit hep bos kalir — sahibi sahneyi, hizi, sesi ve arayuzu carpmadan
+     * izleyebilsin diye (2026-08-19 istegi).
      *
-     * Yayina bu ACIK cikarsa oyun oynanamaz hale gelmez ama TAMAMEN
-     * kolaylasir: oyuncu ortada durup sonsuza kadar hayatta kalir, butun
-     * zorluk egrisi ve skor dengesi anlamsizlasir.
+     * ## Neden global bayrak DEGIL de ayri bir mod
      *
-     * Iki iz birakildi: `PLAY_RELEASE_CHECKLIST` S-8 maddesi ve
-     * `GameEngineTest`'teki "antrenman modu kapali" testi. Test bu deger
-     * `true` iken KIRMIZI YANAR — bilerek, unutulmasin diye.
+     * Ilk surumde bu bir global sabitti ve KARIYER/SONSUZ/GUNLUK dahil her
+     * kosuda orta serit bostu. Iki sorunu vardi:
+     *
+     *  1. Sahibi menude bir sey goremedi — istedigi sey bir MODDU.
+     *  2. Daha kotusu: normal oyunu da bozuyordu. Ayni gun eklenen yeni
+     *     zorluk egrisi (cift dogus deseni) orta serit hep bos oldugu icin
+     *     DEGERLENDIRILEMEZ hale geliyordu. Denge hakkinda verilen her
+     *     izlenim, aslinda oynanmayan bir oyundan geliyordu.
+     *
+     * Artik antrenman yalnizca kendi girisinden gelir; diger uc mod gercek
+     * trafikle oynanir. Motor tarafinda kosu basina parametre
+     * ([GameEngine.sideLanesOnly]), sabit degil.
+     *
+     * Yayina bu ACIK cikarsa oyun cokmez ama menude test amacli bir giris
+     * gorunur. Iz: `docs/PLAY_RELEASE_CHECKLIST.md` S-8.
      */
-    const val TRAINING_MODE_SIDE_LANES_ONLY = true
+    const val TRAINING_MODE_MENU_ENABLED = true
 
     /** Oyuncu araci ekranin altindan bu kadar yukarida durur (player.y = H - 210). */
     const val PLAYER_BOTTOM_OFFSET_PX = 210f

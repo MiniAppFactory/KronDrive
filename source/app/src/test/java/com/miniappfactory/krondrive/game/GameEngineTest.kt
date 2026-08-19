@@ -25,9 +25,11 @@ class GameEngineTest {
         boosters: Set<BoosterType> = emptySet(),
         endlessRecordSeconds: Int = 0,
         seed: Int = 1234,
-        shape: CarShapeDef = CarCatalog.defaultShape
+        shape: CarShapeDef = CarCatalog.defaultShape,
+        sideLanesOnly: Boolean = false
     ): GameEngine = GameEngine(
         mode = mode,
+        sideLanesOnly = sideLanesOnly,
         level = level,
         upgrades = upgrades,
         boosters = boosters,
@@ -413,32 +415,34 @@ class GameEngineTest {
     // -----------------------------------------------------------------
 
     /**
-     * Antrenman modu ya KAPALI olacak ya da acikken GERCEKTEN yan seritlerde
-     * calisacak — arada bir sey yok.
+     * Antrenman modu acikken orta serit BOS kalir, kapaliyken kalmaz.
      *
-     * Bu test KIRMIZI YANMAZ, bilerek: kalici kirmizi bir test her build'de
-     * hata gosterir ve "hepsi yesil" sinyalini yok eder (ayni gerekce
-     * `PlayerProgressCarTest`'te de yazili). Yaptigi is, bayragin acik
-     * oldugunda DAVRANISININ dogru olmasini garanti etmek.
+     * Artik bir `const val` degil KOSU BASINA PARAMETRE
+     * ([GameEngine.sideLanesOnly]), o yuzden test iki dali da GERCEKTEN
+     * calistirabiliyor — eskiden yalnizca sabitin o anki degerine bakabiliyor
+     * ve diger dal hic denenmiyordu.
      *
-     * ⚠ YAYIN KAPISI TEST DEGIL: `docs/PLAY_RELEASE_CHECKLIST.md` S-8.
-     * `TRAINING_MODE_SIDE_LANES_ONLY` acik yayina cikarsa oyuncu orta seritte
-     * durup sonsuza kadar hayatta kalir; butun zorluk egrisi anlamsizlasir.
+     * Bu ayrim onemli: bayrak bir donem globaldi ve KARIYER/SONSUZ/GUNLUK
+     * dahil her kosuda orta serit bostu. Sonuc, ayni gun eklenen zorluk
+     * egrisinin degerlendirilemez hale gelmesiydi — denge hakkindaki her
+     * izlenim aslinda oynanmayan bir oyundan geliyordu.
      */
     @Test
-    fun `antrenman modu acikken orta serit bos kalir`() {
-        val e = engine(RunMode.ENDLESS)
-        e.startRun()
-        e.advance(framesFor(120f), clearTraffic = false)
-        val seritler = e.obstacles.map { it.lane }.toSet()
-        if (GameConfig.TRAINING_MODE_SIDE_LANES_ONLY) {
-            assertTrue(
-                "antrenman modu acik ama orta seritte arac var: $seritler",
-                seritler.none { it != 0 && it != GameConfig.LANE_COUNT - 1 }
-            )
-        } else {
-            assertTrue("trafik hic dogmadi", seritler.isNotEmpty())
-        }
+    fun `antrenman modu yalnizca acikken orta seridi bosaltir`() {
+        val acik = engine(RunMode.ENDLESS, sideLanesOnly = true)
+        acik.startRun()
+        acik.advance(framesFor(120f), clearTraffic = false)
+        val acikSeritler = acik.obstacles.map { it.lane }.toSet()
+        assertTrue(
+            "antrenman ACIK ama orta seritte arac var: $acikSeritler",
+            acikSeritler.none { it != 0 && it != GameConfig.LANE_COUNT - 1 }
+        )
+
+        val kapali = engine(RunMode.ENDLESS, sideLanesOnly = false)
+        kapali.startRun()
+        kapali.advance(framesFor(300f), clearTraffic = false)
+        val kapaliSeritler = kapali.obstacles.map { it.lane }.toSet()
+        assertTrue("trafik hic dogmadi", kapaliSeritler.isNotEmpty())
     }
 
     @Test

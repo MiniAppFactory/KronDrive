@@ -31,8 +31,11 @@ class GameEngine(
     /**
      * Trafik yalnizca dis seritlerde mi dogsun (antrenman modu).
      *
-     * Varsayilani [GameConfig.TRAINING_MODE_SIDE_LANES_ONLY] ama PARAMETRE,
-     * cunku `const val` okumak DENGE OLCUMLERINI SESSIZCE GECERSIZ KILIYORDU:
+     * Varsayilani **false** — yani normal oyun her zaman gercek trafikle
+     * oynanir. Yalnizca ana menudeki ANTRENMAN girisi true geciriyor.
+     *
+     * Bir ara bu `GameConfig`'teki bir `const val`den okunuyordu ve o
+     * DENGE OLCUMLERINI SESSIZCE GECERSIZ KILIYORDU:
      * antrenman modu acikken orta serit hep bos oluyor, otopilot hic
      * carpmiyor ve `LevelCurveTest` "bu hedef ulasilabilir" diyor — oysa
      * gercek oyunda ulasilamayabilir. 2026-08-19'da iki ayri olcum bagimsiz
@@ -40,7 +43,7 @@ class GameEngine(
      *
      * Denge olcen her test bunu ACIKCA `false` gecmeli.
      */
-    private val sideLanesOnly: Boolean = GameConfig.TRAINING_MODE_SIDE_LANES_ONLY,
+    private val sideLanesOnly: Boolean = false,
     /**
      * Oyuncunun garajda sectigi govde sekli ve boyasi.
      *
@@ -581,7 +584,7 @@ class GameEngine(
     }
 
     private fun spawnObstacle() {
-        // GECICI ANTRENMAN MODU (bkz. GameConfig.TRAINING_MODE_SIDE_LANES_ONLY):
+        // ANTRENMAN MODU (bkz. GameConfig.TRAINING_MODE_MENU_ENABLED):
         // acikken yalnizca en sol ve en sag serit kullanilir, orta serit bos
         // kalir. RNG akisi BOZULMUYOR — her iki dalda da `random`dan tam bir
         // deger cekiliyor, yani ayni tohum ayni trafik dizisini uretmeye

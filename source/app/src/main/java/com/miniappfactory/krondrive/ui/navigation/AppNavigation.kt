@@ -34,9 +34,14 @@ private object Routes {
     const val SETTINGS = "settings"
 
     /** Oyun ekrani: mod + (kariyerde) bolum numarasi. Kariyer disinda level = -1. */
-    const val GAME = "game/{mode}/{level}"
+    const val GAME = "game/{mode}/{level}/{training}"
 
-    fun game(mode: RunMode, level: Int?) = "game/${mode.name}/${level ?: -1}"
+    /**
+     * [training] = ANTRENMAN modu: trafik yalnizca yan seritlerde dogar.
+     * Varsayilan **false** — normal menuler gercek oyunu acar.
+     */
+    fun game(mode: RunMode, level: Int?, training: Boolean = false) =
+        "game/${mode.name}/${level ?: -1}/$training"
 }
 
 /**
@@ -75,6 +80,9 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 adsConsentResolved = adsConsentResolved,
                 onCareer = { navController.navigate(Routes.CAREER) },
                 onEndless = { navController.navigate(Routes.game(RunMode.ENDLESS, null)) },
+                onTraining = {
+                    navController.navigate(Routes.game(RunMode.ENDLESS, null, training = true))
+                },
                 onDaily = { navController.navigate(Routes.game(RunMode.DAILY, null)) },
                 onGarage = { navController.navigate(Routes.GARAGE) },
                 onMissions = { navController.navigate(Routes.MISSIONS) },
@@ -180,17 +188,20 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
             route = Routes.GAME,
             arguments = listOf(
                 navArgument("mode") { type = NavType.StringType },
-                navArgument("level") { type = NavType.IntType }
+                navArgument("level") { type = NavType.IntType },
+                navArgument("training") { type = NavType.BoolType }
             )
         ) { entry ->
             val mode = runCatching {
                 RunMode.valueOf(entry.arguments?.getString("mode") ?: RunMode.ENDLESS.name)
             }.getOrDefault(RunMode.ENDLESS)
             val levelArg = entry.arguments?.getInt("level") ?: -1
+            val training = entry.arguments?.getBoolean("training") ?: false
 
             GameScreen(
                 mode = mode,
                 levelId = levelArg.takeIf { it > 0 },
+                training = training,
                 viewModel = viewModel,
                 // Oyun ekraninda BANNER YOK ama gecis ve odullu reklam VAR.
                 // Bayrak buraya 2026-08-19'a kadar hic verilmiyordu: diger
