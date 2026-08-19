@@ -1,5 +1,78 @@
 # Değişiklik günlüğü
 
+## 2026-08-19 (5) — Bütün ekranların tuşları ve geri tuşu cihazda gezildi
+
+Sahibi: *"tüm menü tuşlarını kontrol et, geri tuşu çalışmayan yerler var...
+telefonun main back tuşu da geri tuşu görevi görsün, ana menüye gelmesin"*.
+Beş ekranın hepsi S8'de tek tek gezildi.
+
+### ⚠ Geri sayımda geri tuşu koşuyu ekrandan atıyordu
+
+`BackHandler(enabled = phase == RUNNING || …)` `COUNTDOWN`u kapsamıyordu.
+Kritik ayrıntı: **devre dışı bir `BackHandler` basışı yutmaz, NavHost'a
+bırakır** — yani "HAZIR OL / 3" ekranında tek basış koşuyu bitirmeden atıyordu
+(ne duraklatma, ne kayıt, ne reklam). Seçilen **güçlendiriciler ekran
+açılırken zaten envanterden düşüldüğü** için (`KronViewModel.createEngine`),
+coinle alınan güçlendirici oyun hiç başlamadan yanıyordu.
+
+Kanca artık **her zaman açık**; fazla basışları `BackAction.IGNORE` yutuyor.
+
+### Aynı yerde duraklat tuşu da ölüydü
+
+`GameEngine.pause()` `COUNTDOWN`u destekliyordu, ama ekran koşulu `RUNNING`
+diye **kopyalamıştı**. `pause()` artık duraklattığını döndürüyor; ekran koşulu
+tekrarlamıyor.
+
+### Çıkışta ekran donmuş görünüyordu
+
+Geçiş reklamı önceden yüklenmiyor ve hiçbir geri bildirim yoktu: sonuç
+ekranından çıkarken 0,5–6 saniye hiçbir şey değişmiyordu. Butonlar artık
+"YÜKLENİYOR…" yazıp kilitleniyor.
+
+Dahası `InterstitialAdManager`'da yükleme için **hiç sınır yoktu** — yavaş
+ağda oyuncu sonuç ekranında kilitli kalabilirdi. Bu, 4 numaralı değişmez
+kuralın (*"reklam akışı oyunu ASLA bloklamaz"*) doğrudan ihlaliydi. **3,5 sn**
+sınır kondu; süre dolarsa akış devam eder ve gecikmiş reklam **gösterilmez**.
+
+### Sonuç ekranındaki çıkış butonu yanlış yere söz veriyordu
+
+Her modda "ANA MENÜ" yazıyordu ama nav yığınını bir kademe geri alıyor —
+kariyerde **bölüm haritasına**. Etiket artık gerçeği yazıyor:
+`BÖLÜMLER` / `GERİ` / `ANA MENÜ`.
+
+### Günlük görev rozeti buton gibi görünüyordu
+
+`DailyTierChip`in `clickable`i yok (ödül koşu bitince kendiliğinden ödenir),
+ama "sırada" olan rozet **dolu sarı** çiziliyordu — oyunun birincil butonuyla
+ve haftalık görevlerdeki *alınabilir* rozetle birebir aynı. Basılıyor, hiçbir
+şey olmuyordu. Artık koyu zemin + kalın sarı çerçeve: **dolu sarı = BAS,
+sarı çerçeve = HEDEF**.
+
+### Sağlamlaştırma (gözlemlenen bir hataya bağlı değil)
+
+- `exiting` mandalı: çıkış bir kez başlayınca ikinci basış/dokunuş yutulur.
+  Reklam yüklenirken bu olmadan iki `onExit()` mümkündü.
+- `popBackStackOnce()`: pop yalnızca isteği çıkaran ekran hâlâ öndeyse.
+
+### ⚠ Doğrulanmayan iddia
+
+*"Sonuç ekranında iki geri = ana menü"* diye bir hata **yok**. Cihazda üç kez
+tekrarlandı; her seferinde basış sayısını yanlış saydığım ortaya çıktı:
+sonuç → bölüm haritası → menü, yani doğru davranış. Düzeltme diye yazılan
+mandal bu yüzden "sağlamlaştırma" başlığı altında.
+
+### Doğrulanan ve sorun çıkmayanlar
+
+Kariyer / Garaj / Görevler / Ayarlar: hem ekran içi geri oku hem sistem geri
+tuşu doğru çalışıyor · bölüm detay penceresinde geri pencereyi kapatıyor,
+ekrandan çıkmıyor · görevlerden açılan günlük koşu **görevlere** dönüyor ·
+ayarlarda ses, titreşim ve iki dil butonu · garajda yükseltme (150 coin) ve
+renk satın alma · sonsuz moddaki HIZ kilidi.
+
+Kanıt: **316 test / 0 hata** (11 yeni: `BackActionTest`,
+`PauseDuringCountdownTest`), debug + release başarılı, S8 ekran görüntüleri.
+
+
 ## 2026-08-19 (3) — Otonom oturum: kritik geri tuşu hatası + ölçüm hijyeni
 
 Altı ajanla paralel çalışıldı. Ajan raporları kanıt sayılmadı; her iddia
