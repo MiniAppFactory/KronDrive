@@ -338,6 +338,40 @@ listeye ID yazmak tek başına yetmez; `MainActivity`'deki `MobileAds.initialize
 
 **Yayını durdurmaz ama Adım 7'deki cihaz testinden ÖNCE yapılmalı.**
 
+### A-13 · UMP onay formu AdMob'da YAYINLANMAMIŞ — **AÇIK · BLOKER · YENİ (2026-08-19, cihazda bulundu)**
+
+Kod tarafı doğru (A-3), **hesap tarafı eksik.** Cihazda EEA coğrafyası taklit
+edilerek doğrulandı (`ConsentDebugSettings` + logcat'in verdiği test cihaz
+hash'i; ölçüm sonrası geri alındı):
+
+```
+W UserMessagingPlatform: Publisher misconfiguration: Failed to read publisher's
+account configuration; no form(s) configured for the input app ID. Verify that
+you have configured one or more forms for this application and try again.
+Received app ID: ca-app-pub-8582550349019790~2279115293
+```
+
+SDK kendi deposuna da yazıyor —
+`shared_prefs/__GOOGLE_FUNDING_CHOICE_SDK_INTERNAL__.xml`:
+`<boolean name="is_pub_misconfigured" value="true" />`
+
+**Neden bloker.** Form yayınlanmadığı için AEA/Birleşik Krallık kullanıcısına
+onay formu **hiç gösterilemez**. Buna rağmen `canRequestAds()` true dönüyor ve
+reklamlar servis ediliyor — ekran görüntüsünde banner yüklendi. Yani uygulama
+bugün yayına çıksa **AEA kullanıcısına onay alınmadan reklam gösterilir**.
+Bu, Google'ın EU User Consent Policy'sinin doğrudan ihlali.
+
+Kod incelemesi bunu **yakalayamazdı**: `ConsentManager` akışı doğru yazılmış,
+eksik olan AdMob hesabındaki yapılandırma.
+
+**Yapılacak (sahibi, AdMob konsolu):** Privacy & messaging → GDPR mesajı
+oluştur → bu uygulama (`ca-app-pub-8582550349019790~2279115293`) için
+**yayınla**. Sonra E-2 senaryosu cihazda tekrar denenmeli: EEA taklidiyle form
+çıkmalı, "reddet" seçilince hiçbir reklam servis edilmemeli.
+
+**İlgili:** A-3 (kod tarafı, TAMAM) · B-1 (gizlilik politikası URL'i — form
+oluştururken o URL isteniyor, ikisi birlikte kapatılabilir).
+
 ### A-11 · Yayınlanabilir güncel AAB yok — **AÇIK · BLOKER**
 
 Elde tek güncel-adaylı release AAB: `builds/KronDrive_release_2026-08-15_2351_v1.0.9.aab`
