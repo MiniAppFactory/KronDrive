@@ -247,3 +247,53 @@ hız merdiveni. Bozuk olan üç yer:
 
 Tır için fiyat değil **tasarım** kararı gerekiyor (§1). 3.600 → 1.500 bile
 yetmez: bedava Beety'den her metrikte kötü.
+
+---
+
+## 10. KAPANDI — kalan kare düşmesi boru hattı kaynaklı, iş kaynaklı değil
+
+**Bu madde artık açık değil; sonuç kesin ve yön değiştiriyor.**
+
+Uzun süredir kovaladığımız ~%5 kare düşmesinin çizim maliyetinden gelmediği
+**cihazda kanıtlandı** (2026-08-19, S8). Yöntem: aynı bölüm, aynı koşullar, tek
+değişken tema — CROWD (kataloğun en ağır teması) ile GRASS (en hafifi).
+
+| Aşama (p50) | CROWD | GRASS |
+|---|---|---|
+| `draw→syncQ` — UI thread kaydı | 6,21 ms | **3,39 ms** |
+| `syncQ→sync` — RenderThread beklemesi | 7,15 | **10,11** |
+| `sync→issue` | 0,40 | 0,23 |
+| `issue→swap` | 11,34 | **10,35** |
+| `swap→done` | 4,48 | 6,03 |
+| **Sunum** | ~57 FPS | **55,8 FPS** |
+| Missed Vsync | %4,8 | %5,7 |
+
+**Okunuşu:** UI thread'deki çizim kaydı **yarıya indi** (6,21 → 3,39) ama
+`issue→swap` neredeyse hiç kıpırdamadı ve kare hızı **düzelmedi** — kazanılan
+sürenin tamamını `syncQ→sync` yuttu, yani RenderThread'i beklemek. Aşama iş
+miktarıyla orantılı değil; `eglSwapBuffers` sonrası boş arka tampon bekleyen
+`dequeueBuffer` bloğu, üçlü tamponlamalı 60 Hz bir uygulamada iş azalsa da
+~bir vsync civarında sabitleniyor.
+
+Bu, aynı yönde **üçüncü** kanıt:
+1. Komut sayısı 50 kat düşürüldü (yüzlerce `drawRect` → birkaç `drawPath`) —
+   `issue→swap` 0,04 ms oynadı.
+2. İki tam ekran zemin katmanı kaldırıldı (%98,7 overdraw) — p50 28 → 28 ms.
+3. Seyirci deseni önbelleğe alındı (kare başına ~2.200 native `Path` çağrısı
+   silindi) — p50 28 → 28 ms.
+
+### Sonuç: bu yönde daha fazla iş yapılmamalı
+
+**HUD `graphicsLayer` optimizasyonu bilerek ALINMADI.** Hazırdı, testleri
+geçiyordu ve ~2,1 ms'lik sahne-dışı kaydı hedefliyordu — ama yukarıdaki ölçüm
+o 2,1 ms'in kare süresine dönüşmeyeceğini gösteriyor. Kaldırılan 2,8 ms
+dönüşmedi; 2,1 ms de dönüşmez.
+
+Kalan ~%5 düşme bu cihazda **boru hattı kaynaklı**: 2017 donanımı, 60 Hz ekran,
+üçlü tamponlama. Gerçek kazanç isteniyorsa bakılacak yer çizim değil, ya
+render boru hattının kendisi (Compose dışına çıkmak) ya da çözünürlük — ikisi
+de bu oyunun bütçesinin dışında.
+
+**Tutulan iki değişiklik** (kazanç iddia edilmiyor, doğru ve bedava oldukları
+için duruyorlar): seyirci deseni önbelleği ve tahsis temizliği (kare başına
+3 `Path` + 4 native shader + 9 `ColorFilter` gitti).
