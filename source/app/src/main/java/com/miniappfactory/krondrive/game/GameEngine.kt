@@ -351,14 +351,26 @@ class GameEngine(
         brakeDown = down
     }
 
-    fun pause() {
+    /**
+     * Duraklatir ve GERCEKTEN duraklatildiysa true doner.
+     *
+     * Donus degeri ekranin "duraklatildi" perdesini acmasi icin: ekran ayni
+     * kosulu KENDI basina tekrarladigi surece ikisi kayiyor ve sessiz bir
+     * hata cikiyor. Nitekim ciktI (2026-08-19): ekran yalnizca
+     * `phase == RUNNING` iken perdeyi aciyordu, motor ise `COUNTDOWN`u da
+     * duraklatiyor — geri sayim sirasinda hem duraklat tusu hem geri tusu
+     * HICBIR SEY yapmiyor gorunuyordu.
+     */
+    fun pause(): Boolean {
         if (phase == RunPhase.RUNNING || phase == RunPhase.COUNTDOWN) {
             resumePhase = phase
             phase = RunPhase.PAUSED
             boostDown = false
             brakeDown = false
             boosting = false
+            return true
         }
+        return false
     }
 
     private var resumePhase: RunPhase = RunPhase.COUNTDOWN

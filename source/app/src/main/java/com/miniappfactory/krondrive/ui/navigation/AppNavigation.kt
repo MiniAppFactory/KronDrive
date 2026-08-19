@@ -7,7 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -42,6 +44,30 @@ private object Routes {
      */
     fun game(mode: RunMode, level: Int?, training: Boolean = false) =
         "game/${mode.name}/${level ?: -1}/$training"
+}
+
+/**
+ * Nav yiginindan GUVENLI POP.
+ *
+ * ⚠ CIFT POP (2026-08-19, cihazda bulundu). Sahibi *"geri tusu... ana menuye
+ * gelmesin"* dedi ve hakliydi: kariyerde bolum sonucundan geri tusuna iki kez
+ * basmak bolum haritasini ATLIYOR, oyuncuyu ana menuye atiyordu. Her basis
+ * kendi `popBackStack()`'ini calistiriyordu.
+ *
+ * Asil kilit oyun ekraninda ([GameScreen] `exiting` mandali); burasi ikinci
+ * savunma hatti ve BUTUN ekranlari kapsiyor — ornegin garajda geri okuna cift
+ * dokunmak da menuyu asip UYGULAMADAN CIKIYORDU.
+ *
+ * Kural: pop yalnizca istegi cikaran ekran HALA ONDEYSE (RESUMED) yapilir.
+ * Ilk pop baslar baslamaz o giris RESUMED olmaktan cikar, yani ikinci istek
+ * sessizce dusurulur.
+ */
+private fun NavController.popBackStackOnce() {
+    if (currentBackStackEntry?.lifecycle?.currentState
+            ?.isAtLeast(Lifecycle.State.RESUMED) == true
+    ) {
+        popBackStack()
+    }
 }
 
 /**
@@ -99,7 +125,7 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 onPlayLevel = { levelId ->
                     navController.navigate(Routes.game(RunMode.CAREER, levelId))
                 },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStackOnce() }
             )
         }
 
@@ -156,7 +182,7 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 onBuyCarShape = viewModel::buyCarShape,
                 onSelectCarColor = viewModel::selectCarColor,
                 onBuyCarColor = viewModel::buyCarColor,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStackOnce() }
             )
         }
 
@@ -169,7 +195,7 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 onClaimTier = viewModel::claimMissionTier,
                 onClaimChest = viewModel::claimWeeklyChest,
                 onPlayDaily = { navController.navigate(Routes.game(RunMode.DAILY, null)) },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStackOnce() }
             )
         }
 
@@ -180,7 +206,7 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 onSoundEnabled = viewModel::setSoundEnabled,
                 onVibrationEnabled = viewModel::setVibrationEnabled,
                 onLanguage = viewModel::setLanguage,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStackOnce() }
             )
         }
 
@@ -208,7 +234,7 @@ fun AppNavigation(viewModel: KronViewModel, adsConsentResolved: Boolean) {
                 // bes ekran onu yalnizca banner icin aliyordu, oyun ekrani
                 // ise reklamlarini onaya hic bakmadan gosteriyordu.
                 adsConsentResolved = adsConsentResolved,
-                onExit = { navController.popBackStack() },
+                onExit = { navController.popBackStackOnce() },
                 onPlayLevel = { nextLevel ->
                     // Sonraki bolum, mevcut oyun ekraninin YERINE gelir.
                     navController.navigate(Routes.game(RunMode.CAREER, nextLevel)) {

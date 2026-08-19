@@ -88,6 +88,8 @@ import com.miniappfactory.krondrive.game.GameConfig
 import com.miniappfactory.krondrive.game.GameEvent
 import com.miniappfactory.krondrive.game.LevelCatalog
 import com.miniappfactory.krondrive.game.LevelGoal
+import com.miniappfactory.krondrive.game.BackAction
+import com.miniappfactory.krondrive.game.backAction
 import com.miniappfactory.krondrive.game.RunMode
 import com.miniappfactory.krondrive.game.RunPhase
 import com.miniappfactory.krondrive.game.RunResult
@@ -283,6 +285,29 @@ fun GameScreen(
     var showCrashDialog by remember(engine) { mutableStateOf(false) }
     var adInFlight by remember(engine) { mutableStateOf(false) }
     var adFailed by remember(engine) { mutableStateOf(false) }
+
+    /**
+     * CIKIS MANDALI — bir kosudan yalnizca BIR KEZ cikilir.
+     *
+     * ⚠ CIHAZDA BULUNDU (2026-08-19, sahibi bildirdi: *"geri tusu calismayan
+     * yerler var... ana menuye gelmesin"*). Sonuc ekraninda geri tusuna iki
+     * kez basmak ekrani ANA MENUYE atiyordu:
+     *
+     *   Kariyer -> Bolum 2 -> carpma -> geri (sonuc ekrani) -> geri, geri
+     *   => bolum haritasi ATLANDI, oyuncu ana menude buldu kendini.
+     *
+     * Sebep: her basis [exitFromResult]'i yeniden calistiriyor ve her cagri
+     * kendi `popBackStack()`'ini yapiyordu — iki basis iki POP demek.
+     * Butonlarda ([adInFlight]) kilit vardi ama geri tusu o kilidi hic
+     * gormuyordu; yani ayni niyetin iki yolu yine iki farkli sonuc veriyordu
+     * (16 ve 19 Agustos'taki desenin ucuncu tekrari).
+     *
+     * Ikinci is: gecis reklami ONCEDEN YUKLENMIYOR. Ilk basisla `load()`
+     * basliyor ve ekran 0,5-6 saniye HIC DEGISMIYOR — okunusu "geri tusu
+     * bozuk". Mandal aciktayken butonlar "ÇIKILIYOR…" yazar, yani bekleme
+     * gorunur olur.
+     */
+    var exiting by remember(engine) { mutableStateOf(false) }
     var paused by remember(engine) { mutableStateOf(false) }
     var coinsDoubled by remember(engine) { mutableStateOf(false) }
     /** Reklamdan gercekten odenen bonus coin ve "gunluk sinir doldu" durumu. */
@@ -610,10 +635,11 @@ fun GameScreen(
     }
     val onPauseTap = remember(engine) {
         {
-            if (engine.phase == RunPhase.RUNNING) {
-                engine.pause()
-                paused = true
-            }
+            // Kosulun kopyasi DEGIL, motorun kendi cevabi kullaniliyor:
+            // ekran `RUNNING`e bakiyordu, motor `COUNTDOWN`u da duraklatiyor.
+            // Ikisi ayrisinca geri sayim sirasinda duraklat tusu de geri tusu
+            // de hicbir sey yapmiyor gorunuyordu (2026-08-19, cihazda).
+            if (engine.pause()) paused = true
         }
     }
 
@@ -627,11 +653,16 @@ fun GameScreen(
      * ise kaydediyordu).
      */
     val quitRun = {
-        engine.finish(completed = false)
-        engine.lastResult?.let { publishResult(it) }
-        // Duraklatmadan cikmak da bir kosu sonudur: reklamsiz cikis yolu
-        // birakilmiyor (sahibi karari, 2026-08-14).
-        withOptionalInterstitial(viewModel, mode, levelId, activity, adsAllowed) { onExit() }
+        // [exiting] mandali: duraklat menusunde ÇIKIŞ'a iki kez basmak ya da
+        // geri tusunu tekrarlamak IKI pop demekti (bkz. mandalin tanimi).
+        if (!exiting) {
+            exiting = true
+            engine.finish(completed = false)
+            engine.lastResult?.let { publishResult(it) }
+            // Duraklatmadan cikmak da bir kosu sonudur: reklamsiz cikis yolu
+            // birakilmiyor (sahibi karari, 2026-08-14).
+            withOptionalInterstitial(viewModel, mode, levelId, activity, adsAllowed) { onExit() }
+        }
     }
 
     /**
@@ -671,23 +702,56 @@ fun GameScreen(
      * tusu, tekrar gir. Artik geri tusu de butonla AYNI yoldan gidiyor.
      */
     val exitFromResult = {
-        withOptionalInterstitial(
-            viewModel = viewModel,
-            mode = mode,
-            levelId = result?.levelId ?: levelId,
-            activity = activity,
-            adsAllowed = adsAllowed
-        ) {
-            onExit()
+        if (!exiting) {
+            exiting = true
+            withOptionalInterstitial(
+                viewModel = viewModel,
+                mode = mode,
+                levelId = result?.levelId ?: levelId,
+                activity = activity,
+                adsAllowed = adsAllowed
+            ) {
+                onExit()
+            }
         }
     }
 
-    BackHandler(
-        enabled = engine.phase == RunPhase.RUNNING || paused ||
-            result != null || showCrashDialog
-    ) {
-        when {
-            paused -> quitRun()
+    // ⚠ GERI SAYIM DA KAPSAM ICINDE (2026-08-19, cihazda bulundu).
+    //
+    // Kosul eskiden `phase == RUNNING || ...` idi; `COUNTDOWN` hicbir dala
+    // girmiyordu. Yani "HAZIR OL / 3" yazarken geri tusuna basmak
+    // [BackHandler]'i ATLIYOR ve nav yigininin bir katmanini dogrudan
+    // ustunden atiyordu: ne duraklatma, ne [quitRun], ne reklam. Secilen
+    // GUCLENDIRICILER ise ekran acilirken zaten envanterden dusulmustu
+    // (`KronViewModel.createEngine`) — yani coinle alinan guclendirici tek
+    // bir geri basisiyla, oyun hic baslamadan yaniyordu.
+    //
+    // Artik kosul yalnizca mandala bakiyor: oyun ekrani ACIKKEN geri tusunun
+    // anlamini HER ZAMAN bu ekran belirler. `else` dali geri sayimda da
+    // duraklatir — `GameEngine.pause()` COUNTDOWN'u zaten destekliyor ve
+    // `resume()` geri sayimdan devam ediyor.
+    //
+    // ⚠ `enabled = false` YETMEZ — cihazda kanitlandi (2026-08-19). Devre disi
+    // birakilan bir [BackHandler] basisi YUTMAZ, sistemin varsayilanina
+    // BIRAKIR: yani NavHost yigindan bir kademe atar. Cikis mandalini
+    // `enabled`e baglayan ilk deneme tam da bu yuzden ise yaramadi — cikis
+    // basladiktan sonraki basislar oyun ekranini atlayip once bolum
+    // haritasini, sonra menuyu, sonunda UYGULAMAYI kapatti (cihazda arkadaki
+    // uygulama gorundu). Bu yuzden kanca HER ZAMAN acik ve fazladan basislari
+    // [BackAction.IGNORE] dali sessizce yutuyor.
+    BackHandler(enabled = true) {
+        // Es lesmenin kendisi saf Kotlin'de ([backAction]) ve JVM testiyle
+        // kilitli; burasi yalnizca karari uyguluyor.
+        when (
+            backAction(
+                exiting = exiting,
+                paused = paused,
+                crashDialogVisible = showCrashDialog,
+                resultVisible = result != null
+            )
+        ) {
+            BackAction.IGNORE -> Unit
+            BackAction.QUIT_RUN -> quitRun()
 
             // CARPISMA PERDESI (DEVAM ET / VAZGEC) ACIKKEN geri tusu, VAZGEC
             // butonuyla AYNI seyi yapar: kosuyu bitirir ve sonucu yayimlar.
@@ -705,13 +769,13 @@ fun GameScreen(
             // ayni gun yazilan [quitRun] belgesi bunun olmayacagini iddia
             // ediyordu. Ders: "geri tusu" tek bir sey degil — her perdenin
             // kendi dogru cikisi var ve hepsi sonucu KAYDETMELI.
-            showCrashDialog -> {
+            BackAction.FINISH_AND_SHOW_RESULT -> {
                 engine.finish(completed = false)
                 engine.lastResult?.let { publishResult(it) }
             }
 
-            result != null -> exitFromResult()
-            else -> onPauseTap()
+            BackAction.EXIT_WITH_RESULT -> exitFromResult()
+            BackAction.PAUSE -> onPauseTap()
         }
     }
     val onToggleSpeedLock = remember(engine) {
@@ -835,6 +899,7 @@ fun GameScreen(
         if (paused && result == null) {
             PausedOverlay(
                 language = language,
+                quitting = exiting,
                 onResume = {
                     engine.resume()
                     paused = false
@@ -913,7 +978,11 @@ fun GameScreen(
                     adsAllowed = adsAllowed,
                     activityAvailable = activity != null
                 ),
-                adInFlight = adInFlight,
+                // Cikis sirasinda da butonlar KILITLI ve "YÜKLENİYOR…" yazar:
+                // gecis reklami yuklenirken ekran 0,5-6 saniye hic
+                // degismiyordu ve sahibi bunu "geri tusu calismiyor" diye
+                // bildirdi. Bekleme artik gorunur.
+                adInFlight = adInFlight || exiting,
                 adFailed = adFailed,
                 onDoubleCoins = {
                     if (activity != null && !adInFlight) {
@@ -944,16 +1013,22 @@ fun GameScreen(
                     }
                 },
                 onNext = {
-                    // Esik BITEN bolume gore: 4. bolumu bitirip 5'e gecerken
-                    // reklam cikmaz, cikaran kosu hala reklamsiz bolgedeydi.
-                    withOptionalInterstitial(
-                        viewModel = viewModel,
-                        mode = mode,
-                        levelId = runResult.levelId,
-                        activity = activity,
-                        adsAllowed = adsAllowed
-                    ) {
-                        nextLevelId?.let(onPlayLevel)
+                    // Mandal burada da sart: SONRAKİ BÖLÜM'e cift dokunus iki
+                    // `navigate()` demekti ve reklam yuklenirken buton hicbir
+                    // sey yapmiyor gorunuyordu.
+                    if (!exiting) {
+                        exiting = true
+                        // Esik BITEN bolume gore: 4. bolumu bitirip 5'e gecerken
+                        // reklam cikmaz, cikaran kosu hala reklamsiz bolgedeydi.
+                        withOptionalInterstitial(
+                            viewModel = viewModel,
+                            mode = mode,
+                            levelId = runResult.levelId,
+                            activity = activity,
+                            adsAllowed = adsAllowed
+                        ) {
+                            nextLevelId?.let(onPlayLevel)
+                        }
                     }
                 },
                 // Sonsuz mod bir skor kovalamacasi: dogal dongu "yine".
@@ -974,7 +1049,8 @@ fun GameScreen(
                 // yol 2026-08-19'da eklenirken atlanmisti. Buton [adInFlight]
                 // iken "YUKLENIYOR…" yazip devre disi kaliyor.
                 onRetry = {
-                    if (!adInFlight) {
+                    if (!adInFlight && !exiting) {
+                        exiting = true
                         // ⚠ SIRA ONEMLI — onay kontrolu `&&`'in SOLUNDA.
                         //
                         // `consumeRetryInterstitial()` bir sayaci TUKETIR.
@@ -996,21 +1072,20 @@ fun GameScreen(
                         }
                     }
                 },
-                onHome = {
-                    if (!adInFlight) {
-                        adInFlight = true
-                        withOptionalInterstitial(
-                            viewModel = viewModel,
-                            mode = mode,
-                            levelId = runResult.levelId,
-                            activity = activity,
-                            adsAllowed = adsAllowed
-                        ) {
-                            adInFlight = false
-                            onExit()
-                        }
-                    }
-                }
+                // Buton ve geri tusu ARTIK AYNI FONKSIYON. Eskiden burada
+                // `adInFlight` ile ayri bir kopya vardi ve geri tusu o kilidi
+                // hic gormuyordu — sonuc: geri tusu iki kez basilinca iki pop
+                // (bkz. [exiting] mandalinin tanimi).
+                homeLabel = when (mode) {
+                    // Kariyerde cikis BOLUM HARITASINA doner, ana menuye
+                    // degil. Gunluk gorev hem menuden hem gorevler
+                    // ekranindan acilabildigi icin notr "GERİ" kullaniliyor:
+                    // ikisinde de dogru. Sonsuz yalnizca menuden acilir.
+                    RunMode.CAREER -> language.pick(tr = "BÖLÜMLER", en = "LEVELS")
+                    RunMode.DAILY -> language.pick(tr = "GERİ", en = "BACK")
+                    RunMode.ENDLESS -> language.pick(tr = "ANA MENÜ", en = "HOME")
+                },
+                onHome = exitFromResult
             )
         }
     }
@@ -2244,6 +2319,13 @@ private val COUNTDOWN_LIGHT_RING_OFF = Color(0x33FFFFFF)
 @Composable
 private fun PausedOverlay(
     language: AppLanguage,
+    /**
+     * Cikis baslatildi mi. Gecis reklami ONCEDEN YUKLENMIYOR, yani ÇIKIŞ'a
+     * basildiktan sonra ekran saniyelerce ayni kalabiliyor. Bayrak aciktayken
+     * iki buton da kilitli ve ÇIKIŞ "ÇIKILIYOR…" yazar — oyuncu bekledigini
+     * gorur, tekrar basmaz.
+     */
+    quitting: Boolean,
     onResume: () -> Unit,
     onQuit: () -> Unit
 ) {
@@ -2259,13 +2341,19 @@ private fun PausedOverlay(
                 PrimaryButton(
                     text = language.pick(tr = "DEVAM ET", en = "RESUME"),
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = !quitting,
                     onClick = onResume
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
                 SecondaryButton(
-                    text = language.pick(tr = "ÇIKIŞ", en = "QUIT"),
+                    text = if (quitting) {
+                        language.pick(tr = "ÇIKILIYOR…", en = "LEAVING…")
+                    } else {
+                        language.pick(tr = "ÇIKIŞ", en = "QUIT")
+                    },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = !quitting,
                     onClick = onQuit
                 )
             }
@@ -2365,6 +2453,17 @@ private fun RunResultOverlay(
     /** Sonsuz modda "TEKRAR DENE" gosterilir mi (bkz. cagri yeri). */
     canRetry: Boolean,
     onRetry: () -> Unit,
+    /**
+     * Cikis butonunun etiketi.
+     *
+     * ⚠ ETIKET YALAN SOYLUYORDU (2026-08-19): buton her modda "ANA MENÜ"
+     * yaziyordu ama [onHome] nav yiginini BIR kademe geri aliyor — kariyerde
+     * bolum haritasina, gorevler ekranindan acilan gunlukte gorevler
+     * ekranina. Sahibi geri tusunun ana menuye atlamasini hata olarak
+     * bildirince, ayni yanlis vaadi veren bu etiket de duzeltildi: buton
+     * artik NEREYE gidecegini yaziyor.
+     */
+    homeLabel: String,
     onHome: () -> Unit
 ) {
     val stats = result.stats
@@ -2635,7 +2734,7 @@ private fun RunResultOverlay(
                     text = if (adInFlight) {
                         language.pick(tr = "YÜKLENİYOR…", en = "LOADING…")
                     } else {
-                        language.pick(tr = "ANA MENÜ", en = "HOME")
+                        homeLabel
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !adInFlight,
