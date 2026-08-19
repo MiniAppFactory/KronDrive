@@ -113,7 +113,14 @@ Firebase, Billing **yok**.
 `play-services-ads` birleşme yoluyla `AD_ID` ve `ACCESS_ADSERVICES_*` ekliyor
 (kaldırılmamalı). Sonucu C-4'e bağlı.
 
-### A-3 · UMP / GDPR onay akışı — **AÇIK (kod TAMAM, commit + cihaz kanıtı bekliyor) · 2026-08-19**
+### A-3 · UMP / GDPR onay akışı — **AÇIK (kod + test TAMAM, CİHAZ kanıtı bekliyor) · 2026-08-19**
+
+> **Güncelleme (commit `b13c6e0`):** düzeltme commit edildi ve doğrulandı —
+> `ads/AdConsentGate.kt` (saf Kotlin, 13 test), geçiş ve ödüllü reklamların
+> tamamı kapıdan geçiyor, 296 test / 0 hata, `assembleRelease` başarılı.
+> Kalan tek şart **cihaz doğrulaması**: onayı geri çek, koşuyu bitir,
+> hiçbir tam ekran reklam çıkmamalı (E-2 senaryosu). S8 başka ekipte
+> olduğu için yapılamadı.
 
 > Önceki iki denetim bu maddeyi **TAMAM** yazdı. **Yanlıştı.** Doğrulama
 > `ConsentManager.kt` ve `MainActivity.kt`'te durup orada bitmiş; bayrağın
@@ -705,7 +712,15 @@ Uzunluklar (bugün yeniden ölçüldü):
 | `play_store_assets/store_long_description_en.txt` | **3708**/4000 |
 | `play_store_assets/store_long_description_tr.txt` | **3486**/4000 |
 
-### D-8 · Uzun açıklamada YENİ bir yanlış sayı — **AÇIK · BLOKER · YENİ (2026-08-19)**
+### D-8 · Uzun açıklamada yanlış sayı — **KAPANDI (2026-08-19, commit `b13c6e0`)**
+
+> **Düzeltildi.** İki metin de **3.800 m** yazıyor artık, ayrıca metni koda
+> bağlayan kalıcı bir test eklendi:
+> `game/StoreTextMatchesGameTest.kt` — son bölümün mesafesini ve süresini iki
+> mağaza metniyle karşılaştırıyor. Bu, aynı sınıfın **altıncı** hatasıydı;
+> bir daha sessizce kaymayacak.
+>
+> Aşağıdaki tespit tarihsel kayıt olarak duruyor.
 
 Metinlerin ikisi de **son bölümün hedefini yanlış yazıyor**:
 

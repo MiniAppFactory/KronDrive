@@ -94,9 +94,8 @@ altındaki testleri de güncelle.
 
 ## En son handover
 
-`docs/HANDOVER_20260818.md` (2026-08-18) — öncekileri **iptal etmez, üzerine
-ekler**, ama 18 Ağustos'ta oyunun hissi ve ilerlemesi ciddi şekilde değişti:
-dünya %40 yavaşladı, araç merdiveni yeniden kuruldu (bedava araç 161 → 120
-km/h, araçlar arası fark %11 → %108), yükseltme maliyeti düştü ve bölüm
-hedefleri ölçümden yeniden türetildi. **`HANDOVER_20260816_2.md` ve
-`ECONOMY_STATUS_20260817.md` içindeki denge sayıları artık eski.**
+`docs/HANDOVER_20260819.md` (2026-08-19) — oncekileri iptal etmez, uzerine
+ekler. 18-19 Agustos'ta oyunun dengesi, ilerlemesi ve reklam akisi ciddi
+sekilde degisti; **`HANDOVER_20260816_2.md` ve `ECONOMY_STATUS_20260817.md`
+icindeki denge sayilari artik gecersiz.** Kapatilmayan bulgular ve olcum
+tuzaklari: `docs/ACIK_BULGULAR_20260819.md`.
