@@ -175,3 +175,75 @@ fonksiyon silinmeli.
 
 İkisi de "oyun çok kolay" yönünde doğru sezgiler ama rakamları tutmadı.
 Rapor ≠ kanıt.
+
+---
+
+## 8. Fren ölü bir eksen — ve dominasyon testi bunun üstünde duruyor
+
+**Ölçüm (600 eşli koşu + yoğunluk taraması).** `brakeMul` 0.80 → 1.25 (%56
+salınım), frene basan profille, n=200: eşli fark **%+0,2 / %−1,0 / %−1,5 /
+%−1,7 / %−1,2**. Monotonik değil, işareti tutarsız, hepsi gürültü bandında.
+Kare-mükemmel oyuncuda 0.85 / 1.00 / 1.25 skorları **beş anlamlı basamağa
+kadar aynı**. Frene basmak hiçbir ayarda basmamaktan iyi değil.
+
+**Bunun testlere etkisi ciddi.** `hicbir ucretli arac digerini dort eksende
+birden gecmiyor` testi freni çıkarıp kalan üç ekseni (hız/ivme/boost) baktığında
+**15 tahakküm çifti** ortaya çıkarıyor — ve **15'inin 15'i de yalnızca fren
+sütunuyla kurtuluyor**, istisna yok:
+
+- F1 → süper araba, motosiklet, boğa 67, kas arabası, dağ keçisi, yarış sedan, şehir
+- Süper Araba → yarış sedan, şehir, kas arabası
+- Motosiklet → yarış sedan, şehir, kas arabası
+- Yarış Sedan → şehir · Kuş SLX → dağ keçisi
+
+Yani test yeşil ama **koruduğu şey boş**: "hiçbir araç ötekini çöpe çevirmiyor"
+garantisi, ölçülebilir etkisi sıfır olan bir sayıya dayanıyor. Gerçek oyunda
+F1 motosikleti **her işe yarar eksende** geçiyor; test bunu görmüyor.
+
+İkinci test de aynı bağımlılıkta: `zayif yonu olmayan tek arac giris seviyesi
+aracidir` — fren düşerse Yarış Sedan da kusursuz olur ve test kırılır.
+
+**Ne yapılmalı (sahibinin kararı).** Ya frene ölçülebilir bir etki verilmeli
+(şu an `brakePenalty` yalnızca basılıyken hedef hızı düşürüyor, `decelRate`'e
+**bilerek** uygulanmıyor — gerekçesi `GameEngine`'de yazılı), ya da iki test üç
+eksen üzerinden çalıştırılıp bugünkü 15 çakışma **bilinçli** bir kararla
+kapatılmalı. Bugünkü hâli sessiz bir muafiyet.
+
+---
+
+## 9. ÇÜRÜTÜLDÜ — "motosiklet kataloğun en iyi alımı" ve "sınıf 2,9× yayılım"
+
+Yukarıda §1'de kaydettiğim iki iddia, daha titiz bir ölçümle **çürütüldü**.
+Kendi raporladığım şeyi düzeltiyorum.
+
+**Motosikletin %31 küçük tehlike alanı ölçülebilir hiçbir şey getirmiyor.**
+1.400 eşli koşunun **1.379'u birebir aynı bitti** (aynı tohumda sınıf-kör
+otopilotla, tek değişken kutu). Sebep yapısal: şerit merkezleri 67,20 dp
+aralıklı, çarpışma eşiği en geniş hâlde 30,98 dp — **yatay boyut kararlı
+durumda hiç devreye girmiyor**. Dikey kazanç ise %31 değil **%11** ve
+neredeyse hiçbir zaman çarpışmanın olduğu kareyi değiştirmiyor.
+
+Motosiklet 2.800 coine **tam da hızının fiyatını** ödüyor (fiyat modelinin
+verdiği rakam: 2.802). "Bedava avantaj" yok.
+
+**Sınıf yayılımı 2,9× değil 2,06×** — alan 2,9× ama oyunda iş gören tek
+boyut dikey.
+
+**Asıl bulgu ters yöndeymiş:** bedava avantaj alan motosiklet değil, **gizli
+ceza ödeyen tır**. 3.600 coin ödeyip kataloğun en kötü hız/coin oranını
+alıyor (120 coin/birim, ötekiler ~43) ve üstüne %75–94 hayatta kalma cezası
+taşıyor. 30 bölüm × 3 tohum kariyerde 170/270 yıldız ve **25/90 kaza**; diğer
+bütün araçlar 228–240 yıldız ve **0/90 kaza**.
+
+Fiyat modeli (43 coin = +0,01 hız; boost hızın %32'si; ivme %21'i; fren **0**)
+11 aracın 7'sini ±%3 içinde yeniden üretiyor — yani katalog zaten tutarlı bir
+hız merdiveni. Bozuk olan üç yer:
+
+| Araç | Mevcut | Model | Neden |
+|---|---|---|---|
+| Kuş SLX | 1.500 | **950** | primi frende, fren 0 değerinde |
+| Dağ Keçisi | 1.500 | **750** | kimliği fren 1.12 üzerine kurulu |
+| Tır | 3.600 | **−3.400** | hiçbir fiyat onu alınabilir yapmaz |
+
+Tır için fiyat değil **tasarım** kararı gerekiyor (§1). 3.600 → 1.500 bile
+yetmez: bedava Beety'den her metrikte kötü.
